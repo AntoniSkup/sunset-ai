@@ -117,5 +117,3 @@ While this template is intentionally minimal and to be used as a learning resour
 - https://makerkit.dev
 - https://zerotoshipped.com
 - https://turbostarter.dev
-
-Test
