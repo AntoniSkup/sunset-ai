@@ -1,7 +1,7 @@
 "use server";
 
 import { z } from "zod";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, sql, isNull } from "drizzle-orm";
 import { db } from "@/lib/db/drizzle";
 import {
   User,
@@ -35,13 +35,17 @@ async function logActivity(
   if (teamId === null || teamId === undefined) {
     return;
   }
-  const newActivity: NewActivityLog = {
-    teamId,
-    userId,
-    action: type,
-    ipAddress: ipAddress || "",
-  };
-  await db.insert(activityLogs).values(newActivity);
+  try {
+    const newActivity: NewActivityLog = {
+      teamId,
+      userId,
+      action: type,
+      ipAddress: ipAddress || "",
+    };
+    await db.insert(activityLogs).values(newActivity);
+  } catch (error) {
+    console.error("Error logging activity:", error);
+  }
 }
 
 const signInSchema = z.object({
@@ -112,12 +116,13 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
   const existingUser = await db
     .select()
     .from(users)
-    .where(eq(users.email, email))
+    .where(and(eq(users.email, email), isNull(users.deletedAt)))
     .limit(1);
 
   if (existingUser.length > 0) {
     return {
-      error: "Failed to create user. Please try again.",
+      error:
+        "An account with this email already exists. Please sign in instead.",
       email,
       password,
     };
@@ -131,7 +136,25 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
     role: "owner", // Default role, will be overridden if there's an invitation
   };
 
-  const [createdUser] = await db.insert(users).values(newUser).returning();
+  let createdUser;
+  try {
+    [createdUser] = await db.insert(users).values(newUser).returning();
+  } catch (error: any) {
+    if (error?.code === "23505" || error?.message?.includes("unique")) {
+      return {
+        error:
+          "An account with this email already exists. Please sign in instead.",
+        email,
+        password,
+      };
+    }
+    console.error("Error creating user:", error);
+    return {
+      error: "Failed to create user. Please try again.",
+      email,
+      password,
+    };
+  }
 
   if (!createdUser) {
     return {
@@ -184,7 +207,16 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
       name: `${email}'s Team`,
     };
 
-    [createdTeam] = await db.insert(teams).values(newTeam).returning();
+    try {
+      [createdTeam] = await db.insert(teams).values(newTeam).returning();
+    } catch (error) {
+      console.error("Error creating team:", error);
+      return {
+        error: "Failed to create team. Please try again.",
+        email,
+        password,
+      };
+    }
 
     if (!createdTeam) {
       return {
@@ -206,11 +238,20 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
     role: userRole,
   };
 
-  await Promise.all([
-    db.insert(teamMembers).values(newTeamMember),
-    logActivity(teamId, createdUser.id, ActivityType.SIGN_UP),
-    setSession(createdUser),
-  ]);
+  try {
+    await Promise.all([
+      db.insert(teamMembers).values(newTeamMember),
+      logActivity(teamId, createdUser.id, ActivityType.SIGN_UP),
+      setSession(createdUser),
+    ]);
+  } catch (error) {
+    console.error("Error creating team member or setting session:", error);
+    return {
+      error: "Failed to complete sign up. Please try again.",
+      email,
+      password,
+    };
+  }
 
   const redirectTo = formData.get("redirect") as string | null;
   if (redirectTo === "checkout") {
