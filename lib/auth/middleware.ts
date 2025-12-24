@@ -1,7 +1,7 @@
-import { z } from 'zod';
-import { TeamDataWithMembers, User } from '@/lib/db/schema';
-import { getTeamForUser, getUser } from '@/lib/db/queries';
-import { redirect } from 'next/navigation';
+import { z } from "zod";
+import { TeamDataWithMembers, User } from "@/lib/db/schema";
+import { getTeamForUser, getUser } from "@/lib/db/queries";
+import { redirect } from "next/navigation";
 
 export type ActionState = {
   error?: string;
@@ -11,12 +11,12 @@ export type ActionState = {
 
 type ValidatedActionFunction<S extends z.ZodType<any, any>, T> = (
   data: z.infer<S>,
-  formData: FormData
+  formData: FormData,
 ) => Promise<T>;
 
 export function validatedAction<S extends z.ZodType<any, any>, T>(
   schema: S,
-  action: ValidatedActionFunction<S, T>
+  action: ValidatedActionFunction<S, T>,
 ) {
   return async (prevState: ActionState, formData: FormData) => {
     const result = schema.safeParse(Object.fromEntries(formData));
@@ -31,17 +31,17 @@ export function validatedAction<S extends z.ZodType<any, any>, T>(
 type ValidatedActionWithUserFunction<S extends z.ZodType<any, any>, T> = (
   data: z.infer<S>,
   formData: FormData,
-  user: User
+  user: User,
 ) => Promise<T>;
 
 export function validatedActionWithUser<S extends z.ZodType<any, any>, T>(
   schema: S,
-  action: ValidatedActionWithUserFunction<S, T>
+  action: ValidatedActionWithUserFunction<S, T>,
 ) {
   return async (prevState: ActionState, formData: FormData) => {
     const user = await getUser();
     if (!user) {
-      throw new Error('User is not authenticated');
+      throw new Error("User is not authenticated");
     }
 
     const result = schema.safeParse(Object.fromEntries(formData));
@@ -55,19 +55,19 @@ export function validatedActionWithUser<S extends z.ZodType<any, any>, T>(
 
 type ActionWithTeamFunction<T> = (
   formData: FormData,
-  team: TeamDataWithMembers
+  team: TeamDataWithMembers,
 ) => Promise<T>;
 
 export function withTeam<T>(action: ActionWithTeamFunction<T>) {
   return async (formData: FormData): Promise<T> => {
     const user = await getUser();
     if (!user) {
-      redirect('/sign-in');
+      redirect("/sign-in");
     }
 
     const team = await getTeamForUser();
     if (!team) {
-      throw new Error('Team not found');
+      throw new Error("Team not found");
     }
 
     return action(formData, team);
