@@ -1,0 +1,217 @@
+"use client";
+
+import { useRef, useEffect, useState, useMemo, useLayoutEffect } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import { MessageItem } from "./message-item";
+import type { UIMessage } from "ai";
+
+interface ErrorMessage {
+  id: string;
+  message: string;
+  userMessageId?: string;
+}
+
+interface MessageListProps {
+  messages: UIMessage[];
+  isLoading: boolean;
+  errorMessages?: ErrorMessage[];
+  onRetry?: (errorMessageId: string) => void;
+}
+
+function getTextContent(message: UIMessage): string {
+  const textParts = message.parts
+    .filter((part) => part.type === "text")
+    .map((part) => (part as { text: string }).text);
+  return textParts.join("");
+}
+
+export function MessageList({
+  messages,
+  isLoading,
+  errorMessages = [],
+  onRetry,
+}: MessageListProps) {
+  const parentRef = useRef<HTMLDivElement>(null);
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  type MergedMessage =
+    | { type: "message"; data: UIMessage }
+    | { type: "error"; data: ErrorMessage };
+
+  const mergedMessages: MergedMessage[] = useMemo(() => {
+    const result: MergedMessage[] = [];
+    const errorMap = new Map(
+      errorMessages.map((e) => [e.userMessageId || "", e])
+    );
+
+    for (const message of messages) {
+      result.push({ type: "message", data: message });
+      if (message.role === "user") {
+        const error = errorMap.get(message.id);
+        if (error) {
+          result.push({ type: "error", data: error });
+        }
+      }
+    }
+
+    const orphanedErrors = errorMessages.filter(
+      (e) => !e.userMessageId || !messages.some((m) => m.id === e.userMessageId)
+    );
+    for (const error of orphanedErrors) {
+      result.push({ type: "error", data: error });
+    }
+
+    return result;
+  }, [messages, errorMessages]);
+
+  const getScrollElement = useMemo(() => () => parentRef.current, []);
+
+  const virtualizer = useVirtualizer({
+    count: mergedMessages.length,
+    getScrollElement,
+    estimateSize: () => 100,
+    overscan: 5,
+  });
+
+  const scrollToBottom = () => {
+    if (parentRef.current) {
+      parentRef.current.scrollTop = parentRef.current.scrollHeight;
+    }
+  };
+
+  const [virtualItems, setVirtualItems] = useState<
+    ReturnType<typeof virtualizer.getVirtualItems>
+  >([]);
+
+  useLayoutEffect(() => {
+    if (!isMounted || !parentRef.current) {
+      setVirtualItems([]);
+      return;
+    }
+
+    const items = virtualizer.getVirtualItems();
+    setVirtualItems(items);
+  }, [isMounted, mergedMessages.length]);
+
+  useEffect(() => {
+    if (parentRef.current && mergedMessages.length > 0) {
+      const element = parentRef.current;
+      const isAtBottom =
+        element.scrollHeight - element.scrollTop - element.clientHeight < 50;
+
+      if (isAtBottom) {
+        requestAnimationFrame(() => {
+          scrollToBottom();
+        });
+      }
+    }
+  }, [mergedMessages.length, isLoading]);
+
+  if (!isMounted) {
+    return (
+      <div className="h-full overflow-y-auto overflow-x-hidden p-4">
+        <div className="space-y-4">
+          {mergedMessages.map((item, index) => {
+            if (item.type === "error") {
+              return (
+                <MessageItem
+                  key={item.data.id}
+                  role="error"
+                  content={item.data.message}
+                  onRetry={onRetry ? () => onRetry(item.data.id) : undefined}
+                />
+              );
+            }
+
+            const message = item.data;
+            const lastMessage = mergedMessages[mergedMessages.length - 1];
+            const isLastMessage =
+              index === mergedMessages.length - 1 ||
+              (lastMessage?.type === "message" &&
+                message.id === lastMessage.data.id);
+
+            return (
+              <MessageItem
+                key={message.id}
+                role={message.role as "user" | "assistant"}
+                content={getTextContent(message)}
+                isStreaming={
+                  isLoading && isLastMessage && message.role === "assistant"
+                }
+              />
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div ref={parentRef} className="h-full overflow-y-auto overflow-x-hidden">
+      <div
+        style={{
+          height: `${virtualizer.getTotalSize()}px`,
+          width: "100%",
+          position: "relative",
+          padding: "1rem",
+        }}
+      >
+        {virtualItems.map((virtualRow) => {
+          const item = mergedMessages[virtualRow.index];
+          const isLastMessage = virtualRow.index === mergedMessages.length - 1;
+
+          if (item.type === "error") {
+            return (
+              <div
+                key={virtualRow.key}
+                data-index={virtualRow.index}
+                ref={virtualizer.measureElement}
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: "calc(100% - 2rem)",
+                  transform: `translateY(${virtualRow.start}px)`,
+                }}
+              >
+                <MessageItem
+                  role="error"
+                  content={item.data.message}
+                  onRetry={onRetry ? () => onRetry(item.data.id) : undefined}
+                />
+              </div>
+            );
+          }
+
+          const message = item.data;
+          return (
+            <div
+              key={virtualRow.key}
+              data-index={virtualRow.index}
+              ref={virtualizer.measureElement}
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                width: "calc(100% - 2rem)",
+                transform: `translateY(${virtualRow.start}px)`,
+              }}
+            >
+              <MessageItem
+                role={message.role as "user" | "assistant"}
+                content={getTextContent(message)}
+                isStreaming={
+                  isLoading && isLastMessage && message.role === "assistant"
+                }
+              />
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
