@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useEffect, useState, useMemo, useLayoutEffect } from "react";
+import { useRef, useEffect, useState, useMemo } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { MessageItem } from "./message-item";
 import type { UIMessage } from "ai";
@@ -83,19 +83,7 @@ export function MessageList({
     }
   };
 
-  const [virtualItems, setVirtualItems] = useState<
-    ReturnType<typeof virtualizer.getVirtualItems>
-  >([]);
-
-  useLayoutEffect(() => {
-    if (!isMounted || !parentRef.current) {
-      setVirtualItems([]);
-      return;
-    }
-
-    const items = virtualizer.getVirtualItems();
-    setVirtualItems(items);
-  }, [isMounted, mergedMessages.length]);
+  const virtualItems = isMounted ? virtualizer.getVirtualItems() : [];
 
   useEffect(() => {
     if (parentRef.current && mergedMessages.length > 0) {
