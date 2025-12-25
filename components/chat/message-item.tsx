@@ -1,57 +1,65 @@
 "use client";
 
 import React from "react";
-import ReactMarkdown from "react-markdown";
-import { MessageRole } from "@/lib/chat/types";
-import { cn } from "@/lib/utils";
+import type { UIMessage } from "ai";
+import {
+  Message,
+  MessageContent,
+  MessageResponse,
+} from "@/components/ai-elements/message";
 import { ErrorMessage } from "./error-message";
 
 interface MessageItemProps {
-  role: MessageRole;
-  content: string;
+  message: UIMessage;
   isStreaming?: boolean;
-  onRetry?: () => void;
+}
+
+function getTextContent(message: UIMessage): string {
+  const textParts = message.parts
+    .filter((part) => part.type === "text")
+    .map((part) => (part as { text: string }).text);
+  return textParts.join("");
 }
 
 export const MessageItem = React.memo(function MessageItem({
-  role,
-  content,
+  message,
   isStreaming,
-  onRetry,
 }: MessageItemProps) {
-  const isUser = role === "user";
-  const isAssistant = role === "assistant";
-  const isError = role === "error";
+  const content = getTextContent(message);
+  const isUser = message.role === "user";
 
   return (
-    <div
-      className={cn(
-        "flex w-full mb-4",
-        isUser && "justify-end",
-        (isAssistant || isError) && "justify-start"
-      )}
-    >
-      <div
-        className={cn(
-          "rounded-lg px-4 py-2.5 max-w-[80%] shadow-sm",
-          isUser && "bg-primary text-primary-foreground",
-          isAssistant && "bg-muted text-foreground border",
-          isError && "bg-destructive text-destructive-foreground"
-        )}
-      >
-        {isError && onRetry ? (
-          <ErrorMessage error={content} onRetry={onRetry} />
-        ) : isAssistant ? (
-          <div className="prose prose-sm dark:prose-invert max-w-none">
-            <ReactMarkdown>{content}</ReactMarkdown>
+    <Message from={message.role}>
+      <MessageContent>
+        {isUser ? (
+          <p className="whitespace-pre-wrap">{content}</p>
+        ) : (
+          <>
+            <MessageResponse>{content}</MessageResponse>
             {isStreaming && (
               <span className="inline-block w-2 h-4 bg-current animate-pulse ml-1" />
             )}
-          </div>
-        ) : (
-          <p className="text-sm whitespace-pre-wrap">{content}</p>
+          </>
         )}
-      </div>
-    </div>
+      </MessageContent>
+    </Message>
+  );
+});
+
+interface ErrorMessageItemProps {
+  error: string;
+  onRetry: () => void;
+}
+
+export const ErrorMessageItem = React.memo(function ErrorMessageItem({
+  error,
+  onRetry,
+}: ErrorMessageItemProps) {
+  return (
+    <Message from="assistant">
+      <MessageContent className="bg-destructive text-destructive-foreground">
+        <ErrorMessage error={error} onRetry={onRetry} />
+      </MessageContent>
+    </Message>
   );
 });

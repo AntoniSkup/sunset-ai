@@ -1,16 +1,9 @@
-export type MessageRole = "user" | "assistant" | "error";
+import type { UIMessage } from "ai";
 
-export interface ChatMessage {
-  id: string;
-  content: string;
-  role: MessageRole;
-  timestamp: Date;
-  isStreaming: boolean;
-  error?: string | null;
-}
+export type MessageRole = "user" | "assistant";
 
 export interface Conversation {
-  messages: ChatMessage[];
+  messages: UIMessage[];
   isLoading: boolean;
   error: string | null;
 }

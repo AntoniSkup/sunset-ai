@@ -2,7 +2,7 @@
 
 import { useRef, useEffect, useState, useMemo } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { MessageItem } from "./message-item";
+import { MessageItem, ErrorMessageItem } from "./message-item";
 import type { UIMessage } from "ai";
 
 interface ErrorMessage {
@@ -16,13 +16,6 @@ interface MessageListProps {
   isLoading: boolean;
   errorMessages?: ErrorMessage[];
   onRetry?: (errorMessageId: string) => void;
-}
-
-function getTextContent(message: UIMessage): string {
-  const textParts = message.parts
-    .filter((part) => part.type === "text")
-    .map((part) => (part as { text: string }).text);
-  return textParts.join("");
 }
 
 export function MessageList({
@@ -101,16 +94,21 @@ export function MessageList({
 
   if (!isMounted) {
     return (
-      <div className="h-full overflow-y-auto overflow-x-hidden p-4">
-        <div className="space-y-4">
+      <div className="h-full overflow-y-auto overflow-x-hidden">
+        <div className="flex flex-col gap-8 p-4">
           {mergedMessages.map((item, index) => {
             if (item.type === "error") {
               return (
-                <MessageItem
+                <ErrorMessageItem
                   key={item.data.id}
-                  role="error"
-                  content={item.data.message}
-                  onRetry={onRetry ? () => onRetry(item.data.id) : undefined}
+                  error={item.data.message}
+                  onRetry={
+                    onRetry
+                      ? () => onRetry(item.data.id)
+                      : () => {
+                          /* no-op */
+                        }
+                  }
                 />
               );
             }
@@ -125,8 +123,7 @@ export function MessageList({
             return (
               <MessageItem
                 key={message.id}
-                role={message.role as "user" | "assistant"}
-                content={getTextContent(message)}
+                message={message}
                 isStreaming={
                   isLoading && isLastMessage && message.role === "assistant"
                 }
@@ -166,10 +163,15 @@ export function MessageList({
                   transform: `translateY(${virtualRow.start}px)`,
                 }}
               >
-                <MessageItem
-                  role="error"
-                  content={item.data.message}
-                  onRetry={onRetry ? () => onRetry(item.data.id) : undefined}
+                <ErrorMessageItem
+                  error={item.data.message}
+                  onRetry={
+                    onRetry
+                      ? () => onRetry(item.data.id)
+                      : () => {
+                          /* no-op */
+                        }
+                  }
                 />
               </div>
             );
@@ -190,8 +192,7 @@ export function MessageList({
               }}
             >
               <MessageItem
-                role={message.role as "user" | "assistant"}
-                content={getTextContent(message)}
+                message={message}
                 isStreaming={
                   isLoading && isLastMessage && message.role === "assistant"
                 }
