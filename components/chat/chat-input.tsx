@@ -30,12 +30,8 @@ export function ChatInput({
   };
 
   return (
-    <form
-      ref={formRef}
-      onSubmit={handleSubmit}
-      className="border-t bg-background"
-    >
-      <div className="relative">
+    <form ref={formRef} onSubmit={handleSubmit} className="bg-background p-2">
+      <div className="relative bg-white rounded-lg border shadow-xs">
         <textarea
           value={input}
           onChange={handleInputChange}
@@ -77,7 +73,8 @@ export function ChatInput({
         multiple
         accept=".jpg, .jpeg, .png, .pdf, .txt, .html"
       />
-      <div className="flex justify-between text-sm p-2"></div>
+      {/* <div className="flex justify-between text-sm p-2"></div> */}
+      {/* Here we will put the buttons at the buttom of the chat input */}
     </form>
   );
 }

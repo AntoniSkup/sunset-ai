@@ -85,7 +85,7 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
+    --background: 210 20% 98%;
     --foreground: 222.2 84% 4.9%;
     --card: 0 0% 100%;
     --card-foreground: 222.2 84% 4.9%;
@@ -170,7 +170,7 @@
 */
 
 :root {
-  --background: hsl(0 0% 100%);
+  --background: hsl(210 20% 98%);
   --foreground: hsl(240 10% 3.9%);
   --card: hsl(0 0% 100%);
   --card-foreground: hsl(240 10% 3.9%);
