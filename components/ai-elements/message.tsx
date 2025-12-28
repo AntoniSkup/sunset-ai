@@ -304,12 +304,30 @@ export const MessageBranchPage = ({
 export type MessageResponseProps = ComponentProps<typeof Streamdown>;
 
 export const MessageResponse = memo(
-  ({ className, ...props }: MessageResponseProps) => (
+  ({ className, components, ...props }: MessageResponseProps) => (
     <Streamdown
       className={cn(
         "size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
         className
       )}
+      components={{
+        ul: ({ children, ...listProps }) => (
+          <ul className="list-disc pl-6 my-2 space-y-1" {...listProps}>
+            {children}
+          </ul>
+        ),
+        ol: ({ children, ...listProps }) => (
+          <ol className="list-decimal pl-6 my-2 space-y-1" {...listProps}>
+            {children}
+          </ol>
+        ),
+        li: ({ children, ...listProps }) => (
+          <li className="pl-2" {...listProps}>
+            {children}
+          </li>
+        ),
+        ...components,
+      }}
       {...props}
     />
   ),

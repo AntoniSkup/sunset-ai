@@ -6,7 +6,6 @@ import { DefaultChatTransport } from "ai";
 import { WelcomeMessage } from "./welcome-message";
 import { MessageList } from "./message-list";
 import { ChatInput } from "./chat-input";
-import type { UIMessage } from "ai";
 
 export function Chat() {
   const [input, setInput] = useState("");

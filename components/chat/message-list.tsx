@@ -190,6 +190,7 @@ export function MessageList({
                 width: "100%",
                 transform: `translateY(${virtualRow.start}px)`,
               }}
+              className="py-4"
             >
               <MessageItem
                 message={message}
