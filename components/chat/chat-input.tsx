@@ -1,14 +1,14 @@
 "use client";
 
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Send } from "lucide-react";
-import { FormEvent } from "react";
+import { ArrowUp } from "lucide-react";
+import { FormEvent, useRef } from "react";
+import { cn } from "@/lib/utils";
 
 interface ChatInputProps {
   input: string;
   handleSubmit: (e: FormEvent<HTMLFormElement>) => void;
-  handleInputChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  handleInputChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
   isLoading: boolean;
 }
 
@@ -18,21 +18,66 @@ export function ChatInput({
   handleInputChange,
   isLoading,
 }: ChatInputProps) {
+  const formRef = useRef<HTMLFormElement>(null);
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      if (!isLoading && input.trim() && formRef.current) {
+        formRef.current.requestSubmit();
+      }
+    }
+  };
+
   return (
     <form
+      ref={formRef}
       onSubmit={handleSubmit}
-      className="flex gap-2 p-4 border-t bg-background"
+      className="border-t bg-background"
     >
-      <Input
-        value={input}
-        onChange={handleInputChange}
-        placeholder="Type your message..."
-        disabled={isLoading}
-        className="flex-1"
+      <div className="relative">
+        <textarea
+          value={input}
+          onChange={handleInputChange}
+          onKeyDown={handleKeyDown}
+          placeholder="What would you like to change?"
+          disabled={isLoading}
+          className={cn(
+            "w-full pl-4 pt-4 pr-16 text-sm resize-none overflow-auto",
+            "focus:outline-none bg-transparent rounded-t-lg",
+            "placeholder:text-muted-foreground",
+            "disabled:cursor-not-allowed disabled:opacity-50"
+          )}
+          style={{
+            height: "100px",
+            minHeight: "100px",
+            maxHeight: "400px",
+          }}
+        />
+        <Button
+          type="submit"
+          disabled={isLoading || !input.trim()}
+          size="icon"
+          className={cn(
+            "absolute top-4 right-4 w-[28px] h-[28px] p-1 rounded-lg",
+            isLoading || !input.trim()
+              ? "bg-muted text-muted-foreground hover:bg-muted"
+              : ""
+          )}
+          aria-label="Send message"
+          title="Send message"
+        >
+          <ArrowUp className="h-6 w-6" />
+        </Button>
+      </div>
+      <input
+        type="file"
+        id="chat-file-upload"
+        className="hidden"
+        multiple
+        accept=".jpg, .jpeg, .png, .pdf, .txt, .html"
       />
-      <Button type="submit" disabled={isLoading || !input.trim()}>
-        <Send className="h-4 w-4" />
-      </Button>
+      <div className="flex justify-between text-sm p-2"></div>
     </form>
   );
 }

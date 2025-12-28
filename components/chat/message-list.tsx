@@ -95,7 +95,7 @@ export function MessageList({
   if (!isMounted) {
     return (
       <div className="h-full overflow-y-auto overflow-x-hidden">
-        <div className="flex flex-col gap-8 p-4">
+        <div className="flex flex-col gap-8 p-1">
           {mergedMessages.map((item, index) => {
             if (item.type === "error") {
               return (
@@ -142,8 +142,8 @@ export function MessageList({
           height: `${virtualizer.getTotalSize()}px`,
           width: "100%",
           position: "relative",
-          padding: "1rem",
         }}
+        className="p-1"
       >
         {virtualItems.map((virtualRow) => {
           const item = mergedMessages[virtualRow.index];
@@ -159,7 +159,7 @@ export function MessageList({
                   position: "absolute",
                   top: 0,
                   left: 0,
-                  width: "calc(100% - 2rem)",
+                  right: 0,
                   transform: `translateY(${virtualRow.start}px)`,
                 }}
               >
@@ -187,7 +187,7 @@ export function MessageList({
                 position: "absolute",
                 top: 0,
                 left: 0,
-                width: "calc(100% - 2rem)",
+                width: "100%",
                 transform: `translateY(${virtualRow.start}px)`,
               }}
             >

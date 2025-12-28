@@ -5,7 +5,7 @@ import type { UIMessage } from "ai";
 
 async function getAIModel() {
   const modelProvider = process.env.AI_MODEL_PROVIDER;
-  const modelName = process.env.AI_MODEL_NAME || "gpt-4";
+  const modelName = process.env.AI_MODEL_NAME || "gpt-5.2";
 
   if (!modelProvider) {
     throw new Error("AI_MODEL_PROVIDER environment variable is not set");
