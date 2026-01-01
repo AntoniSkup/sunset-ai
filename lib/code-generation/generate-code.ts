@@ -13,6 +13,17 @@ export function buildCodeGenerationPrompt(
   previousCodeVersion?: string,
   isModification?: boolean
 ): string {
+  const cleanedPreviousCodeVersion = previousCodeVersion
+    ?.trim()
+    .startsWith("```")
+    ? previousCodeVersion
+        .trim()
+        .replace(/^```[^\r\n]*\r?\n/, "")
+        .replace(/\r?\n```$/, "")
+        .replace(/```$/, "")
+        .trim()
+    : previousCodeVersion;
+
   const basePrompt = `You are an expert web developer specializing in creating beautiful, modern landing pages using HTML and Tailwind CSS.
 
 Your task is to generate a complete, valid HTML document with Tailwind CSS classes for styling.
@@ -26,10 +37,13 @@ Requirements:
 - Make the design modern, responsive, and visually appealing
 - Include proper spacing, typography, and color schemes
 - The landing page should be complete and ready to render in a browser
+- Output MUST be raw HTML only
+- Do NOT wrap the output in Markdown code fences (no backticks, no \`\`\`html)
+- The first characters of your response must be <!DOCTYPE html>
 
 ${
-  isModification && previousCodeVersion
-    ? `\nThis is a modification request. The previous code version is:\n\n${previousCodeVersion}\n\nPlease modify ONLY the parts requested by the user while preserving the rest of the structure and content.`
+  isModification && cleanedPreviousCodeVersion
+    ? `\nThis is a modification request. The previous code version is:\n\n${cleanedPreviousCodeVersion}\n\nPlease modify ONLY the parts requested by the user while preserving the rest of the structure and content.`
     : ""
 }
 
@@ -51,6 +65,12 @@ export async function generateCodeWithAI(prompt: string): Promise<string> {
   return result.text;
 }
 
+/**
+ * Generates landing page code based on user request.
+ *
+ * Note: Preview loader is shown client-side when tool call starts (detected in Chat component).
+ * See components/chat/chat.tsx for preview integration.
+ */
 export async function generateCode(
   request: CodeGenerationRequest,
   userId: number
@@ -200,6 +220,7 @@ export const generateLandingPageCodeTool = tool({
         versionNumber: result.versionNumber,
         codeContent: result.codeContent,
         fixesApplied: result.fixesApplied || [],
+        sessionId: finalSessionId,
       };
     }
 

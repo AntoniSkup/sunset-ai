@@ -90,13 +90,13 @@
 
 ### Implementation for User Story 2
 
-- [ ] T030 [P] [US2] Create showPreviewLoader function in lib/preview/update-preview.ts that sends postMessage to preview iframe to display loading indicator per FR-009a
-- [ ] T031 [US2] Integrate showPreviewLoader call in lib/code-generation/generate-code.ts when code generation starts per FR-009a
-- [ ] T032 [P] [US2] Create updatePreviewPanel function in lib/preview/update-preview.ts that sends postMessage to preview iframe per contracts/code-generation-tool.md
-- [ ] T033 [US2] Integrate updatePreviewPanel call in lib/code-generation/save-code.ts after successful database save per FR-015
-- [ ] T034 [US2] Implement postMessage payload structure in lib/preview/update-preview.ts with type, versionId, versionNumber, and previewUrl fields per contracts/code-generation-tool.md
-- [ ] T035 [US2] Implement postMessage payload structure for loading state in lib/preview/update-preview.ts with type 'loading' per FR-009a
-- [ ] T036 [US2] Add error handling in lib/preview/update-preview.ts for postMessage failures that logs errors without blocking save operation per contracts/code-generation-tool.md
+- [x] T030 [P] [US2] Create showPreviewLoader function in lib/preview/update-preview.ts that sends postMessage to preview iframe to display loading indicator per FR-009a
+- [x] T031 [US2] Integrate showPreviewLoader call in lib/code-generation/generate-code.ts when code generation starts per FR-009a (client-side integration in components/chat/chat.tsx)
+- [x] T032 [P] [US2] Create updatePreviewPanel function in lib/preview/update-preview.ts that sends postMessage to preview iframe per contracts/code-generation-tool.md
+- [x] T033 [US2] Integrate updatePreviewPanel call in lib/code-generation/save-code.ts after successful database save per FR-015 (client-side integration in components/chat/chat.tsx)
+- [x] T034 [US2] Implement postMessage payload structure in lib/preview/update-preview.ts with type, versionId, versionNumber, and previewUrl fields per contracts/code-generation-tool.md
+- [x] T035 [US2] Implement postMessage payload structure for loading state in lib/preview/update-preview.ts with type 'loading' per FR-009a
+- [x] T036 [US2] Add error handling in lib/preview/update-preview.ts for postMessage failures that logs errors without blocking save operation per contracts/code-generation-tool.md
 - [ ] T037 [US2] Verify preview panel displays loading indicator when code generation starts and only shows preview content once generation completes per FR-009a
 - [ ] T038 [US2] Verify preview panel automatically loads and displays most recent version when save completes per FR-009 and SC-004
 - [ ] T039 [US2] Verify preview panel updates correctly when multiple landing pages are generated in a session per acceptance scenario 3

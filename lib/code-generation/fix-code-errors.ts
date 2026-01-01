@@ -1,6 +1,27 @@
 import { parse } from "node-html-parser";
 import type { CodeValidationResult } from "./types";
 
+function stripMarkdownCodeFences(input: string): {
+  code: string;
+  stripped: boolean;
+} {
+  if (!input) return { code: input, stripped: false };
+
+  let code = input.trim();
+  let stripped = false;
+
+  if (code.startsWith("```")) {
+    const before = code;
+    code = code.replace(/^```[^\r\n]*\r?\n/, "");
+    code = code.replace(/\r?\n```$/, "");
+    code = code.replace(/```$/, "");
+    code = code.trim();
+    stripped = code !== before.trim();
+  }
+
+  return { code, stripped };
+}
+
 export function parseAndValidateHTML(html: string): {
   isValid: boolean;
   root: ReturnType<typeof parse> | null;
@@ -103,24 +124,29 @@ export async function validateAndFixCode(
     };
   }
 
-  const parseResult = parseAndValidateHTML(code);
+  const stripped = stripMarkdownCodeFences(code);
+  const fixesAppliedPrefix = stripped.stripped
+    ? ["Removed markdown code fences"]
+    : [];
+
+  const parseResult = parseAndValidateHTML(stripped.code);
 
   if (parseResult.isValid) {
     return {
       isValid: true,
-      fixedCode: code,
-      fixesApplied: [],
+      fixedCode: stripped.code,
+      fixesApplied: fixesAppliedPrefix,
       errors: [],
     };
   }
 
-  const fixResult = fixCommonErrors(code);
+  const fixResult = fixCommonErrors(stripped.code);
   const reparseResult = parseAndValidateHTML(fixResult.fixedCode);
 
   return {
     isValid: reparseResult.isValid,
     fixedCode: fixResult.fixedCode,
-    fixesApplied: fixResult.fixesApplied,
+    fixesApplied: [...fixesAppliedPrefix, ...fixResult.fixesApplied],
     errors: reparseResult.errors,
   };
 }
