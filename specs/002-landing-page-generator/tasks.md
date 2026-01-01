@@ -97,9 +97,9 @@
 - [x] T034 [US2] Implement postMessage payload structure in lib/preview/update-preview.ts with type, versionId, versionNumber, and previewUrl fields per contracts/code-generation-tool.md
 - [x] T035 [US2] Implement postMessage payload structure for loading state in lib/preview/update-preview.ts with type 'loading' per FR-009a
 - [x] T036 [US2] Add error handling in lib/preview/update-preview.ts for postMessage failures that logs errors without blocking save operation per contracts/code-generation-tool.md
-- [ ] T037 [US2] Verify preview panel displays loading indicator when code generation starts and only shows preview content once generation completes per FR-009a
-- [ ] T038 [US2] Verify preview panel automatically loads and displays most recent version when save completes per FR-009 and SC-004
-- [ ] T039 [US2] Verify preview panel updates correctly when multiple landing pages are generated in a session per acceptance scenario 3
+- [x] T037 [US2] Verify preview panel displays loading indicator when code generation starts and only shows preview content once generation completes per FR-009a
+- [x] T038 [US2] Verify preview panel automatically loads and displays most recent version when save completes per FR-009 and SC-004
+- [x] T039 [US2] Verify preview panel updates correctly when multiple landing pages are generated in a session per acceptance scenario 3
 
 **Checkpoint**: At this point, User Stories 1 AND 2 should both work independently - code generation works and preview panel displays generated landing pages
 
@@ -113,9 +113,9 @@
 
 ### Implementation for User Story 3
 
-- [ ] T040 [US3] Modify buildCodeGenerationPrompt function in lib/code-generation/generate-code.ts to include previous code version when isModification is true per FR-013 and FR-014
-- [ ] T041 [US3] Update generateLandingPageCodeTool execute function in lib/code-generation/generate-code.ts to retrieve previous code version from database when isModification is true per FR-013
-- [ ] T042 [US3] Implement logic in lib/code-generation/generate-code.ts that detects modification requests and includes previous code in prompt per FR-013
+- [x] T040 [US3] Modify buildCodeGenerationPrompt function in lib/code-generation/generate-code.ts to include previous code version when isModification is true per FR-013 and FR-014
+- [x] T041 [US3] Update generateLandingPageCodeTool execute function in lib/code-generation/generate-code.ts to retrieve previous code version from database when isModification is true per FR-013
+- [x] T042 [US3] Implement logic in lib/code-generation/generate-code.ts that detects modification requests and includes previous code in prompt per FR-013
 - [ ] T043 [US3] Verify code generation preserves existing structure and content when generating modifications per FR-014
 - [ ] T044 [US3] Verify new version number is assigned correctly for modification requests (sequential increment) per FR-008
 - [ ] T045 [US3] Verify preview panel updates automatically when modified code is saved per FR-015
@@ -129,16 +129,16 @@
 
 **Purpose**: Improvements that affect multiple user stories
 
-- [ ] T047 [P] Add rate limiting to code generation requests (10 requests per user per minute) per contracts/code-generation-tool.md
-- [ ] T048 [P] Implement code size validation (max 1MB) in lib/code-generation/fix-code-errors.ts per spec assumptions
-- [ ] T049 [P] Add logging for code generation operations in lib/code-generation/generate-code.ts for observability
-- [ ] T050 [P] Add logging for database save operations in lib/code-generation/save-code.ts for debugging
-- [ ] T051 [P] Implement memory cleanup for temporary code storage with timeout (1 hour) per research.md
-- [ ] T052 [P] Add input validation for userRequest parameter (non-empty, reasonable length) in lib/code-generation/generate-code.ts
-- [ ] T053 [P] Add session ID validation in lib/code-generation/generate-code.ts per data-model.md
-- [ ] T054 Verify all error messages are explicit and actionable per constitution
-- [ ] T055 Run quickstart.md validation to ensure all user flows work correctly
-- [ ] T056 Verify performance meets success criteria (SC-001: <30s generation, SC-004: <2s preview update)
+- [x] T047 [P] Add rate limiting to code generation requests (10 requests per user per minute) per contracts/code-generation-tool.md
+- [x] T048 [P] Implement code size validation (max 1MB) in lib/code-generation/fix-code-errors.ts per spec assumptions
+- [x] T049 [P] Add logging for code generation operations in lib/code-generation/generate-code.ts for observability
+- [x] T050 [P] Add logging for database save operations in lib/code-generation/save-code.ts for debugging
+- [x] T051 [P] Implement memory cleanup for temporary code storage with timeout (1 hour) per research.md
+- [x] T052 [P] Add input validation for userRequest parameter (non-empty, reasonable length) in lib/code-generation/generate-code.ts
+- [x] T053 [P] Add session ID validation in lib/code-generation/generate-code.ts per data-model.md
+- [x] T054 Verify all error messages are explicit and actionable per constitution
+- [x] T055 Run quickstart.md validation to ensure all user flows work correctly
+- [x] T056 Verify performance meets success criteria (SC-001: <30s generation, SC-004: <2s preview update)
 
 ---
 

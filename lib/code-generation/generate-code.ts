@@ -7,6 +7,7 @@ import type { CodeGenerationRequest, CodeGenerationResult } from "./types";
 import { validateAndFixCode } from "@/lib/code-generation/fix-code-errors";
 import { saveCodeWithRetry } from "@/lib/code-generation/save-code";
 import { getNextVersionNumber, getLatestVersion } from "@/lib/db/queries";
+import { checkRateLimit } from "@/lib/code-generation/rate-limit";
 
 export function buildCodeGenerationPrompt(
   userRequest: string,
@@ -76,6 +77,15 @@ export async function generateCode(
   userId: number
 ): Promise<CodeGenerationResult> {
   try {
+    const rateLimit = checkRateLimit(userId);
+    if (!rateLimit.allowed) {
+      const resetInSeconds = Math.ceil((rateLimit.resetAt - Date.now()) / 1000);
+      return {
+        success: false,
+        error: `Rate limit exceeded. Please try again in ${resetInSeconds} seconds. Maximum 10 requests per minute.`,
+      };
+    }
+
     if (!request.userRequest || request.userRequest.trim().length === 0) {
       return {
         success: false,
@@ -83,10 +93,24 @@ export async function generateCode(
       };
     }
 
+    if (request.userRequest.length > 10000) {
+      return {
+        success: false,
+        error: "User request exceeds maximum length of 10,000 characters",
+      };
+    }
+
     if (!request.sessionId || request.sessionId.trim().length === 0) {
       return {
         success: false,
         error: "Session ID is required",
+      };
+    }
+
+    if (request.sessionId.length > 255) {
+      return {
+        success: false,
+        error: "Session ID exceeds maximum length of 255 characters",
       };
     }
 
@@ -109,6 +133,9 @@ export async function generateCode(
     const generatedCode = await generateCodeWithAI(prompt);
 
     if (!generatedCode || generatedCode.trim().length === 0) {
+      console.error(
+        `[Code Generation] Empty result for user ${userId}, session ${request.sessionId}`
+      );
       return {
         success: false,
         error: "Code generation returned empty result",
@@ -118,6 +145,9 @@ export async function generateCode(
     const validationResult = await validateAndFixCode(generatedCode);
 
     if (!validationResult.isValid && validationResult.errors.length > 0) {
+      console.error(
+        `[Code Generation] Validation failed for user ${userId}, session ${request.sessionId}: ${validationResult.errors.join(", ")}`
+      );
       return {
         success: false,
         error: `Code validation failed: ${validationResult.errors.join(", ")}`,
@@ -134,6 +164,9 @@ export async function generateCode(
     });
 
     if (!saveResult.success) {
+      console.error(
+        `[Code Generation] Save failed for user ${userId}, session ${request.sessionId}, version ${versionNumber}: ${saveResult.error}`
+      );
       return {
         success: false,
         error: saveResult.error || "Failed to save code to database",
@@ -150,6 +183,10 @@ export async function generateCode(
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error occurred";
+    console.error(
+      `[Code Generation] Unexpected error for user ${userId}: ${errorMessage}`,
+      error
+    );
     return {
       success: false,
       error: `Code generation failed: ${errorMessage}`,
