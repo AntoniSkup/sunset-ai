@@ -78,9 +78,7 @@
 }
 
 @layer utilities {
-  body {
-    font-family: "Manrope", Arial, Helvetica, sans-serif;
-  }
+  /* Intentionally empty: app typography is defined in @layer base */
 }
 
 @layer base {
@@ -272,6 +270,14 @@
     @apply border-border outline-ring/50;
   }
   body {
+    font-family:
+      ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji",
+      "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+    font-style: normal;
+    font-weight: 400;
+    font-size: 14px;
+    line-height: 24px;
+
     @apply bg-background text-foreground;
   }
 }

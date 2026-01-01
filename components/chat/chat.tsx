@@ -3,9 +3,14 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
+import type { UIMessage } from "ai";
 import { WelcomeMessage } from "./welcome-message";
 import { MessageList } from "./message-list";
 import { ChatInput } from "./chat-input";
+import {
+  showPreviewLoader,
+  updatePreviewPanel,
+} from "@/lib/preview/update-preview";
 
 export function Chat() {
   const [input, setInput] = useState("");
@@ -89,6 +94,62 @@ export function Chat() {
       parts: [{ type: "text", text: messageToRetry }],
     });
   };
+
+  useEffect(() => {
+    const lastMessage = messages[messages.length - 1];
+    if (!lastMessage || lastMessage.role !== "assistant") {
+      return;
+    }
+
+    for (const part of lastMessage.parts) {
+      const partType = part.type as string;
+
+      if (
+        partType.startsWith("tool-") &&
+        partType === "tool-generate_landing_page_code" &&
+        !("result" in part) &&
+        !("output" in part)
+      ) {
+        showPreviewLoader("Generating landing page...");
+      }
+
+      if (
+        partType.startsWith("tool-") &&
+        partType === "tool-generate_landing_page_code" &&
+        ("result" in part || "output" in part)
+      ) {
+        try {
+          const result =
+            "result" in part
+              ? (part as any).result
+              : "output" in part
+                ? (part as any).output
+                : null;
+
+          if (
+            result &&
+            typeof result === "object" &&
+            result.success === true &&
+            result.versionId &&
+            result.versionNumber
+          ) {
+            const sessionId =
+              result.sessionId ||
+              ("input" in part ? (part as any).input?.sessionId : null) ||
+              `session-${Date.now()}`;
+
+            updatePreviewPanel(
+              result.versionId,
+              result.versionNumber,
+              sessionId
+            );
+          }
+        } catch (error) {
+          console.error("Failed to update preview from tool result:", error);
+        }
+      }
+    }
+  }, [messages]);
 
   useEffect(() => {
     const lastMessage = messages[messages.length - 1];

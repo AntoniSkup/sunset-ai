@@ -2,21 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUser } from "@/lib/db/queries";
 import { streamText, convertToModelMessages } from "ai";
 import type { UIMessage } from "ai";
+import { generateLandingPageCodeTool } from "@/lib/code-generation/generate-code";
+import { getAIModel } from "@/lib/ai/get-ai-model";
+import { chatSystemPrompt } from "@/prompts/chat-system-prompt";
 
-async function getAIModel() {
-  const modelProvider = process.env.AI_MODEL_PROVIDER;
-  const modelName = process.env.AI_MODEL_NAME || "gpt-5.2";
+const requestQueues = new Map<string, Promise<void>>();
 
-  if (!modelProvider) {
-    throw new Error("AI_MODEL_PROVIDER environment variable is not set");
+async function processRequestQueue(sessionId: string): Promise<void> {
+  const queue = requestQueues.get(sessionId);
+  if (queue) {
+    await queue;
   }
-
-  if (modelProvider === "openai") {
-    const { openai } = await import("@ai-sdk/openai");
-    return openai(modelName);
-  }
-
-  throw new Error(`Unsupported AI model provider: ${modelProvider}`);
 }
 
 export async function POST(request: NextRequest) {
@@ -46,9 +42,15 @@ export async function POST(request: NextRequest) {
       messages as Array<Omit<UIMessage, "id">>
     );
 
+    const tools = {
+      generate_landing_page_code: generateLandingPageCodeTool,
+    };
+
     const result = streamText({
       model,
+      system: chatSystemPrompt,
       messages: modelMessages,
+      tools,
     });
 
     return result.toUIMessageStreamResponse();

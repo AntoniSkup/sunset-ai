@@ -5,6 +5,8 @@ import {
   text,
   timestamp,
   integer,
+  index,
+  unique,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
@@ -127,6 +129,43 @@ export type TeamDataWithMembers = Team & {
     user: Pick<User, "id" | "name" | "email">;
   })[];
 };
+
+export const landingPageVersions = pgTable(
+  "landing_page_versions",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id),
+    sessionId: varchar("session_id", { length: 255 }).notNull(),
+    versionNumber: integer("version_number").notNull(),
+    codeContent: text("code_content").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    sessionVersionUnique: unique().on(table.sessionId, table.versionNumber),
+    sessionVersionIdx: index("session_version_idx").on(
+      table.sessionId,
+      table.versionNumber
+    ),
+    userIdIdx: index("user_id_idx").on(table.userId),
+    createdAtIdx: index("created_at_idx").on(table.createdAt),
+  })
+);
+
+export const landingPageVersionsRelations = relations(
+  landingPageVersions,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [landingPageVersions.userId],
+      references: [users.id],
+    }),
+  })
+);
+
+export type LandingPageVersion = typeof landingPageVersions.$inferSelect;
+export type NewLandingPageVersion = typeof landingPageVersions.$inferInsert;
 
 export enum ActivityType {
   SIGN_UP = "SIGN_UP",

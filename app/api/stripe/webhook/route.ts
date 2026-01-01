@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
     console.error("Webhook signature verification failed.", err);
     return NextResponse.json(
       { error: "Webhook signature verification failed." },
-      { status: 400 },
+      { status: 400 }
     );
   }
 
@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
       await handleSubscriptionChange(subscription);
       break;
     default:
-      console.log(`Unhandled event type ${event.type}`);
+      console.info(`Unhandled event type ${event.type}`);
   }
 
   return NextResponse.json({ received: true });
