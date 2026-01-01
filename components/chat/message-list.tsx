@@ -25,7 +25,10 @@ export function MessageList({
   onRetry,
 }: MessageListProps) {
   const parentRef = useRef<HTMLDivElement>(null);
+  const bottomSpacerRef = useRef<HTMLDivElement>(null);
   const [isMounted, setIsMounted] = useState(false);
+  const lastUserMessageIdRef = useRef<string | null>(null);
+  type ScrollMode = "auto" | "smooth";
 
   useEffect(() => {
     setIsMounted(true);
@@ -70,13 +73,35 @@ export function MessageList({
     overscan: 5,
   });
 
-  const scrollToBottom = () => {
-    if (parentRef.current) {
-      parentRef.current.scrollTop = parentRef.current.scrollHeight;
+  const scrollToBottom = (behavior: ScrollMode = "auto") => {
+    if (mergedMessages.length === 0) return;
+
+    if (bottomSpacerRef.current) {
+      bottomSpacerRef.current.scrollIntoView({ behavior, block: "end" });
+      return;
     }
+
+    parentRef.current?.scrollTo({
+      top: parentRef.current.scrollHeight,
+      behavior,
+    });
   };
 
   const virtualItems = isMounted ? virtualizer.getVirtualItems() : [];
+
+  useEffect(() => {
+    if (!isMounted) return;
+
+    const lastMessage = messages[messages.length - 1];
+    if (!lastMessage || lastMessage.role !== "user") return;
+
+    if (lastUserMessageIdRef.current === lastMessage.id) return;
+    lastUserMessageIdRef.current = lastMessage.id;
+
+    requestAnimationFrame(() => {
+      scrollToBottom("smooth");
+    });
+  }, [isMounted, messages, mergedMessages.length]);
 
   useEffect(() => {
     if (parentRef.current && mergedMessages.length > 0) {
@@ -86,7 +111,7 @@ export function MessageList({
 
       if (isAtBottom) {
         requestAnimationFrame(() => {
-          scrollToBottom();
+          scrollToBottom("smooth");
         });
       }
     }
@@ -131,6 +156,7 @@ export function MessageList({
             );
           })}
         </div>
+        <div ref={bottomSpacerRef} aria-hidden className="h-16" />
       </div>
     );
   }
@@ -202,6 +228,7 @@ export function MessageList({
           );
         })}
       </div>
+      <div ref={bottomSpacerRef} aria-hidden className="h-32" />
     </div>
   );
 }
