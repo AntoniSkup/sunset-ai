@@ -1,6 +1,12 @@
-import { desc, and, eq, isNull } from "drizzle-orm";
+import { desc, and, eq, isNull, max, asc } from "drizzle-orm";
 import { db } from "./drizzle";
-import { activityLogs, teamMembers, teams, users } from "./schema";
+import {
+  activityLogs,
+  teamMembers,
+  teams,
+  users,
+  landingPageVersions,
+} from "./schema";
 import { cookies } from "next/headers";
 import { verifyToken } from "@/lib/auth/session";
 
@@ -53,7 +59,7 @@ export async function updateTeamSubscription(
     stripeProductId: string | null;
     planName: string | null;
     subscriptionStatus: string;
-  },
+  }
 ) {
   await db
     .update(teams)
@@ -127,4 +133,51 @@ export async function getTeamForUser() {
   });
 
   return result?.team || null;
+}
+
+export async function getNextVersionNumber(sessionId: string) {
+  const result = await db
+    .select({ max: max(landingPageVersions.versionNumber) })
+    .from(landingPageVersions)
+    .where(eq(landingPageVersions.sessionId, sessionId));
+
+  return (result[0]?.max ?? 0) + 1;
+}
+
+export async function getLatestVersion(sessionId: string) {
+  const result = await db
+    .select()
+    .from(landingPageVersions)
+    .where(eq(landingPageVersions.sessionId, sessionId))
+    .orderBy(desc(landingPageVersions.versionNumber))
+    .limit(1);
+
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function createLandingPageVersion(data: {
+  userId: number;
+  sessionId: string;
+  versionNumber: number;
+  codeContent: string;
+}) {
+  const result = await db
+    .insert(landingPageVersions)
+    .values({
+      userId: data.userId,
+      sessionId: data.sessionId,
+      versionNumber: data.versionNumber,
+      codeContent: data.codeContent,
+    })
+    .returning();
+
+  return result[0];
+}
+
+export async function getAllVersionsForSession(sessionId: string) {
+  return await db
+    .select()
+    .from(landingPageVersions)
+    .where(eq(landingPageVersions.sessionId, sessionId))
+    .orderBy(asc(landingPageVersions.versionNumber));
 }
