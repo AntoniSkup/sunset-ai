@@ -42,14 +42,14 @@ export function ToolCallIndicator({
       {isComplete ? (
         <>
           <CheckCircle2 className="h-4 w-4 text-green-600" />
-          <span className="text-sm">Wrote</span>
+          <span className="text-sm text-black">Wrote</span>
           <FileCode className="h-4 w-4" />
           <span className="font-mono text-xs">{file}</span>
         </>
       ) : (
         <>
           <Loader2 className="h-4 w-4 animate-spin" />
-          <span className="text-sm">Writing</span>
+          <span className="text-sm text-black">Writing</span>
           <FileCode className="h-4 w-4" />
           <span className="font-mono text-xs">{file}</span>
         </>

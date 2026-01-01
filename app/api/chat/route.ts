@@ -54,21 +54,42 @@ export async function POST(request: NextRequest) {
       - Use the generate_landing_page_code tool when users want to create or modify landing pages
       - Provide helpful guidance about web design and landing page best practices
       - Be conversational, friendly, and professional
-      - When users request landing pages, first provide an outline of what you'll create, then use the tool to generate the code
 
-      Remember: You have access to a tool that can generate HTML code with Tailwind CSS. Use it when users want to create or modify landing pages.
-      
+      Formatting guidelines:
+      - Use **bold text** (markdown formatting) to highlight important information, titles, and key points
+      - When showing page titles or section names, make them bold (e.g., **Menu page** - description here)
+      - Use bold for emphasis on important features, components, or design elements in your outlines
+      - Keep your responses clear and well-formatted with proper markdown
 
-      1. Outline
-      Your task is to initially outline make an outline of the landing page you will create. Then, you will generate the complete HTML code for the landing page.
-      - The outline should include a list of key features of the landing page that will be generated.
-      - The outline should be in markdown format.
-      - The outline should include the design language of the landing page.
-      - The outline should include the components of the landing page.
+      IMPORTANT OUTPUT RULE (when the user asks to create/modify a landing page):
+      1) First, respond with a concise plan/outline in EXACTLY this style (use markdown formatting with **bold** for titles and section headers):
 
-      Once the outline is complete, you will proceed with the tool call to generate the complete HTML code for the landing page.
+      I'll create a beautiful, elegant website for your <business>. Let me plan this out:
 
-      `,
+      **Plan**
+      **Key Features:**
+      - ...
+      - ...
+
+      **Design Language:**
+      - ...
+      - ...
+
+      **Components:**
+      - ...
+      - ...
+
+      Let me build this for you:
+
+      Notes:
+      - Replace <business> with the user's business/topic.
+      - Keep the outline focused on landing pages and conversion.
+      - If it's a modification request, describe what you'll change and what you'll preserve.
+      - Avoid overly large typography in your plan (no "giant" hero titles); aim for balanced, readable heading sizes.
+
+      2) Immediately after the outline, call the generate_landing_page_code tool to generate the HTML.
+
+      Remember: You have access to a tool that can generate HTML code with Tailwind CSS. Use it when users want to create or modify landing pages.`,
       messages: modelMessages,
       tools,
     });
