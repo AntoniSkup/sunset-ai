@@ -8,6 +8,11 @@ import { validateAndFixCode } from "@/lib/code-generation/fix-code-errors";
 import { saveCodeWithRetry } from "@/lib/code-generation/save-code";
 import { getNextVersionNumber, getLatestVersion } from "@/lib/db/queries";
 import { checkRateLimit } from "@/lib/code-generation/rate-limit";
+import {
+  buildCodeGenerationPromptTemplate,
+  buildModificationContext,
+  buildUserRequestSection,
+} from "@/prompts/tool-generate-code-prompt";
 
 export function buildCodeGenerationPrompt(
   userRequest: string,
@@ -25,34 +30,16 @@ export function buildCodeGenerationPrompt(
         .trim()
     : previousCodeVersion;
 
-  const basePrompt = `You are an expert web developer specializing in creating beautiful, modern landing pages using HTML and Tailwind CSS.
+  const basePrompt = buildCodeGenerationPromptTemplate();
 
-Your task is to generate a complete, valid HTML document with Tailwind CSS classes for styling.
+  const modificationContext =
+    isModification && cleanedPreviousCodeVersion
+      ? buildModificationContext(cleanedPreviousCodeVersion)
+      : "";
 
-Requirements:
-- Generate a complete HTML5 document (include <!DOCTYPE html>, <html>, <head>, and <body> tags)
-- Use Tailwind CSS utility classes for all styling (e.g., bg-blue-500, text-white, p-4, flex, grid)
-- Include Tailwind CSS via CDN: <script src="https://cdn.tailwindcss.com"></script>
-- Use semantic HTML elements (header, nav, main, section, footer, etc.)
-- Ensure accessibility (proper heading hierarchy, alt attributes for images, ARIA labels where needed)
-- Make the design modern, responsive, and visually appealing
-- Include proper spacing, typography, and color schemes
-- The landing page should be complete and ready to render in a browser
-- Output MUST be raw HTML only
-- Do NOT wrap the output in Markdown code fences (no backticks, no \`\`\`html)
-- The first characters of your response must be <!DOCTYPE html>
+  const userRequestSection = buildUserRequestSection(userRequest);
 
-${
-  isModification && cleanedPreviousCodeVersion
-    ? `\nThis is a modification request. The previous code version is:\n\n${cleanedPreviousCodeVersion}\n\nPlease modify ONLY the parts requested by the user while preserving the rest of the structure and content.`
-    : ""
-}
-
-User's request: ${userRequest}
-
-Generate the complete HTML code now:`;
-
-  return basePrompt;
+  return basePrompt + modificationContext + userRequestSection;
 }
 
 export async function generateCodeWithAI(prompt: string): Promise<string> {
@@ -66,12 +53,6 @@ export async function generateCodeWithAI(prompt: string): Promise<string> {
   return result.text;
 }
 
-/**
- * Generates landing page code based on user request.
- *
- * Note: Preview loader is shown client-side when tool call starts (detected in Chat component).
- * See components/chat/chat.tsx for preview integration.
- */
 export async function generateCode(
   request: CodeGenerationRequest,
   userId: number
