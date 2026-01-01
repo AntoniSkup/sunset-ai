@@ -1,0 +1,59 @@
+"use client";
+
+import React from "react";
+import { Loader2, FileCode, CheckCircle2 } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+interface ToolCallIndicatorProps {
+  toolName: string;
+  fileName: string;
+  isComplete: boolean;
+  className?: string;
+}
+
+export function ToolCallIndicator({
+  toolName,
+  fileName,
+  isComplete,
+  className,
+}: ToolCallIndicatorProps) {
+  const getToolDisplayInfo = (tool: string) => {
+    if (tool === "generate_landing_page_code") {
+      return {
+        displayName: "Generating landing page",
+        file: fileName || "file/index.html",
+      };
+    }
+    return {
+      displayName: tool,
+      file: fileName || "file",
+    };
+  };
+
+  const { displayName, file } = getToolDisplayInfo(toolName);
+
+  return (
+    <div
+      className={cn(
+        "inline-flex items-center gap-2 px-3 py-1.5 rounded-md hover:bg-muted text-muted-foreground text-sm my-2",
+        className
+      )}
+    >
+      {isComplete ? (
+        <>
+          <CheckCircle2 className="h-4 w-4 text-green-600" />
+          <span className="text-sm">Wrote</span>
+          <FileCode className="h-4 w-4" />
+          <span className="font-mono text-xs">{file}</span>
+        </>
+      ) : (
+        <>
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <span className="text-sm">Writing</span>
+          <FileCode className="h-4 w-4" />
+          <span className="font-mono text-xs">{file}</span>
+        </>
+      )}
+    </div>
+  );
+}
