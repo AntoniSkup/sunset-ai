@@ -119,8 +119,8 @@ export function MessageList({
 
   if (!isMounted) {
     return (
-      <div className="h-full overflow-y-auto overflow-x-hidden">
-        <div className="flex flex-col gap-8 p-1">
+      <div className="message-list-scroll h-full overflow-y-auto overflow-x-hidden">
+        <div className="flex flex-col gap-8">
           {mergedMessages.map((item, index) => {
             if (item.type === "error") {
               return (
@@ -162,7 +162,10 @@ export function MessageList({
   }
 
   return (
-    <div ref={parentRef} className="h-full overflow-y-auto overflow-x-hidden">
+    <div
+      ref={parentRef}
+      className="message-list-scroll h-full overflow-y-auto overflow-x-hidden p-2 md:p-4"
+    >
       <div
         style={{
           height: `${virtualizer.getTotalSize()}px`,

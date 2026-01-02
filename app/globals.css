@@ -78,7 +78,34 @@
 }
 
 @layer utilities {
-  /* Intentionally empty: app typography is defined in @layer base */
+  .message-list-scroll {
+    scrollbar-gutter: stable;
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.35) transparent;
+  }
+
+  .message-list-scroll::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .message-list-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .message-list-scroll::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--muted-foreground) / 0.28);
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+
+  .message-list-scroll:hover::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--muted-foreground) / 0.4);
+  }
+
+  .message-list-scroll::-webkit-scrollbar-thumb:active {
+    background-color: hsl(var(--muted-foreground) / 0.55);
+  }
 }
 
 @layer base {

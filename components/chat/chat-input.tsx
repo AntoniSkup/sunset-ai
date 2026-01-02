@@ -30,7 +30,7 @@ export function ChatInput({
   };
 
   return (
-    <form ref={formRef} onSubmit={handleSubmit} className="bg-background">
+    <form ref={formRef} onSubmit={handleSubmit} className="bg-background p-4">
       <div className="relative bg-white rounded-lg border shadow-xs">
         <textarea
           value={input}
@@ -42,7 +42,7 @@ export function ChatInput({
             "w-full pl-4 pt-4 pr-16 text-sm resize-none overflow-auto",
             "focus:outline-none bg-transparent rounded-t-lg",
             "placeholder:text-muted-foreground",
-            "disabled:cursor-not-allowed disabled:opacity-50"
+            "disabled:opacity-50"
           )}
           style={{
             height: "100px",

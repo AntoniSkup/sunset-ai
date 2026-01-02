@@ -9,7 +9,7 @@ export default function BuilderPage() {
     <div className="h-full flex">
       <Group orientation="horizontal" className="flex-1 h-full">
         <Panel defaultSize={30} minSize={30}>
-          <div className="h-full w-full border rounded-lg bg-background overflow-hidden p-4">
+          <div className="h-full w-full border rounded-lg bg-background overflow-hidden">
             <Chat />
           </div>
         </Panel>
