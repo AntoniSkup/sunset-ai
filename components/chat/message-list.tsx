@@ -231,7 +231,7 @@ export function MessageList({
           );
         })}
       </div>
-      <div ref={bottomSpacerRef} aria-hidden className="h-32" />
+      <div ref={bottomSpacerRef} aria-hidden className="h-64" />
     </div>
   );
 }
