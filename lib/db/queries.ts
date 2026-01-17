@@ -7,6 +7,7 @@ import {
   users,
   landingPageVersions,
   chats,
+  chatMessages,
 } from "./schema";
 import { nanoid } from "nanoid";
 import { cookies } from "next/headers";
@@ -188,7 +189,7 @@ export async function createChat(data: {
   userId: number;
   title?: string;
 }) {
-  const publicId = `chat_${nanoid()}`;
+  const publicId = nanoid();
   const result = await db
     .insert(chats)
     .values({
@@ -234,4 +235,42 @@ export async function updateChatByPublicId(
     .returning();
 
   return result.length > 0 ? result[0] : null;
+}
+
+export async function createChatMessage(data: {
+  chatId: number;
+  role: "user" | "assistant";
+  content: string;
+}) {
+  const result = await db
+    .insert(chatMessages)
+    .values({
+      chatId: data.chatId,
+      role: data.role,
+      content: data.content,
+    })
+    .returning();
+
+  await db
+    .update(chats)
+    .set({ updatedAt: new Date() })
+    .where(eq(chats.id, data.chatId));
+
+  return result[0];
+}
+
+export async function getChatMessagesByPublicId(
+  chatPublicId: string,
+  userId: number
+) {
+  const chat = await getChatByPublicId(chatPublicId, userId);
+  if (!chat) return null;
+
+  const messages = await db
+    .select()
+    .from(chatMessages)
+    .where(eq(chatMessages.chatId, chat.id))
+    .orderBy(asc(chatMessages.createdAt), asc(chatMessages.id));
+
+  return { chat, messages };
 }

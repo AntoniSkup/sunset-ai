@@ -3,6 +3,7 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
+import type { UIMessage } from "ai";
 import { WelcomeMessage } from "./welcome-message";
 import { MessageList } from "./message-list";
 import { ChatInput } from "./chat-input";
@@ -17,6 +18,70 @@ interface ChatProps {
 }
 
 export function Chat({ chatId: providedChatId }: ChatProps = {}) {
+  if (providedChatId) {
+    return <ChatWithHistory chatId={providedChatId} />;
+  }
+
+  return <ChatInner />;
+}
+
+function ChatWithHistory({ chatId }: { chatId: string }) {
+  const [initialMessages, setInitialMessages] = useState<UIMessage[] | null>(
+    null
+  );
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setInitialMessages(null);
+    setLoadError(null);
+
+    (async () => {
+      try {
+        const res = await fetch(`/api/chats/${encodeURIComponent(chatId)}/messages`);
+        if (!res.ok) {
+          const data = await res.json().catch(() => null);
+          throw new Error(data?.error || "Failed to load chat messages");
+        }
+        const data = await res.json();
+        if (!cancelled) {
+          setInitialMessages(Array.isArray(data?.messages) ? data.messages : []);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setLoadError(e instanceof Error ? e.message : "Failed to load chat");
+          setInitialMessages([]);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [chatId]);
+
+  if (initialMessages === null) {
+    return (
+      <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
+        Loading chat…
+      </div>
+    );
+  }
+
+  if (loadError) {
+    console.warn(loadError);
+  }
+
+  return <ChatInner chatId={chatId} initialMessages={initialMessages} />;
+}
+
+function ChatInner({
+  chatId: providedChatId,
+  initialMessages = [],
+}: {
+  chatId?: string;
+  initialMessages?: UIMessage[];
+}) {
   const [input, setInput] = useState("");
   const [chatId, setChatId] = useState<string | null>(providedChatId || null);
   const [isCreatingChat, setIsCreatingChat] = useState(false);
@@ -76,6 +141,7 @@ export function Chat({ chatId: providedChatId }: ChatProps = {}) {
   >([]);
 
   const { messages, sendMessage, status } = useChat({
+    messages: initialMessages,
     transport,
     onError: (error) => {
       const errorMessage =

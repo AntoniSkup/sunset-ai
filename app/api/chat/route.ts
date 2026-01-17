@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getUser, getChatByPublicId } from "@/lib/db/queries";
+import {
+  getUser,
+  getChatByPublicId,
+  createChatMessage,
+} from "@/lib/db/queries";
 import { streamText, convertToModelMessages } from "ai";
 import type { UIMessage } from "ai";
 import { createGenerateLandingPageCodeToolWithChatId } from "@/lib/code-generation/generate-code";
@@ -64,11 +68,39 @@ export async function POST(request: NextRequest) {
       generate_landing_page_code: generateLandingPageCodeToolWithChatId,
     };
 
+    const lastMessage = messages[messages.length - 1] as any;
+    if (lastMessage?.role === "user" && Array.isArray(lastMessage.parts)) {
+      const userText = lastMessage.parts
+        .filter((p: any) => p?.type === "text")
+        .map((p: any) => p.text)
+        .join("");
+      if (userText && typeof userText === "string" && userText.trim()) {
+        await createChatMessage({
+          chatId: chat.id,
+          role: "user",
+          content: userText.trim(),
+        });
+      }
+    }
+
     const result = streamText({
       model,
       system: chatSystemPrompt,
       messages: modelMessages,
       tools,
+      onFinish: async ({ text }) => {
+        if (text && text.trim()) {
+          try {
+            await createChatMessage({
+              chatId: chat.id,
+              role: "assistant",
+              content: text.trim(),
+            });
+          } catch (e) {
+            console.error("Failed to persist assistant message:", e);
+          }
+        }
+      },
     });
 
     return result.toUIMessageStreamResponse();
