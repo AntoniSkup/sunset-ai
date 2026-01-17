@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getUser } from "@/lib/db/queries";
+import { getUser, getChatByPublicId } from "@/lib/db/queries";
 import { streamText, convertToModelMessages } from "ai";
 import type { UIMessage } from "ai";
-import { generateLandingPageCodeTool } from "@/lib/code-generation/generate-code";
+import { createGenerateLandingPageCodeToolWithChatId } from "@/lib/code-generation/generate-code";
 import { getAIModel } from "@/lib/ai/get-ai-model";
 import { chatSystemPrompt } from "@/prompts/chat-system-prompt";
 
 const requestQueues = new Map<string, Promise<void>>();
 
-async function processRequestQueue(sessionId: string): Promise<void> {
-  const queue = requestQueues.get(sessionId);
+async function processRequestQueue(chatId: string): Promise<void> {
+  const queue = requestQueues.get(chatId);
   if (queue) {
     await queue;
   }
@@ -27,12 +27,27 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { messages } = body;
+    const { messages, chatId } = body;
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return NextResponse.json(
         { error: "Invalid messages", code: "INVALID_MESSAGE" },
         { status: 400 }
+      );
+    }
+
+    if (!chatId || typeof chatId !== "string") {
+      return NextResponse.json(
+        { error: "Chat ID is required", code: "CHAT_ID_REQUIRED" },
+        { status: 400 }
+      );
+    }
+
+    const chat = await getChatByPublicId(chatId, user.id);
+    if (!chat) {
+      return NextResponse.json(
+        { error: "Chat not found", code: "CHAT_NOT_FOUND" },
+        { status: 404 }
       );
     }
 
@@ -42,8 +57,11 @@ export async function POST(request: NextRequest) {
       messages as Array<Omit<UIMessage, "id">>
     );
 
+    const generateLandingPageCodeToolWithChatId =
+      createGenerateLandingPageCodeToolWithChatId(chatId);
+
     const tools = {
-      generate_landing_page_code: generateLandingPageCodeTool,
+      generate_landing_page_code: generateLandingPageCodeToolWithChatId,
     };
 
     const result = streamText({

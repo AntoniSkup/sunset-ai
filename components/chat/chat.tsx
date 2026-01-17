@@ -3,7 +3,6 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
-import type { UIMessage } from "ai";
 import { WelcomeMessage } from "./welcome-message";
 import { MessageList } from "./message-list";
 import { ChatInput } from "./chat-input";
@@ -11,17 +10,65 @@ import {
   showPreviewLoader,
   updatePreviewPanel,
 } from "@/lib/preview/update-preview";
+import { usePendingMessageStore } from "@/lib/stores/usePendingMessageStore";
 
-export function Chat() {
+interface ChatProps {
+  chatId?: string;
+}
+
+export function Chat({ chatId: providedChatId }: ChatProps = {}) {
   const [input, setInput] = useState("");
+  const [chatId, setChatId] = useState<string | null>(providedChatId || null);
+  const [isCreatingChat, setIsCreatingChat] = useState(false);
   const lastUserMessageRef = useRef<string>("");
+  const pendingMessage = usePendingMessageStore((s) => s.pendingMessage);
+  const setPendingMessage = usePendingMessageStore((s) => s.setPendingMessage);
+  const consumedPendingIdsRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    const createNewChat = async () => {
+      if (chatId || isCreatingChat || providedChatId) return;
+
+      setIsCreatingChat(true);
+      try {
+        const response = await fetch("/api/chats", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({}),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setChatId(data.chat.publicId);
+        } else {
+          console.error("Failed to create chat");
+        }
+      } catch (error) {
+        console.error("Error creating chat:", error);
+      } finally {
+        setIsCreatingChat(false);
+      }
+    };
+
+    createNewChat();
+  }, [chatId, isCreatingChat, providedChatId]);
 
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
         api: "/api/chat",
+        async fetch(url, options) {
+          if (chatId && options?.body) {
+            const body = JSON.parse(options.body as string);
+            body.chatId = chatId;
+            options.body = JSON.stringify(body);
+          }
+          return fetch(url, options);
+        },
       }),
-    []
+    [chatId]
   );
 
   const [errorMessages, setErrorMessages] = useState<
@@ -47,11 +94,32 @@ export function Chat() {
     },
   });
 
+  useEffect(() => {
+    if (
+      chatId &&
+      pendingMessage &&
+      pendingMessage.chatId === chatId &&
+      messages.length === 0 &&
+      status !== "streaming" &&
+      status !== "submitted"
+    ) {
+      if (consumedPendingIdsRef.current.has(pendingMessage.id)) return;
+      consumedPendingIdsRef.current.add(pendingMessage.id);
+
+      setPendingMessage(null);
+
+      sendMessage({
+        role: "user",
+        parts: [{ type: "text", text: pendingMessage.message }],
+      });
+    }
+  }, [chatId, pendingMessage, messages.length, status, sendMessage, setPendingMessage]);
+
   const isLoading = status === "streaming" || status === "submitted";
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!input.trim() || isLoading) return;
+    if (!input.trim() || isLoading || !chatId) return;
 
     const message = input.trim();
     lastUserMessageRef.current = message;
@@ -135,6 +203,7 @@ export function Chat() {
           ) {
             const sessionId =
               result.sessionId ||
+              (chatId ? `chat-${chatId}` : null) ||
               ("input" in part ? (part as any).input?.sessionId : null) ||
               `session-${Date.now()}`;
 

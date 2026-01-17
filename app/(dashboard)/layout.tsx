@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { use, useState, Suspense } from "react";
+import { useState, Suspense } from "react";
 import { Button } from "@/components/ui/button";
 import { CircleIcon, Home, LogOut } from "lucide-react";
 import {

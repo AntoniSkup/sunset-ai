@@ -79,6 +79,7 @@ export const teamsRelations = relations(teams, ({ many }) => ({
 export const usersRelations = relations(users, ({ many }) => ({
   teamMembers: many(teamMembers),
   invitationsSent: many(invitations),
+  chats: many(chats),
 }));
 
 export const invitationsRelations = relations(invitations, ({ one }) => ({
@@ -166,6 +167,35 @@ export const landingPageVersionsRelations = relations(
 
 export type LandingPageVersion = typeof landingPageVersions.$inferSelect;
 export type NewLandingPageVersion = typeof landingPageVersions.$inferInsert;
+
+export const chats = pgTable(
+  "chats",
+  {
+    id: serial("id").primaryKey(),
+    publicId: varchar("public_id", { length: 32 }).notNull(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id),
+    title: varchar("title", { length: 255 }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    publicIdUnique: unique("chats_public_id_unique").on(table.publicId),
+    userIdIdx: index("chat_user_id_idx").on(table.userId),
+    createdAtIdx: index("chat_created_at_idx").on(table.createdAt),
+  })
+);
+
+export const chatsRelations = relations(chats, ({ one }) => ({
+  user: one(users, {
+    fields: [chats.userId],
+    references: [users.id],
+  }),
+}));
+
+export type Chat = typeof chats.$inferSelect;
+export type NewChat = typeof chats.$inferInsert;
 
 export enum ActivityType {
   SIGN_UP = "SIGN_UP",

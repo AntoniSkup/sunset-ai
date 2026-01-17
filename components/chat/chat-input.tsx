@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { ArrowUp } from "lucide-react";
+import { ArrowUp, Loader2 } from "lucide-react";
 import { FormEvent, useRef } from "react";
 import { cn } from "@/lib/utils";
 
@@ -63,7 +63,11 @@ export function ChatInput({
           aria-label="Send message"
           title="Send message"
         >
-          <ArrowUp className="h-6 w-6" />
+          {isLoading ? (
+            <Loader2 className="h-5 w-5 animate-spin" />
+          ) : (
+            <ArrowUp className="h-6 w-6" />
+          )}
         </Button>
       </div>
       <input

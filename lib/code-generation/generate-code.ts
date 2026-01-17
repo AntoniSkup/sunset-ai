@@ -202,49 +202,66 @@ const generateLandingPageCodeSchema = z.object({
     ),
 });
 
+const generateLandingPageCodeToolExecute = async ({
+  userRequest,
+  isModification,
+  previousCodeVersion,
+  sessionId,
+}: z.infer<typeof generateLandingPageCodeSchema>) => {
+  const user = await getUser();
+  if (!user) {
+    return {
+      success: false,
+      error: "User not authenticated",
+    };
+  }
+
+  const finalSessionId = sessionId || `session-${user.id}-${nanoid()}`;
+
+  const request: CodeGenerationRequest = {
+    userRequest,
+    isModification,
+    previousCodeVersion,
+    sessionId: finalSessionId,
+  };
+
+  const result = await generateCode(request, user.id);
+
+  if (result.success) {
+    return {
+      success: true,
+      versionId: result.versionId,
+      versionNumber: result.versionNumber,
+      codeContent: result.codeContent,
+      fixesApplied: result.fixesApplied || [],
+      sessionId: finalSessionId,
+    };
+  }
+
+  return {
+    success: false,
+    error: result.error || "Code generation failed",
+  };
+};
+
 export const generateLandingPageCodeTool = tool({
   description:
     "Generate HTML code with Tailwind CSS for landing pages. Use this when users request to create, build, or modify a landing page. Include conversation context and previous code versions for iterative refinement.",
   inputSchema: generateLandingPageCodeSchema,
-  execute: async ({
-    userRequest,
-    isModification,
-    previousCodeVersion,
-    sessionId,
-  }: z.infer<typeof generateLandingPageCodeSchema>) => {
-    const user = await getUser();
-    if (!user) {
-      return {
-        success: false,
-        error: "User not authenticated",
-      };
-    }
-
-    const finalSessionId = sessionId || `session-${user.id}-${nanoid()}`;
-
-    const request: CodeGenerationRequest = {
-      userRequest,
-      isModification,
-      previousCodeVersion,
-      sessionId: finalSessionId,
-    };
-
-    const result = await generateCode(request, user.id);
-
-    if (result.success) {
-      return {
-        success: true,
-        versionId: result.versionId,
-        versionNumber: result.versionNumber,
-        codeContent: result.codeContent,
-        fixesApplied: result.fixesApplied || [],
-        sessionId: finalSessionId,
-      };
-    }
-
-    return {
-      success: false,
-      error: result.error || "Code generation failed",
-    };
-  },
+  execute: generateLandingPageCodeToolExecute,
 } as any);
+
+export function createGenerateLandingPageCodeToolWithChatId(chatId: string) {
+  const sessionId = `chat-${chatId}`;
+  return tool({
+    description:
+      "Generate HTML code with Tailwind CSS for landing pages. Use this when users request to create, build, or modify a landing page. Include conversation context and previous code versions for iterative refinement.",
+    inputSchema: generateLandingPageCodeSchema,
+    execute: async (input: z.infer<typeof generateLandingPageCodeSchema>) => {
+      return generateLandingPageCodeToolExecute({
+        ...input,
+        sessionId: input.sessionId || sessionId,
+      });
+    },
+  } as any);
+}

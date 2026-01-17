@@ -6,7 +6,9 @@ import {
   teams,
   users,
   landingPageVersions,
+  chats,
 } from "./schema";
+import { nanoid } from "nanoid";
 import { cookies } from "next/headers";
 import { verifyToken } from "@/lib/auth/session";
 
@@ -180,4 +182,56 @@ export async function getAllVersionsForSession(sessionId: string) {
     .from(landingPageVersions)
     .where(eq(landingPageVersions.sessionId, sessionId))
     .orderBy(asc(landingPageVersions.versionNumber));
+}
+
+export async function createChat(data: {
+  userId: number;
+  title?: string;
+}) {
+  const publicId = `chat_${nanoid()}`;
+  const result = await db
+    .insert(chats)
+    .values({
+      publicId,
+      userId: data.userId,
+      title: data.title || null,
+    })
+    .returning();
+
+  return result[0];
+}
+
+export async function getChatByPublicId(chatPublicId: string, userId: number) {
+  const result = await db
+    .select()
+    .from(chats)
+    .where(and(eq(chats.publicId, chatPublicId), eq(chats.userId, userId)))
+    .limit(1);
+
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function getChatsByUser(userId: number) {
+  return await db
+    .select()
+    .from(chats)
+    .where(eq(chats.userId, userId))
+    .orderBy(desc(chats.updatedAt));
+}
+
+export async function updateChatByPublicId(
+  chatPublicId: string,
+  userId: number,
+  data: { title?: string }
+) {
+  const result = await db
+    .update(chats)
+    .set({
+      ...data,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(chats.publicId, chatPublicId), eq(chats.userId, userId)))
+    .returning();
+
+  return result.length > 0 ? result[0] : null;
 }
