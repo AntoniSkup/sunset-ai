@@ -2,7 +2,7 @@ export interface PreviewUpdatePayload {
   type: "UPDATE_PREVIEW";
   versionId: number;
   versionNumber: number;
-  sessionId: string;
+  chatId: string;
   previewUrl?: string;
 }
 
@@ -45,14 +45,14 @@ export function showPreviewLoader(message?: string): void {
 export function updatePreviewPanel(
   versionId: number,
   versionNumber: number,
-  sessionId: string,
+  chatId: string,
   previewUrl?: string
 ): void {
   const payload: PreviewUpdatePayload = {
     type: "UPDATE_PREVIEW",
     versionId,
     versionNumber,
-    sessionId,
+    chatId,
     previewUrl,
   };
   dispatchPreviewEvent(payload);

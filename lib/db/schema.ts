@@ -7,6 +7,7 @@ import {
   integer,
   index,
   unique,
+  jsonb,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
@@ -138,18 +139,17 @@ export const landingPageVersions = pgTable(
     userId: integer("user_id")
       .notNull()
       .references(() => users.id),
-    sessionId: varchar("session_id", { length: 255 }).notNull(),
+    chatId: varchar("chat_id", { length: 32 })
+      .notNull()
+      .references(() => chats.publicId),
     versionNumber: integer("version_number").notNull(),
     codeContent: text("code_content").notNull(),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
   (table) => ({
-    sessionVersionUnique: unique().on(table.sessionId, table.versionNumber),
-    sessionVersionIdx: index("session_version_idx").on(
-      table.sessionId,
-      table.versionNumber
-    ),
+    chatVersionUnique: unique().on(table.chatId, table.versionNumber),
+    chatVersionIdx: index("chat_version_idx").on(table.chatId, table.versionNumber),
     userIdIdx: index("user_id_idx").on(table.userId),
     createdAtIdx: index("created_at_idx").on(table.createdAt),
   })
@@ -204,12 +204,35 @@ export const chatMessages = pgTable(
   })
 );
 
+export const chatToolCalls = pgTable(
+  "chat_tool_calls",
+  {
+    id: serial("id").primaryKey(),
+    chatId: integer("chat_id")
+      .notNull()
+      .references(() => chats.id),
+    stepNumber: integer("step_number"),
+    state: varchar("state", { length: 20 }).notNull(), // "call" | "result"
+    toolCallId: varchar("tool_call_id", { length: 255 }),
+    toolName: varchar("tool_name", { length: 255 }).notNull(),
+    input: jsonb("input"),
+    output: jsonb("output"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    chatIdIdx: index("chat_tool_calls_chat_id_idx").on(table.chatId),
+    toolCallIdIdx: index("chat_tool_calls_tool_call_id_idx").on(table.toolCallId),
+    createdAtIdx: index("chat_tool_calls_created_at_idx").on(table.createdAt),
+  })
+);
+
 export const chatsRelations = relations(chats, ({ one, many }) => ({
   user: one(users, {
     fields: [chats.userId],
     references: [users.id],
   }),
   messages: many(chatMessages),
+  toolCalls: many(chatToolCalls),
 }));
 
 export const chatMessagesRelations = relations(chatMessages, ({ one }) => ({
@@ -219,10 +242,19 @@ export const chatMessagesRelations = relations(chatMessages, ({ one }) => ({
   }),
 }));
 
+export const chatToolCallsRelations = relations(chatToolCalls, ({ one }) => ({
+  chat: one(chats, {
+    fields: [chatToolCalls.chatId],
+    references: [chats.id],
+  }),
+}));
+
 export type Chat = typeof chats.$inferSelect;
 export type NewChat = typeof chats.$inferInsert;
 export type ChatMessage = typeof chatMessages.$inferSelect;
 export type NewChatMessage = typeof chatMessages.$inferInsert;
+export type ChatToolCall = typeof chatToolCalls.$inferSelect;
+export type NewChatToolCall = typeof chatToolCalls.$inferInsert;
 
 export enum ActivityType {
   SIGN_UP = "SIGN_UP",

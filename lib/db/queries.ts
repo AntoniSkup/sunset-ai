@@ -8,6 +8,7 @@ import {
   landingPageVersions,
   chats,
   chatMessages,
+  chatToolCalls,
 } from "./schema";
 import { nanoid } from "nanoid";
 import { cookies } from "next/headers";
@@ -138,20 +139,20 @@ export async function getTeamForUser() {
   return result?.team || null;
 }
 
-export async function getNextVersionNumber(sessionId: string) {
+export async function getNextVersionNumber(chatId: string) {
   const result = await db
     .select({ max: max(landingPageVersions.versionNumber) })
     .from(landingPageVersions)
-    .where(eq(landingPageVersions.sessionId, sessionId));
+    .where(eq(landingPageVersions.chatId, chatId));
 
   return (result[0]?.max ?? 0) + 1;
 }
 
-export async function getLatestVersion(sessionId: string) {
+export async function getLatestVersion(chatId: string) {
   const result = await db
     .select()
     .from(landingPageVersions)
-    .where(eq(landingPageVersions.sessionId, sessionId))
+    .where(eq(landingPageVersions.chatId, chatId))
     .orderBy(desc(landingPageVersions.versionNumber))
     .limit(1);
 
@@ -160,7 +161,7 @@ export async function getLatestVersion(sessionId: string) {
 
 export async function createLandingPageVersion(data: {
   userId: number;
-  sessionId: string;
+  chatId: string;
   versionNumber: number;
   codeContent: string;
 }) {
@@ -168,7 +169,7 @@ export async function createLandingPageVersion(data: {
     .insert(landingPageVersions)
     .values({
       userId: data.userId,
-      sessionId: data.sessionId,
+      chatId: data.chatId,
       versionNumber: data.versionNumber,
       codeContent: data.codeContent,
     })
@@ -177,11 +178,11 @@ export async function createLandingPageVersion(data: {
   return result[0];
 }
 
-export async function getAllVersionsForSession(sessionId: string) {
+export async function getAllVersionsForChat(chatId: string) {
   return await db
     .select()
     .from(landingPageVersions)
-    .where(eq(landingPageVersions.sessionId, sessionId))
+    .where(eq(landingPageVersions.chatId, chatId))
     .orderBy(asc(landingPageVersions.versionNumber));
 }
 
@@ -273,4 +274,31 @@ export async function getChatMessagesByPublicId(
     .orderBy(asc(chatMessages.createdAt), asc(chatMessages.id));
 
   return { chat, messages };
+}
+
+export async function createChatToolCall(data: {
+  chatId: number;
+  stepNumber?: number | null;
+  state: "call" | "result";
+  toolName: string;
+  toolCallId?: string | null;
+  input?: unknown;
+  output?: unknown;
+}) {
+  const result = await db
+    .insert(chatToolCalls)
+    .values({
+      chatId: data.chatId,
+      stepNumber: data.stepNumber ?? null,
+      state: data.state,
+      toolName: data.toolName,
+      toolCallId: data.toolCallId ?? null,
+      input: data.input ?? null,
+      output: data.output ?? null,
+    })
+    .returning();
+
+  await db.update(chats).set({ updatedAt: new Date() }).where(eq(chats.id, data.chatId));
+
+  return result[0];
 }

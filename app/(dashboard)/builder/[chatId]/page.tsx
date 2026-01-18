@@ -21,7 +21,7 @@ function BuilderContent({
         <Separator />
         <Panel defaultSize={70}>
           <div className="h-full w-full border rounded-lg bg-background overflow-hidden">
-            <PreviewPanel />
+            <PreviewPanel chatId={chatId} />
           </div>
         </Panel>
       </Group>

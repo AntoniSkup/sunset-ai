@@ -3,6 +3,7 @@ import {
   getUser,
   getChatByPublicId,
   createChatMessage,
+  createChatToolCall,
 } from "@/lib/db/queries";
 import { streamText, convertToModelMessages } from "ai";
 import type { UIMessage } from "ai";
@@ -88,6 +89,43 @@ export async function POST(request: NextRequest) {
       system: chatSystemPrompt,
       messages: modelMessages,
       tools,
+      onStepFinish: async (step) => {
+        try {
+          const stepNumber = (step as any).step ?? null;
+          const staticCalls = (step as any).staticToolCalls ?? [];
+          const staticResults = (step as any).staticToolResults ?? [];
+
+          for (const call of staticCalls) {
+            const toolName =
+              (call as any).toolName ?? (call as any).name ?? "unknown";
+            const toolCallId = (call as any).toolCallId ?? (call as any).id ?? null;
+            await createChatToolCall({
+              chatId: chat.id,
+              stepNumber,
+              state: "call",
+              toolName,
+              toolCallId,
+              input: call,
+            });
+          }
+
+          for (const res of staticResults) {
+            const toolName =
+              (res as any).toolName ?? (res as any).name ?? "unknown";
+            const toolCallId = (res as any).toolCallId ?? (res as any).id ?? null;
+            await createChatToolCall({
+              chatId: chat.id,
+              stepNumber,
+              state: "result",
+              toolName,
+              toolCallId,
+              output: res,
+            });
+          }
+        } catch (e) {
+          console.error("Failed to persist tool calls/results:", e);
+        }
+      },
       onFinish: async ({ text }) => {
         if (text && text.trim()) {
           try {

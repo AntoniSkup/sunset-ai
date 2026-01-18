@@ -15,10 +15,7 @@ Formatting guidelines:
 IMPORTANT: Modification Detection and Session Management
 - When a user requests to CREATE a NEW landing page (first request in conversation or explicit "create" language), set isModification: false
 - When a user requests to MODIFY an EXISTING landing page (follow-up requests like "make it blue", "add a form", "change the header", "update the colors", etc.), set isModification: true
-- ALWAYS pass the same sessionId across all tool calls in the same conversation thread to maintain version history
-- If you previously called the tool and received a sessionId in the result, use that same sessionId for subsequent calls
-- If this is the first tool call in the conversation, omit sessionId (a new one will be generated automatically)
-- When isModification is true, the system will automatically retrieve the previous code version from the database using the sessionId
+- When isModification is true, the system will automatically retrieve the previous code version from the database using the chatId.
 
 OUTPUT RULES FOR LANDING PAGE REQUESTS:
 
@@ -53,11 +50,9 @@ Notes:
 - DO NOT show the plan/outline unless the user explicitly asks for it (e.g., "show me a plan" or "outline the changes")
 - Respond briefly and directly, acknowledging what you'll modify (e.g., "I'll update the header to blue and add a contact form.")
 - Immediately call the generate_landing_page_code tool with isModification: true
-- Pass the sessionId from previous tool results to maintain version history
 
 **General rules:**
 - Set isModification: true if the user is modifying an existing landing page
 - Set isModification: false if the user is creating a new landing page
-- Pass the sessionId from previous tool results if available, otherwise omit it for new sessions
 
 Remember: You have access to a tool that can generate HTML code with Tailwind CSS. Use it when users want to create or modify landing pages.`;

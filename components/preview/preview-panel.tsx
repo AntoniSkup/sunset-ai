@@ -11,9 +11,10 @@ import { PREVIEW_EVENT_TYPE } from "@/lib/preview/update-preview";
 
 interface PreviewPanelProps {
   className?: string;
+  chatId: string;
 }
 
-export function PreviewPanel({ className }: PreviewPanelProps) {
+export function PreviewPanel({ className, chatId }: PreviewPanelProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState<string>("");
@@ -38,7 +39,7 @@ export function PreviewPanel({ className }: PreviewPanelProps) {
         if (iframeRef.current) {
           const previewUrl =
             updatePayload.previewUrl ||
-            `/api/preview/${updatePayload.sessionId}/${updatePayload.versionNumber}`;
+            `/api/preview/${updatePayload.chatId}/${updatePayload.versionNumber}`;
           iframeRef.current.src = previewUrl;
         }
       }
@@ -56,6 +57,53 @@ export function PreviewPanel({ className }: PreviewPanelProps) {
       );
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadLatestPreview() {
+      if (!chatId || typeof chatId !== "string") {
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/preview/${chatId}/latest`, {
+          cache: "no-store",
+        });
+
+        if (res.status === 204 || res.status === 404) {
+          return;
+        }
+
+        if (!res.ok) {
+          throw new Error(`Failed to load latest preview: ${res.status}`);
+        }
+
+        const data = (await res.json()) as {
+          versionId: number;
+          versionNumber: number;
+          previewUrl: string;
+        };
+
+        if (cancelled) {
+          return;
+        }
+
+        if (data?.versionId && data?.previewUrl && iframeRef.current) {
+          setCurrentVersionId(data.versionId);
+          iframeRef.current.src = data.previewUrl;
+        }
+      } catch (e) {
+        console.error("Failed to load latest preview:", e);
+      }
+    }
+
+    loadLatestPreview();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [chatId]);
 
   return (
     <div className={`relative h-full w-full ${className || ""}`}>

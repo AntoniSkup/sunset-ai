@@ -1,5 +1,4 @@
 import { generateText, tool } from "ai";
-import { nanoid } from "nanoid";
 import { z } from "zod";
 import { getAIModel } from "@/lib/ai/get-ai-model";
 import { getUser } from "@/lib/db/queries";
@@ -81,17 +80,17 @@ export async function generateCode(
       };
     }
 
-    if (!request.sessionId || request.sessionId.trim().length === 0) {
+    if (!request.chatId || request.chatId.trim().length === 0) {
       return {
         success: false,
-        error: "Session ID is required",
+        error: "Chat ID is required",
       };
     }
 
-    if (request.sessionId.length > 255) {
+    if (request.chatId.length > 32) {
       return {
         success: false,
-        error: "Session ID exceeds maximum length of 255 characters",
+        error: "Chat ID exceeds maximum length of 32 characters",
       };
     }
 
@@ -99,7 +98,7 @@ export async function generateCode(
     if (request.isModification && request.previousCodeVersion) {
       previousCode = request.previousCodeVersion;
     } else if (request.isModification) {
-      const latestVersion = await getLatestVersion(request.sessionId);
+      const latestVersion = await getLatestVersion(request.chatId);
       if (latestVersion) {
         previousCode = latestVersion.codeContent;
       }
@@ -115,7 +114,7 @@ export async function generateCode(
 
     if (!generatedCode || generatedCode.trim().length === 0) {
       console.error(
-        `[Code Generation] Empty result for user ${userId}, session ${request.sessionId}`
+        `[Code Generation] Empty result for user ${userId}, chat ${request.chatId}`
       );
       return {
         success: false,
@@ -127,7 +126,7 @@ export async function generateCode(
 
     if (!validationResult.isValid && validationResult.errors.length > 0) {
       console.error(
-        `[Code Generation] Validation failed for user ${userId}, session ${request.sessionId}: ${validationResult.errors.join(", ")}`
+        `[Code Generation] Validation failed for user ${userId}, chat ${request.chatId}: ${validationResult.errors.join(", ")}`
       );
       return {
         success: false,
@@ -135,18 +134,18 @@ export async function generateCode(
       };
     }
 
-    const versionNumber = await getNextVersionNumber(request.sessionId);
+    const versionNumber = await getNextVersionNumber(request.chatId);
 
     const saveResult = await saveCodeWithRetry({
       userId,
-      sessionId: request.sessionId,
+      chatId: request.chatId,
       versionNumber,
       codeContent: validationResult.fixedCode,
     });
 
     if (!saveResult.success) {
       console.error(
-        `[Code Generation] Save failed for user ${userId}, session ${request.sessionId}, version ${versionNumber}: ${saveResult.error}`
+        `[Code Generation] Save failed for user ${userId}, chat ${request.chatId}, version ${versionNumber}: ${saveResult.error}`
       );
       return {
         success: false,
@@ -194,20 +193,16 @@ const generateLandingPageCodeSchema = z.object({
     .describe(
       "The previous version of the code if this is a modification request"
     ),
-  sessionId: z
-    .string()
-    .optional()
-    .describe(
-      "Unique session identifier for version tracking. If not provided, a new session will be created."
-    ),
 });
 
-const generateLandingPageCodeToolExecute = async ({
-  userRequest,
-  isModification,
-  previousCodeVersion,
-  sessionId,
-}: z.infer<typeof generateLandingPageCodeSchema>) => {
+const generateLandingPageCodeToolExecute = async (
+  {
+    userRequest,
+    isModification,
+    previousCodeVersion,
+  }: z.infer<typeof generateLandingPageCodeSchema>,
+  chatId: string
+) => {
   const user = await getUser();
   if (!user) {
     return {
@@ -216,13 +211,15 @@ const generateLandingPageCodeToolExecute = async ({
     };
   }
 
-  const finalSessionId = sessionId || `session-${user.id}-${nanoid()}`;
+  if (!chatId) {
+    return { success: false, error: "Chat ID is required" };
+  }
 
   const request: CodeGenerationRequest = {
     userRequest,
     isModification,
     previousCodeVersion,
-    sessionId: finalSessionId,
+    chatId,
   };
 
   const result = await generateCode(request, user.id);
@@ -234,7 +231,7 @@ const generateLandingPageCodeToolExecute = async ({
       versionNumber: result.versionNumber,
       codeContent: result.codeContent,
       fixesApplied: result.fixesApplied || [],
-      sessionId: finalSessionId,
+      chatId,
     };
   }
 
@@ -248,20 +245,22 @@ export const generateLandingPageCodeTool = tool({
   description:
     "Generate HTML code with Tailwind CSS for landing pages. Use this when users request to create, build, or modify a landing page. Include conversation context and previous code versions for iterative refinement.",
   inputSchema: generateLandingPageCodeSchema,
-  execute: generateLandingPageCodeToolExecute,
+  execute: async (_input: z.infer<typeof generateLandingPageCodeSchema>) => {
+    return {
+      success: false,
+      error:
+        "Chat ID is required. Use createGenerateLandingPageCodeToolWithChatId(chatId) to inject it server-side.",
+    };
+  },
 } as any);
 
 export function createGenerateLandingPageCodeToolWithChatId(chatId: string) {
-  const sessionId = `chat-${chatId}`;
   return tool({
     description:
       "Generate HTML code with Tailwind CSS for landing pages. Use this when users request to create, build, or modify a landing page. Include conversation context and previous code versions for iterative refinement.",
     inputSchema: generateLandingPageCodeSchema,
     execute: async (input: z.infer<typeof generateLandingPageCodeSchema>) => {
-      return generateLandingPageCodeToolExecute({
-        ...input,
-        sessionId: input.sessionId || sessionId,
-      });
+      return generateLandingPageCodeToolExecute(input, chatId);
     },
   } as any);
 }

@@ -20,7 +20,7 @@ export async function GET(
   }
 
   try {
-    const { sessionId, versionNumber } = await params;
+    const { sessionId: chatId, versionNumber } = await params;
     const versionNum = parseInt(versionNumber, 10);
 
     if (isNaN(versionNum)) {
@@ -30,7 +30,7 @@ export async function GET(
       );
     }
 
-    const version = await getLatestVersion(sessionId);
+    const version = await getLatestVersion(chatId);
 
     if (!version) {
       return NextResponse.json(

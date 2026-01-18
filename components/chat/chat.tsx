@@ -86,6 +86,8 @@ function ChatInner({
   const [chatId, setChatId] = useState<string | null>(providedChatId || null);
   const [isCreatingChat, setIsCreatingChat] = useState(false);
   const lastUserMessageRef = useRef<string>("");
+  const lastPreviewVersionIdRef = useRef<number | null>(null);
+  const previewLoaderShownForToolCallIdsRef = useRef<Set<string>>(new Set());
   const pendingMessage = usePendingMessageStore((s) => s.pendingMessage);
   const setPendingMessage = usePendingMessageStore((s) => s.setPendingMessage);
   const consumedPendingIdsRef = useRef<Set<string>>(new Set());
@@ -139,6 +141,7 @@ function ChatInner({
   const [errorMessages, setErrorMessages] = useState<
     Array<{ id: string; message: string; userMessageId?: string }>
   >([]);
+  const toolErrorKeysRef = useRef<Set<string>>(new Set());
 
   const { messages, sendMessage, status } = useChat({
     messages: initialMessages,
@@ -230,59 +233,113 @@ function ChatInner({
   };
 
   useEffect(() => {
-    const lastMessage = messages[messages.length - 1];
-    if (!lastMessage || lastMessage.role !== "assistant") {
-      return;
-    }
+    let newestSuccessful:
+      | { versionId: number; versionNumber: number; chatId: string }
+      | null = null;
+    let newestFailure: { error: string; toolCallId?: string } | null = null;
+    const lastUserMessageId = [...messages].reverse().find((m) => m.role === "user")?.id;
 
-    for (const part of lastMessage.parts) {
-      const partType = part.type as string;
+    for (const message of messages) {
+      if (message.role !== "assistant") continue;
 
-      if (
-        partType.startsWith("tool-") &&
-        partType === "tool-generate_landing_page_code" &&
-        !("result" in part) &&
-        !("output" in part)
-      ) {
-        showPreviewLoader("Generating landing page...");
-      }
+      for (const part of message.parts as any[]) {
+        const partType = String(part?.type || "");
 
-      if (
-        partType.startsWith("tool-") &&
-        partType === "tool-generate_landing_page_code" &&
-        ("result" in part || "output" in part)
-      ) {
-        try {
-          const result =
-            "result" in part
-              ? (part as any).result
-              : "output" in part
-                ? (part as any).output
-                : null;
-
-          if (
-            result &&
-            typeof result === "object" &&
-            result.success === true &&
-            result.versionId &&
-            result.versionNumber
-          ) {
-            const sessionId =
-              result.sessionId ||
-              (chatId ? `chat-${chatId}` : null) ||
-              ("input" in part ? (part as any).input?.sessionId : null) ||
-              `session-${Date.now()}`;
-
-            updatePreviewPanel(
-              result.versionId,
-              result.versionNumber,
-              sessionId
-            );
+        // Show loader when we detect a call for the landing page generation tool.
+        if (partType === "tool-call" && part?.toolName === "generate_landing_page_code") {
+          const toolCallId = String(part?.toolCallId || "generate_landing_page_code");
+          if (!previewLoaderShownForToolCallIdsRef.current.has(toolCallId)) {
+            previewLoaderShownForToolCallIdsRef.current.add(toolCallId);
+            showPreviewLoader("Generating landing page...");
           }
-        } catch (error) {
-          console.error("Failed to update preview from tool result:", error);
+        }
+
+        if (partType.startsWith("tool-")) {
+          const toolName = partType.replace("tool-", "");
+          if (toolName === "generate_landing_page_code") {
+            const hasResult = "result" in part || "output" in part;
+            if (!hasResult) {
+              const toolCallId = String(part?.toolCallId || "generate_landing_page_code");
+              if (!previewLoaderShownForToolCallIdsRef.current.has(toolCallId)) {
+                previewLoaderShownForToolCallIdsRef.current.add(toolCallId);
+                showPreviewLoader("Generating landing page...");
+              }
+            }
+          }
+        }
+
+        if (partType === "tool-result" && part?.toolName === "generate_landing_page_code") {
+          const result = part?.result ?? part?.output ?? null;
+          if (result?.success === true && result?.versionId && result?.versionNumber) {
+            const candidate = {
+              versionId: Number(result.versionId),
+              versionNumber: Number(result.versionNumber),
+              chatId: String(chatId || ""),
+            };
+            if (!newestSuccessful || candidate.versionNumber > newestSuccessful.versionNumber) {
+              newestSuccessful = candidate;
+            }
+          }
+          if (result?.success === false && typeof result?.error === "string" && result.error) {
+            newestFailure = {
+              error: result.error,
+              toolCallId: String(part?.toolCallId || ""),
+            };
+          }
+        }
+
+        // Extract a tool result (embedded format).
+        if (partType.startsWith("tool-")) {
+          const toolName = partType.replace("tool-", "");
+          if (toolName !== "generate_landing_page_code") continue;
+          const result = part?.result ?? part?.output ?? null;
+          if (result?.success === true && result?.versionId && result?.versionNumber) {
+            const candidate = {
+              versionId: Number(result.versionId),
+              versionNumber: Number(result.versionNumber),
+              chatId: String(chatId || ""),
+            };
+            if (!newestSuccessful || candidate.versionNumber > newestSuccessful.versionNumber) {
+              newestSuccessful = candidate;
+            }
+          }
+          if (result?.success === false && typeof result?.error === "string" && result.error) {
+            newestFailure = {
+              error: result.error,
+              toolCallId: String(part?.toolCallId || ""),
+            };
+          }
         }
       }
+    }
+
+    if (newestFailure?.error) {
+      const key = `${newestFailure.toolCallId || "generate_landing_page_code"}:${newestFailure.error}`;
+      if (!toolErrorKeysRef.current.has(key)) {
+        toolErrorKeysRef.current.add(key);
+        setErrorMessages((prev) => [
+          ...prev,
+          {
+            id: `tool-error-${Date.now()}-${Math.random()}`,
+            message: `Landing page generation failed to save: ${newestFailure.error}`,
+            userMessageId: lastUserMessageId,
+          },
+        ]);
+      }
+    }
+
+    if (
+      newestSuccessful &&
+      newestSuccessful.versionId &&
+      newestSuccessful.chatId &&
+      lastPreviewVersionIdRef.current !== newestSuccessful.versionId
+    ) {
+      lastPreviewVersionIdRef.current = newestSuccessful.versionId;
+      updatePreviewPanel(
+        newestSuccessful.versionId,
+        newestSuccessful.versionNumber,
+        newestSuccessful.chatId
+      );
     }
   }, [messages]);
 
