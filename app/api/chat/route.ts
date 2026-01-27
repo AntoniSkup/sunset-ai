@@ -13,6 +13,59 @@ import { chatSystemPrompt } from "@/prompts/chat-system-prompt";
 
 const requestQueues = new Map<string, Promise<void>>();
 
+function getToolTitle(toolName: string): string {
+  if (toolName === "generate_landing_page_code") {
+    return "landing/index.html";
+  }
+  return toolName || "tool";
+}
+
+function escapeToolAttr(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function buildToolMarkerLines(
+  markers: Array<{ id: number; title: string }>
+): string {
+  return markers
+    .map((m) => `<tool title="${escapeToolAttr(m.title)}" id=${m.id} />`)
+    .join("\n");
+}
+
+function injectToolMarkersIntoAssistantText(
+  text: string,
+  markers: Array<{ id: number; title: string }>
+): string {
+  if (!markers.length) return text;
+  const markerBlock = buildToolMarkerLines(markers);
+
+  const candidates = [
+    /(^Let me build this for you:\s*$)/im,
+    /(^Let me build this now:\s*$)/im,
+    /(^Let me build.*:\s*$)/im,
+  ];
+
+  for (const re of candidates) {
+    const match = text.match(re);
+    if (match && typeof match.index === "number") {
+      const insertPos = match.index + match[0].length;
+      return (
+        text.slice(0, insertPos).trimEnd() +
+        "\n\n" +
+        markerBlock +
+        "\n\n" +
+        text.slice(insertPos).trimStart()
+      ).trim();
+    }
+  }
+
+  return `${text.trim()}\n\n${markerBlock}`.trim();
+}
+
 async function processRequestQueue(chatId: string): Promise<void> {
   const queue = requestQueues.get(chatId);
   if (queue) {
@@ -84,6 +137,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const toolMarkers: Array<{ id: number; title: string }> = [];
+
     const result = streamText({
       model,
       system: chatSystemPrompt,
@@ -99,7 +154,7 @@ export async function POST(request: NextRequest) {
             const toolName =
               (call as any).toolName ?? (call as any).name ?? "unknown";
             const toolCallId = (call as any).toolCallId ?? (call as any).id ?? null;
-            await createChatToolCall({
+            const toolRow = await createChatToolCall({
               chatId: chat.id,
               stepNumber,
               state: "call",
@@ -107,6 +162,7 @@ export async function POST(request: NextRequest) {
               toolCallId,
               input: call,
             });
+            toolMarkers.push({ id: toolRow.id, title: getToolTitle(toolName) });
           }
 
           for (const res of staticResults) {
@@ -129,10 +185,14 @@ export async function POST(request: NextRequest) {
       onFinish: async ({ text }) => {
         if (text && text.trim()) {
           try {
+            const finalText = injectToolMarkersIntoAssistantText(
+              text.trim(),
+              toolMarkers
+            );
             await createChatMessage({
               chatId: chat.id,
               role: "assistant",
-              content: text.trim(),
+              content: finalText,
             });
           } catch (e) {
             console.error("Failed to persist assistant message:", e);

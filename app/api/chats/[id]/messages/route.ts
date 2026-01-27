@@ -38,9 +38,35 @@ export async function GET(
       );
     }
 
-    const messages: UIMessage[] = result.messages.map((m) => ({
-      id: `db-${m.id}`,
-      role: m.role as UIMessage["role"],
+    const merged: Array<{
+      id: string;
+      role: UIMessage["role"];
+      content: string;
+    }> = [];
+
+
+    for (const m of result.messages) {
+      const role = m.role as UIMessage["role"];
+      const content = m.content ?? "";
+
+      const last = merged[merged.length - 1];
+
+      if (role === "assistant" && last?.role === "assistant") {
+        last.content = `${last.content}\n\n${content}`.trim();
+        continue;
+      }
+
+
+      merged.push({
+        id: `db-${m.id}`,
+        role,
+        content,
+      });
+    }
+
+    const messages: UIMessage[] = merged.map((m) => ({
+      id: m.id,
+      role: m.role,
       parts: [{ type: "text", text: m.content }],
     }));
 
