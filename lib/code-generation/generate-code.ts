@@ -22,11 +22,11 @@ export function buildCodeGenerationPrompt(
     ?.trim()
     .startsWith("```")
     ? previousCodeVersion
-        .trim()
-        .replace(/^```[^\r\n]*\r?\n/, "")
-        .replace(/\r?\n```$/, "")
-        .replace(/```$/, "")
-        .trim()
+      .trim()
+      .replace(/^```[^\r\n]*\r?\n/, "")
+      .replace(/\r?\n```$/, "")
+      .replace(/```$/, "")
+      .trim()
     : previousCodeVersion;
 
   const basePrompt = buildCodeGenerationPromptTemplate();

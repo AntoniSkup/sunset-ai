@@ -288,7 +288,6 @@ function ChatInner({
           }
         }
 
-        // Extract a tool result (embedded format).
         if (partType.startsWith("tool-")) {
           const toolName = partType.replace("tool-", "");
           if (toolName !== "generate_landing_page_code") continue;
