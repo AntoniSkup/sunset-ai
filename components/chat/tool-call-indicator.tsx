@@ -28,7 +28,7 @@ export function ToolCallIndicator({
   return (
     <div
       className={cn(
-        "inline-flex items-center gap-2 px-3 py-1.5 rounded-md hover:bg-muted text-muted-foreground text-sm my-2",
+        "inline-flex items-center gap-2 px-3 py-1.5 rounded-md hover:bg-muted text-muted-foreground text-sm",
         className
       )}
     >

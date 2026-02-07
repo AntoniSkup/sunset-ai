@@ -192,7 +192,7 @@ export const MessageItem = React.memo(function MessageItem({
 
               if (t.type === "tool-marker") {
                 return (
-                  <div key={`m-${t.id || idx}`} className="my-2">
+                  <div key={`m-${t.id || idx}`} className="my-1">
                     <ToolCallIndicator
                       toolName={t.toolName}
                       fileName={t.title}
@@ -204,7 +204,7 @@ export const MessageItem = React.memo(function MessageItem({
 
               const fileName = t.destination || getDefaultFileNameForTool(t.toolName);
               return (
-                <div key={`c-${t.toolCallId || idx}`} className="my-2">
+                <div key={`c-${t.toolCallId || idx}`} className="my-1">
                   <ToolCallIndicator
                     toolName={t.toolName}
                     fileName={fileName}
