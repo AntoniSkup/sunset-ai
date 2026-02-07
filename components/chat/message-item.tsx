@@ -109,7 +109,7 @@ function buildRenderTokens(message: UIMessage): RenderToken[] {
     }
     if (partType.startsWith("tool-")) {
       const toolCallId = String(part?.toolCallId || "");
-      const hasResult = "result" in part || "output" in part;
+      const hasResult = part?.result != null || part?.output != null;
       if (toolCallId && hasResult) hasResultById.set(toolCallId, true);
     }
   }
@@ -149,7 +149,7 @@ function buildRenderTokens(message: UIMessage): RenderToken[] {
     if (partType.startsWith("tool-")) {
       const toolName = partType.replace("tool-", "");
       const toolCallId = String(part?.toolCallId || "");
-      const hasResult = "result" in part || "output" in part;
+      const hasResult = part?.result != null || part?.output != null;
       const destination =
         typeof part?.args?.destination === "string"
           ? String(part.args.destination)
@@ -208,7 +208,7 @@ export const MessageItem = React.memo(function MessageItem({
                   <ToolCallIndicator
                     toolName={t.toolName}
                     fileName={fileName}
-                    isComplete={t.isComplete && !isStreaming}
+                    isComplete={t.isComplete}
                   />
                 </div>
               );
