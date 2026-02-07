@@ -1,4 +1,4 @@
-import { desc, and, eq, isNull, max, asc } from "drizzle-orm";
+import { desc, and, eq, isNull, max, asc, lte } from "drizzle-orm";
 import { db } from "./drizzle";
 import {
   activityLogs,
@@ -6,6 +6,9 @@ import {
   teams,
   users,
   landingPageVersions,
+  landingSiteFiles,
+  landingSiteRevisions,
+  landingSiteFileVersions,
   chats,
   chatMessages,
   chatToolCalls,
@@ -184,6 +187,145 @@ export async function getAllVersionsForChat(chatId: string) {
     .from(landingPageVersions)
     .where(eq(landingPageVersions.chatId, chatId))
     .orderBy(asc(landingPageVersions.versionNumber));
+}
+
+export async function getNextLandingSiteRevisionNumber(chatId: string) {
+  const result = await db
+    .select({ max: max(landingSiteRevisions.revisionNumber) })
+    .from(landingSiteRevisions)
+    .where(eq(landingSiteRevisions.chatId, chatId));
+
+  return (result[0]?.max ?? 0) + 1;
+}
+
+export async function getLatestLandingSiteRevision(chatId: string) {
+  const result = await db
+    .select()
+    .from(landingSiteRevisions)
+    .where(eq(landingSiteRevisions.chatId, chatId))
+    .orderBy(desc(landingSiteRevisions.revisionNumber))
+    .limit(1);
+
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function upsertLandingSiteFile(data: {
+  chatId: string;
+  path: string;
+  kind?: string;
+}) {
+  const kind = data.kind ?? "section";
+  const result = await db
+    .insert(landingSiteFiles)
+    .values({
+      chatId: data.chatId,
+      path: data.path,
+      kind,
+      updatedAt: new Date(),
+    })
+    .onConflictDoUpdate({
+      target: [landingSiteFiles.chatId, landingSiteFiles.path],
+      set: { kind, updatedAt: new Date() },
+    })
+    .returning();
+
+  return result[0];
+}
+
+export async function createLandingSiteRevision(data: {
+  chatId: string;
+  userId: number;
+}) {
+  const revisionNumber = await getNextLandingSiteRevisionNumber(data.chatId);
+  const result = await db
+    .insert(landingSiteRevisions)
+    .values({
+      chatId: data.chatId,
+      userId: data.userId,
+      revisionNumber,
+    })
+    .returning();
+
+  return result[0];
+}
+
+export async function createLandingSiteFileVersion(data: {
+  fileId: number;
+  revisionId: number;
+  content: string;
+}) {
+  const result = await db
+    .insert(landingSiteFileVersions)
+    .values({
+      fileId: data.fileId,
+      revisionId: data.revisionId,
+      content: data.content,
+    })
+    .returning();
+
+  return result[0];
+}
+
+export async function getLandingSiteFileByPath(chatId: string, path: string) {
+  const result = await db
+    .select()
+    .from(landingSiteFiles)
+    .where(and(eq(landingSiteFiles.chatId, chatId), eq(landingSiteFiles.path, path)))
+    .limit(1);
+
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function getLatestLandingSiteFileContent(chatId: string, path: string) {
+  const result = await db
+    .select({
+      content: landingSiteFileVersions.content,
+      revisionNumber: landingSiteRevisions.revisionNumber,
+      revisionId: landingSiteRevisions.id,
+      fileId: landingSiteFiles.id,
+    })
+    .from(landingSiteFiles)
+    .innerJoin(landingSiteFileVersions, eq(landingSiteFileVersions.fileId, landingSiteFiles.id))
+    .innerJoin(
+      landingSiteRevisions,
+      eq(landingSiteRevisions.id, landingSiteFileVersions.revisionId)
+    )
+    .where(and(eq(landingSiteFiles.chatId, chatId), eq(landingSiteFiles.path, path)))
+    .orderBy(desc(landingSiteRevisions.revisionNumber))
+    .limit(1);
+
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function getLandingSiteFileContentAtOrBeforeRevision(data: {
+  chatId: string;
+  path: string;
+  revisionNumber: number;
+}) {
+  const result = await db
+    .select({
+      content: landingSiteFileVersions.content,
+      revisionNumber: landingSiteRevisions.revisionNumber,
+      revisionId: landingSiteRevisions.id,
+      fileId: landingSiteFiles.id,
+    })
+    .from(landingSiteFiles)
+    .innerJoin(landingSiteFileVersions, eq(landingSiteFileVersions.fileId, landingSiteFiles.id))
+    .innerJoin(
+      landingSiteRevisions,
+      eq(landingSiteRevisions.id, landingSiteFileVersions.revisionId)
+    )
+    .where(
+      and(
+        eq(landingSiteFiles.chatId, data.chatId),
+        eq(landingSiteFiles.path, data.path),
+        lte(landingSiteRevisions.revisionNumber, data.revisionNumber)
+      )
+    )
+    .orderBy(desc(landingSiteRevisions.revisionNumber))
+    .limit(1);
+
+  return result.length > 0 ? result[0] : null;
 }
 
 export async function createChat(data: {

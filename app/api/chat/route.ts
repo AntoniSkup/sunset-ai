@@ -5,19 +5,34 @@ import {
   createChatMessage,
   createChatToolCall,
 } from "@/lib/db/queries";
-import { streamText, convertToModelMessages } from "ai";
+import { streamText, convertToModelMessages, stepCountIs } from "ai";
 import type { UIMessage } from "ai";
-import { createGenerateLandingPageCodeToolWithChatId } from "@/lib/code-generation/generate-code";
+import { createSectionTool, createSiteTool } from "@/lib/code-generation/generate-code";
 import { getAIModel } from "@/lib/ai/get-ai-model";
 import { chatSystemPrompt } from "@/prompts/chat-system-prompt";
 
 const requestQueues = new Map<string, Promise<void>>();
 
 function getToolTitle(toolName: string): string {
-  if (toolName === "generate_landing_page_code") {
-    return "landing/index.html";
+  if (toolName === "create_site") {
+    return "Site layout";
+  }
+  if (toolName === "create_section") {
+    return "Section layout";
   }
   return toolName || "tool";
+}
+
+function getDestinationFromToolCall(call: unknown): string | null {
+  const c = call as any;
+  const dest =
+    c?.args?.destination ??
+    c?.input?.destination ??
+    c?.arguments?.destination ??
+    c?.parameters?.destination;
+  if (typeof dest !== "string") return null;
+  const trimmed = dest.trim();
+  return trimmed ? trimmed : null;
 }
 
 function escapeToolAttr(value: string): string {
@@ -29,16 +44,21 @@ function escapeToolAttr(value: string): string {
 }
 
 function buildToolMarkerLines(
-  markers: Array<{ id: number; title: string }>
+  markers: Array<{ id: number; title: string; toolName: string }>
 ): string {
   return markers
-    .map((m) => `<tool title="${escapeToolAttr(m.title)}" id=${m.id} />`)
+    .map(
+      (m) =>
+        `<tool toolName="${escapeToolAttr(m.toolName)}" title="${escapeToolAttr(
+          m.title
+        )}" id=${m.id} />`
+    )
     .join("\n");
 }
 
 function injectToolMarkersIntoAssistantText(
   text: string,
-  markers: Array<{ id: number; title: string }>
+  markers: Array<{ id: number; title: string; toolName: string }>
 ): string {
   if (!markers.length) return text;
   const markerBlock = buildToolMarkerLines(markers);
@@ -115,11 +135,15 @@ export async function POST(request: NextRequest) {
       messages as Array<Omit<UIMessage, "id">>
     );
 
-    const generateLandingPageCodeToolWithChatId =
-      createGenerateLandingPageCodeToolWithChatId(chatId);
+    // const generateLandingPageCodeToolWithChatId =
+    //   createGenerateLandingPageTool(chatId);
+
+    const createSiteToolCall = createSiteTool(chatId);
+    const createSectionToolCall = createSectionTool(chatId);
 
     const tools = {
-      generate_landing_page_code: generateLandingPageCodeToolWithChatId,
+      create_site: createSiteToolCall,
+      create_section: createSectionToolCall,
     };
 
     const lastMessage = messages[messages.length - 1] as any;
@@ -137,13 +161,15 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const toolMarkers: Array<{ id: number; title: string }> = [];
+    const toolMarkers: Array<{ id: number; title: string; toolName: string }> =
+      [];
 
     const result = streamText({
       model,
       system: chatSystemPrompt,
       messages: modelMessages,
       tools,
+      stopWhen: stepCountIs(20),
       onStepFinish: async (step) => {
         try {
           const stepNumber = (step as any).step ?? null;
@@ -162,7 +188,14 @@ export async function POST(request: NextRequest) {
               toolCallId,
               input: call,
             });
-            toolMarkers.push({ id: toolRow.id, title: getToolTitle(toolName) });
+            const destination = getDestinationFromToolCall(call);
+            toolMarkers.push({
+              id: toolRow.id,
+              title:
+                destination ||
+                (toolName === "create_site" ? "landing/index.html" : getToolTitle(toolName)),
+              toolName,
+            });
           }
 
           for (const res of staticResults) {

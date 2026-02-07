@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getLatestVersion, getUser } from "@/lib/db/queries";
+import { getLatestLandingSiteRevision, getLatestVersion, getUser } from "@/lib/db/queries";
 
 export async function GET(
   _request: NextRequest,
@@ -20,6 +20,24 @@ export async function GET(
 
   try {
     const { sessionId: chatId } = await params;
+
+    const latestRevision = await getLatestLandingSiteRevision(chatId);
+
+    if (latestRevision) {
+      if (latestRevision.userId !== user.id) {
+        return NextResponse.json(
+          { error: "Unauthorized", code: "UNAUTHORIZED" },
+          { status: 403 }
+        );
+      }
+
+      return NextResponse.json({
+        chatId,
+        revisionId: latestRevision.id,
+        revisionNumber: latestRevision.revisionNumber,
+        previewUrl: `/api/preview/${chatId}/${latestRevision.revisionNumber}`,
+      });
+    }
 
     const version = await getLatestVersion(chatId);
 

@@ -17,8 +17,14 @@ interface MessageItemProps {
 
 type RenderToken =
   | { type: "text"; text: string }
-  | { type: "tool-marker"; id: string; title: string }
-  | { type: "tool-call"; toolCallId: string; toolName: string; isComplete: boolean };
+  | { type: "tool-marker"; id: string; title: string; toolName: string }
+  | {
+    type: "tool-call";
+    toolCallId: string;
+    toolName: string;
+    isComplete: boolean;
+    destination?: string;
+  };
 
 function unescapeAttr(value: string): string {
   return value
@@ -47,14 +53,17 @@ function tokenizeTextWithToolMarkers(text: string): RenderToken[] {
     }
 
     const titleMatch = String(attrs).match(/title\s*=\s*"([^"]*)"/i);
+    const toolNameMatch = String(attrs).match(/toolName\s*=\s*"([^"]*)"/i);
     const idMatch = String(attrs).match(/id\s*=\s*("?)([0-9]+)\1/i);
     const titleRaw = titleMatch?.[1] ?? "tool";
+    const toolNameRaw = toolNameMatch?.[1] ?? "unknown";
     const idRaw = idMatch?.[2] ?? "";
 
     tokens.push({
       type: "tool-marker",
       id: idRaw,
       title: unescapeAttr(titleRaw),
+      toolName: unescapeAttr(toolNameRaw),
     });
 
     lastIndex = end;
@@ -82,8 +91,9 @@ function getTextContent(message: UIMessage): string {
 }
 
 function getDefaultFileNameForTool(toolName: string): string {
-  if (toolName === "generate_landing_page_code") return "landing/index.html";
-  return "file";
+  if (toolName === "create_site") return "landing/index.html";
+  if (toolName === "create_section") return "landing/sections/section.html";
+  return "file.html";
 }
 
 function buildRenderTokens(message: UIMessage): RenderToken[] {
@@ -116,11 +126,18 @@ function buildRenderTokens(message: UIMessage): RenderToken[] {
     if (partType === "tool-call") {
       const toolCallId = String(part?.toolCallId || "");
       const toolName = String(part?.toolName || "unknown");
+      const destination =
+        typeof part?.args?.destination === "string"
+          ? String(part.args.destination)
+          : typeof part?.input?.destination === "string"
+            ? String(part.input.destination)
+            : undefined;
       tokens.push({
         type: "tool-call",
         toolCallId,
         toolName,
         isComplete: !!(toolCallId && hasResultById.get(toolCallId)),
+        destination,
       });
       continue;
     }
@@ -133,11 +150,18 @@ function buildRenderTokens(message: UIMessage): RenderToken[] {
       const toolName = partType.replace("tool-", "");
       const toolCallId = String(part?.toolCallId || "");
       const hasResult = "result" in part || "output" in part;
+      const destination =
+        typeof part?.args?.destination === "string"
+          ? String(part.args.destination)
+          : typeof part?.input?.destination === "string"
+            ? String(part.input.destination)
+            : undefined;
       tokens.push({
         type: "tool-call",
         toolCallId,
         toolName,
         isComplete: hasResult || !!(toolCallId && hasResultById.get(toolCallId)),
+        destination,
       });
       continue;
     }
@@ -170,15 +194,15 @@ export const MessageItem = React.memo(function MessageItem({
                 return (
                   <div key={`m-${t.id || idx}`} className="my-2">
                     <ToolCallIndicator
-                      toolName="generate_landing_page_code"
-                      fileName={t.title || "landing/index.html"}
+                      toolName={t.toolName}
+                      fileName={t.title}
                       isComplete={true}
                     />
                   </div>
                 );
               }
 
-              const fileName = getDefaultFileNameForTool(t.toolName);
+              const fileName = t.destination || getDefaultFileNameForTool(t.toolName);
               return (
                 <div key={`c-${t.toolCallId || idx}`} className="my-2">
                   <ToolCallIndicator

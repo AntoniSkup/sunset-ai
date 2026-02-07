@@ -1,4 +1,4 @@
-# API Contract: Code Generation Tool
+# API Contract: Multi-file Site Generation Tools (Option A)
 
 **Created**: 2025-12-25  
 **Feature**: Landing Page Code Generation Tool  
@@ -8,87 +8,111 @@
 
 The code generation tool is integrated into the chat API route (`app/api/chat/route.ts`) as a Vercel AI SDK tool. It is invoked automatically by the AI model when it detects a user request for landing page creation or modification.
 
-## Tool Definition
+## Tools
 
-### Tool Name
+### Tool: `create_site`
 
-`generate_landing_page_code`
+#### Description
 
-### Tool Description
+Initializes a new landing site for the current chat. Typically creates the entry layout document (e.g., `landing/index.html`) and any default structure needed for the follow-up `create_section` calls.
 
-Generates HTML code with Tailwind CSS styling for landing pages based on user's natural language description. Can create new landing pages or modify existing ones based on conversation context.
-
-### Tool Schema
+#### Input schema (proposed)
 
 ```typescript
 import { tool } from "ai";
 
-const generateLandingPageCodeTool = tool({
+const createSiteTool = tool({
   description:
-    "Generate HTML code with Tailwind CSS for landing pages. Use this when users request to create, build, or modify a landing page. Include conversation context and previous code versions for iterative refinement.",
+    "Initialize a new landing site for this chat. Creates the entry layout document and returns the current revision info for preview.",
   parameters: z.object({
     userRequest: z
       .string()
-      .describe(
-        "The user's natural language request describing the landing page they want to create or modify"
-      ),
-    isModification: z
-      .boolean()
-      .optional()
-      .describe(
-        "Whether this is a modification to an existing landing page (true) or a new landing page (false)"
-      ),
-    previousCodeVersion: z
-      .string()
-      .optional()
-      .describe(
-        "The previous version of the code if this is a modification request"
-      ),
-    sessionId: z
-      .string()
-      .describe("Unique session identifier for version tracking"),
+      .min(1)
+      .describe("High-level description of the site (brand, goal, audience)."),
   }),
-  execute: async ({
-    userRequest,
-    isModification,
-    previousCodeVersion,
-    sessionId,
-  }) => {
-    // Implementation in lib/code-generation/generate-code.ts
-  },
 });
 ```
 
-## Tool Execution Flow
+#### Output (proposed)
 
-### Input Parameters
+Returns the latest revision info after initialization:
 
-- **userRequest** (string, required): The user's natural language description of the landing page
-- **isModification** (boolean, optional): Indicates if this is modifying existing code
-- **previousCodeVersion** (string, optional): Previous code version for context (if modification)
-- **sessionId** (string, required): Session identifier for version tracking
+```typescript
+{
+  success: boolean;
+  chatId: string;
+  revisionId?: number;
+  revisionNumber?: number;
+  error?: string;
+}
+```
 
-### Execution Steps
+---
 
-1. **Validate Input**: Check that userRequest is not empty, sessionId is valid
-2. **Build Prompt**: Construct AI prompt with user request, conversation context, and previous code (if modification)
-3. **Call AI Service**: Invoke AI model to generate HTML code with Tailwind CSS
-4. **Validate Code**: Parse and validate generated HTML, fix common errors
-5. **Determine Version**: Calculate next version number for session
-6. **Save to Database**: Persist code to `landing_page_versions` table
-7. **Update Preview**: Send postMessage to preview panel with new version
-8. **Return Result**: Return structured result to chat system
+### Tool: `create_section`
+
+#### Description
+
+Creates or modifies **exactly one HTML file** (layout, page, or section) identified by `destination` (path). Use this repeatedly to build a full site: layout → page → sections.
+
+#### Input schema (required for Option A)
+
+```typescript
+import { tool } from "ai";
+
+const createSectionTool = tool({
+  description:
+    "Create or modify one HTML file (layout/page/section) for the current landing site. One tool call writes exactly one file.",
+  parameters: z.object({
+    destination: z
+      .string()
+      .min(1)
+      .describe("Normalized relative .html path, e.g. landing/sections/hero.html"),
+    userRequest: z
+      .string()
+      .min(1)
+      .describe("Instructions for ONLY this file's content and style."),
+    isModification: z
+      .boolean()
+      .optional()
+      .describe("True when updating an existing file; false when creating a new file."),
+  }),
+});
+```
+
+#### Output (proposed)
+
+```typescript
+{
+  success: boolean;
+  chatId: string;
+  destination: string;
+  revisionId?: number;
+  revisionNumber?: number;
+  error?: string;
+}
+```
+
+## Execution flow (Option A)
+
+1. **Validate input**: ensure `destination` is a safe normalized `.html` path
+2. **Load previous file (if modification)**: fetch latest file content for (`chatId`, `destination`)
+3. **Build prompt**: include previous file content when modifying, otherwise generate from scratch
+4. **Call AI service**: generate raw HTML for this single file
+5. **Validate/fix**: enforce fragment vs full-doc expectations based on file kind
+6. **Create new revision**: insert a new `landing_site_revisions` row for this chat
+7. **Upsert file row**: ensure `landing_site_files` exists for (`chatId`, `destination`)
+8. **Save file version**: insert `landing_site_file_versions` linking file + revision
+9. **Update preview**: preview loads `/api/preview/{chatId}/{revisionNumber}` and composes the entry document by resolving `<!-- include: ... -->`
 
 ### Return Value
 
 ```typescript
 {
   success: boolean;
-  versionId?: number;
-  versionNumber?: number;
-  codeContent?: string;
+  revisionId?: number;
+  revisionNumber?: number;
   error?: string;
-  fixesApplied?: string[];
 }
 ```
 
@@ -134,14 +158,15 @@ const generateLandingPageCodeTool = tool({
 
 ## Integration with Chat API
 
-The tool is added to the `tools` array in the `streamText` call:
+Tools are added to the `tools` object in the `streamText` call:
 
 ```typescript
 const result = streamText({
   model,
   messages: modelMessages,
   tools: {
-    generate_landing_page_code: generateLandingPageCodeTool,
+    create_site: createSiteTool,
+    create_section: createSectionTool,
   },
 });
 ```

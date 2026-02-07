@@ -28,8 +28,11 @@ export function PreviewPanel({ className, chatId }: PreviewPanelProps) {
         setIsLoading(true);
         setLoadingMessage(
           (payload as PreviewLoadingPayload).message ||
-            "Generating landing page..."
+          "Generating landing page..."
         );
+      } else if (payload.type === "STOP_LOADING") {
+        setIsLoading(false);
+        setLoadingMessage("");
       } else if (payload.type === "UPDATE_PREVIEW") {
         const updatePayload = payload as PreviewUpdatePayload;
         setIsLoading(false);
@@ -80,8 +83,10 @@ export function PreviewPanel({ className, chatId }: PreviewPanelProps) {
         }
 
         const data = (await res.json()) as {
-          versionId: number;
-          versionNumber: number;
+          versionId?: number;
+          versionNumber?: number;
+          revisionId?: number;
+          revisionNumber?: number;
           previewUrl: string;
         };
 
@@ -89,8 +94,9 @@ export function PreviewPanel({ className, chatId }: PreviewPanelProps) {
           return;
         }
 
-        if (data?.versionId && data?.previewUrl && iframeRef.current) {
-          setCurrentVersionId(data.versionId);
+        const id = Number(data?.revisionId ?? data?.versionId ?? 0);
+        if (id && data?.previewUrl && iframeRef.current) {
+          setCurrentVersionId(id);
           iframeRef.current.src = data.previewUrl;
         }
       } catch (e) {

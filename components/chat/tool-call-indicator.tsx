@@ -17,20 +17,13 @@ export function ToolCallIndicator({
   isComplete,
   className,
 }: ToolCallIndicatorProps) {
-  const getToolDisplayInfo = (tool: string) => {
-    if (tool === "generate_landing_page_code") {
-      return {
-        displayName: "Generating landing page",
-        file: fileName || "file/index.html",
-      };
-    }
-    return {
-      displayName: tool,
-      file: fileName || "file",
-    };
-  };
-
-  const { displayName, file } = getToolDisplayInfo(toolName);
+  const file =
+    fileName ||
+    (toolName === "create_site"
+      ? "landing/index.html"
+      : toolName === "create_section"
+        ? "landing/sections/section.html"
+        : "file");
 
   return (
     <div

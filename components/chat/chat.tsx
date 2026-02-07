@@ -9,6 +9,7 @@ import { MessageList } from "./message-list";
 import { ChatInput } from "./chat-input";
 import {
   showPreviewLoader,
+  hidePreviewLoader,
   updatePreviewPanel,
 } from "@/lib/preview/update-preview";
 import { usePendingMessageStore } from "@/lib/stores/usePendingMessageStore";
@@ -239,41 +240,58 @@ function ChatInner({
     let newestFailure: { error: string; toolCallId?: string } | null = null;
     const lastUserMessageId = [...messages].reverse().find((m) => m.role === "user")?.id;
 
+    const builderToolNames = new Set([
+      "create_site",
+      "create_section",
+      "generate_landing_page_code",
+    ]);
+
+    const isBuilderTool = (toolName: unknown) =>
+      typeof toolName === "string" && builderToolNames.has(toolName);
+
+    const extractVersionLike = (result: any) => {
+      if (!result || result.success !== true) return null;
+      const id = result.revisionId ?? result.versionId;
+      const num = result.revisionNumber ?? result.versionNumber;
+      if (!id || !num) return null;
+      return { versionId: Number(id), versionNumber: Number(num) };
+    };
+
     for (const message of messages) {
       if (message.role !== "assistant") continue;
 
       for (const part of message.parts as any[]) {
         const partType = String(part?.type || "");
 
-        // Show loader when we detect a call for the landing page generation tool.
-        if (partType === "tool-call" && part?.toolName === "generate_landing_page_code") {
-          const toolCallId = String(part?.toolCallId || "generate_landing_page_code");
+        if (partType === "tool-call" && isBuilderTool(part?.toolName)) {
+          const toolCallId = String(part?.toolCallId || part?.toolName || "tool");
           if (!previewLoaderShownForToolCallIdsRef.current.has(toolCallId)) {
             previewLoaderShownForToolCallIdsRef.current.add(toolCallId);
-            showPreviewLoader("Generating landing page...");
+            showPreviewLoader("Generating website...");
           }
         }
 
         if (partType.startsWith("tool-")) {
           const toolName = partType.replace("tool-", "");
-          if (toolName === "generate_landing_page_code") {
+          if (isBuilderTool(toolName)) {
             const hasResult = "result" in part || "output" in part;
             if (!hasResult) {
-              const toolCallId = String(part?.toolCallId || "generate_landing_page_code");
+              const toolCallId = String(part?.toolCallId || toolName || "tool");
               if (!previewLoaderShownForToolCallIdsRef.current.has(toolCallId)) {
                 previewLoaderShownForToolCallIdsRef.current.add(toolCallId);
-                showPreviewLoader("Generating landing page...");
+                showPreviewLoader("Generating website...");
               }
             }
           }
         }
 
-        if (partType === "tool-result" && part?.toolName === "generate_landing_page_code") {
+        if (partType === "tool-result" && isBuilderTool(part?.toolName)) {
           const result = part?.result ?? part?.output ?? null;
-          if (result?.success === true && result?.versionId && result?.versionNumber) {
+          const extracted = extractVersionLike(result);
+          if (extracted) {
             const candidate = {
-              versionId: Number(result.versionId),
-              versionNumber: Number(result.versionNumber),
+              versionId: extracted.versionId,
+              versionNumber: extracted.versionNumber,
               chatId: String(chatId || ""),
             };
             if (!newestSuccessful || candidate.versionNumber > newestSuccessful.versionNumber) {
@@ -290,12 +308,13 @@ function ChatInner({
 
         if (partType.startsWith("tool-")) {
           const toolName = partType.replace("tool-", "");
-          if (toolName !== "generate_landing_page_code") continue;
+          if (!isBuilderTool(toolName)) continue;
           const result = part?.result ?? part?.output ?? null;
-          if (result?.success === true && result?.versionId && result?.versionNumber) {
+          const extracted = extractVersionLike(result);
+          if (extracted) {
             const candidate = {
-              versionId: Number(result.versionId),
-              versionNumber: Number(result.versionNumber),
+              versionId: extracted.versionId,
+              versionNumber: extracted.versionNumber,
               chatId: String(chatId || ""),
             };
             if (!newestSuccessful || candidate.versionNumber > newestSuccessful.versionNumber) {
@@ -313,34 +332,41 @@ function ChatInner({
     }
 
     if (newestFailure?.error) {
-      const key = `${newestFailure.toolCallId || "generate_landing_page_code"}:${newestFailure.error}`;
+      const key = `${newestFailure.toolCallId || "tool"}:${newestFailure.error}`;
       if (!toolErrorKeysRef.current.has(key)) {
         toolErrorKeysRef.current.add(key);
         setErrorMessages((prev) => [
           ...prev,
           {
             id: `tool-error-${Date.now()}-${Math.random()}`,
-            message: `Landing page generation failed to save: ${newestFailure.error}`,
+            message: `Generation failed: ${newestFailure.error}`,
             userMessageId: lastUserMessageId,
           },
         ]);
       }
     }
 
-    if (
-      newestSuccessful &&
-      newestSuccessful.versionId &&
-      newestSuccessful.chatId &&
-      lastPreviewVersionIdRef.current !== newestSuccessful.versionId
-    ) {
-      lastPreviewVersionIdRef.current = newestSuccessful.versionId;
-      updatePreviewPanel(
-        newestSuccessful.versionId,
-        newestSuccessful.versionNumber,
-        newestSuccessful.chatId
-      );
+    const isTurnFinished = status !== "streaming" && status !== "submitted";
+    if (!isTurnFinished) return;
+
+    if (newestSuccessful?.versionId && newestSuccessful.chatId) {
+      if (lastPreviewVersionIdRef.current !== newestSuccessful.versionId) {
+        lastPreviewVersionIdRef.current = newestSuccessful.versionId;
+        updatePreviewPanel(
+          newestSuccessful.versionId,
+          newestSuccessful.versionNumber,
+          newestSuccessful.chatId
+        );
+      } else {
+        hidePreviewLoader();
+      }
+      return;
     }
-  }, [messages]);
+
+    if (newestFailure?.error) {
+      hidePreviewLoader();
+    }
+  }, [messages, status]);
 
   useEffect(() => {
     const lastMessage = messages[messages.length - 1];

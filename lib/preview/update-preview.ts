@@ -11,9 +11,14 @@ export interface PreviewLoadingPayload {
   message?: string;
 }
 
+export interface PreviewStopLoadingPayload {
+  type: "STOP_LOADING";
+}
+
 export type PreviewMessagePayload =
   | PreviewUpdatePayload
-  | PreviewLoadingPayload;
+  | PreviewLoadingPayload
+  | PreviewStopLoadingPayload;
 
 const PREVIEW_EVENT_NAME = "preview-update";
 
@@ -38,6 +43,13 @@ export function showPreviewLoader(message?: string): void {
   const payload: PreviewLoadingPayload = {
     type: "LOADING",
     message: message || "Generating landing page...",
+  };
+  dispatchPreviewEvent(payload);
+}
+
+export function hidePreviewLoader(): void {
+  const payload: PreviewStopLoadingPayload = {
+    type: "STOP_LOADING",
   };
   dispatchPreviewEvent(payload);
 }

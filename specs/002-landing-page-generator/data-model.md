@@ -1,45 +1,87 @@
-# Data Model: Landing Page Code Generation Tool
+# Data Model: Multi-file Landing Site Generator (Option A)
 
 **Created**: 2025-12-25  
 **Feature**: Landing Page Code Generation Tool
 
+## Goal
+
+Store a landing site as **multiple HTML files** (layout, pages, sections) with version history, so the AI can modify one file at a time while the preview renders a composed site.
+
+## Key decisions (Phase 1)
+
+- **Storage model**: Option A — `landing_site_files` + `landing_site_revisions` + `landing_site_file_versions`
+- **Site key**: `chatId` (maps to `chats.public_id`) is the site/session identifier
+- **Versioning model**: global, sequential **revision numbers per chatId** (r1, r2, r3...). Each revision may update 1+ files.
+- **File paths**:
+  - Stored as normalized **POSIX-style** paths (forward slashes), relative to the site root
+  - Constraint: must end with `.html`, no leading `/`
+- **Composition convention** (includes):
+  - Use HTML comments in composed documents:
+    - `<!-- include: landing/pages/home.html -->`
+    - `<!-- include: landing/sections/hero.html -->`
+  - Preview renderer resolves `include:` directives by inlining the referenced file contents.
+
 ## Entities
 
-### Landing Page Version
+### Landing Site File
 
-Represents a single version of generated website code for a landing page.
+Represents a single named HTML file in the site (layout, page, or section).
 
-**Table**: `landing_page_versions`
+**Table**: `landing_site_files`
 
 **Fields**:
 
-- `id` (serial, primary key): Unique identifier for the version record
-- `user_id` (integer, foreign key → users.id): User who generated this version
-- `session_id` (varchar, 255): Unique session identifier for grouping versions
-- `version_number` (integer): Sequential version number within session (v1, v2, v3...)
-- `code_content` (text): Generated HTML code with Tailwind CSS (up to 1MB per spec assumption)
-- `created_at` (timestamp): When this version was generated
-- `updated_at` (timestamp): When this version was last updated (initially same as created_at)
+- `id` (serial, primary key)
+- `chat_id` (varchar(32), foreign key → chats.public_id)
+- `path` (varchar(255)): normalized, relative file path like `landing/index.html`
+- `kind` (varchar(20)): `layout` | `page` | `section` | `other`
+- `created_at` (timestamp)
+- `updated_at` (timestamp)
 
-**Constraints**:
+**Constraints / indexes**:
 
-- `user_id` must reference existing user (foreign key constraint)
-- `version_number` must be positive integer
-- `code_content` cannot be null or empty
-- `session_id` cannot be null
-- Unique constraint on (`session_id`, `version_number`) to prevent duplicate versions
+- Unique (`chat_id`, `path`)
+- Index on (`chat_id`)
 
-**Indexes**:
+### Landing Site Revision
 
-- Primary key on `id`
-- Index on (`session_id`, `version_number`) for fast version queries
-- Index on `user_id` for user-based queries
-- Index on `created_at` for chronological queries
+Represents a single site-wide revision (r1, r2, r3...) that can update one or more files.
 
-**Relationships**:
+**Table**: `landing_site_revisions`
 
-- Belongs to `User` (many-to-one via `user_id`)
-- No direct relationship to chat messages (association via session_id and timestamps)
+**Fields**:
+
+- `id` (serial, primary key)
+- `chat_id` (varchar(32), foreign key → chats.public_id)
+- `user_id` (integer, foreign key → users.id)
+- `revision_number` (integer): sequential per chatId
+- `created_at` (timestamp)
+
+**Constraints / indexes**:
+
+- Unique (`chat_id`, `revision_number`)
+- Index on (`chat_id`, `revision_number`)
+- Index on (`user_id`)
+
+### Landing Site File Version
+
+Represents the content of one file at a specific revision.
+
+**Table**: `landing_site_file_versions`
+
+**Fields**:
+
+- `id` (serial, primary key)
+- `file_id` (integer, foreign key → landing_site_files.id)
+- `revision_id` (integer, foreign key → landing_site_revisions.id)
+- `content` (text): raw HTML for that single file
+- `created_at` (timestamp)
+
+**Constraints / indexes**:
+
+- Unique (`file_id`, `revision_id`) (a file can be written at most once per revision)
+- Index on (`file_id`)
+- Index on (`revision_id`)
 
 ### Code Generation Request (Transient)
 
@@ -55,153 +97,194 @@ Represents a user's natural language request that triggers code generation. This
 
 **Note**: This entity is managed by the chat system. The code generation tool receives this information but doesn't persist it separately.
 
+## Rendering model (how preview picks file contents)
+
+Given a target revision \(rN\):
+
+- Find the set of files for the site (`landing_site_files` where `chat_id = chatId`)
+- For each file, select the most recent version at or before \(rN\)
+  - Implementation detail: either a query-per-file (fine for MVP) or a single SQL query using `DISTINCT ON (file_id)` ordered by `revision_number DESC`
+- Choose an **entry file** (for MVP: `landing/index.html`)
+- Inline `<!-- include: ... -->` directives by loading the referenced file contents at the same revision.
+
 ## Database Schema (Drizzle ORM)
 
 ```typescript
-export const landingPageVersions = pgTable(
-  "landing_page_versions",
+export const landingSiteFiles = pgTable(
+  "landing_site_files",
   {
     id: serial("id").primaryKey(),
-    userId: integer("user_id")
+    chatId: varchar("chat_id", { length: 32 })
       .notNull()
-      .references(() => users.id),
-    sessionId: varchar("session_id", { length: 255 }).notNull(),
-    versionNumber: integer("version_number").notNull(),
-    codeContent: text("code_content").notNull(),
+      .references(() => chats.publicId),
+    path: varchar("path", { length: 255 }).notNull(),
+    kind: varchar("kind", { length: 20 }).notNull().default("section"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
   (table) => ({
-    sessionVersionUnique: unique().on(table.sessionId, table.versionNumber),
-    sessionVersionIdx: index("session_version_idx").on(
-      table.sessionId,
-      table.versionNumber
+    chatPathUnique: unique().on(table.chatId, table.path),
+    chatIdIdx: index("landing_site_files_chat_id_idx").on(table.chatId),
+  })
+);
+
+export const landingSiteRevisions = pgTable(
+  "landing_site_revisions",
+  {
+    id: serial("id").primaryKey(),
+    chatId: varchar("chat_id", { length: 32 })
+      .notNull()
+      .references(() => chats.publicId),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id),
+    revisionNumber: integer("revision_number").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    chatRevisionUnique: unique().on(table.chatId, table.revisionNumber),
+    chatRevisionIdx: index("landing_site_revisions_chat_revision_idx").on(
+      table.chatId,
+      table.revisionNumber
     ),
-    userIdIdx: index("user_id_idx").on(table.userId),
-    createdAtIdx: index("created_at_idx").on(table.createdAt),
+    userIdIdx: index("landing_site_revisions_user_id_idx").on(table.userId),
   })
 );
 
-export const landingPageVersionsRelations = relations(
-  landingPageVersions,
-  ({ one }) => ({
-    user: one(users, {
-      fields: [landingPageVersions.userId],
-      references: [users.id],
-    }),
+export const landingSiteFileVersions = pgTable(
+  "landing_site_file_versions",
+  {
+    id: serial("id").primaryKey(),
+    fileId: integer("file_id")
+      .notNull()
+      .references(() => landingSiteFiles.id),
+    revisionId: integer("revision_id")
+      .notNull()
+      .references(() => landingSiteRevisions.id),
+    content: text("content").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    fileRevisionUnique: unique().on(table.fileId, table.revisionId),
+    fileIdIdx: index("landing_site_file_versions_file_id_idx").on(table.fileId),
+    revisionIdIdx: index("landing_site_file_versions_revision_id_idx").on(
+      table.revisionId
+    ),
   })
 );
-
-export type LandingPageVersion = typeof landingPageVersions.$inferSelect;
-export type NewLandingPageVersion = typeof landingPageVersions.$inferInsert;
 ```
 
 ## State Transitions
 
-### Version Creation Flow
+### Revision creation flow (single-file update)
 
-1. **Request Received**: User sends message requesting landing page creation
-2. **Code Generation**: AI service generates HTML code with Tailwind CSS
-3. **Code Validation**: System validates and fixes common errors
-4. **Version Assignment**: System determines next version number for session (MAX + 1)
-5. **Database Save**: System attempts to save version to database
-6. **Success**: Version saved, preview updated, confirmation sent to chat
-7. **Failure**: Code kept in memory, error shown with retry option
+1. **Request Received**: User requests a new site or a change to an existing one
+2. **Select destination**: The model chooses exactly one file `path` to create/modify for this tool call
+3. **Code Generation**: AI generates raw HTML for that single file
+4. **Validate/normalize**: Ensure path normalization and HTML validity expectations for the file kind
+5. **Create revision**: Insert `landing_site_revisions` row with next `revision_number` for `chat_id`
+6. **Upsert file**: Ensure `landing_site_files` exists for (`chat_id`, `path`)
+7. **Save file version**: Insert `landing_site_file_versions` row for (`file_id`, `revision_id`)
+8. **Preview update**: Preview loads revision \(rN\) and composes `landing/index.html` by resolving includes
 
-### Version Number Assignment
+### Revision number assignment
 
-- Query: `SELECT MAX(version_number) FROM landing_page_versions WHERE session_id = ?`
-- If no existing versions: start at 1
-- If versions exist: use MAX + 1
-- This ensures sequential numbering (v1, v2, v3...) per session
+- Query: `SELECT MAX(revision_number) FROM landing_site_revisions WHERE chat_id = ?`
+- If no revisions: start at 1
+- Else: MAX + 1
 
-### Most Recent Version Query
+### Most recent revision query
 
-- Query: `SELECT * FROM landing_page_versions WHERE session_id = ? ORDER BY version_number DESC LIMIT 1`
-- Used to display latest version in preview panel
-- Used for iterative refinement (include previous code in prompt)
+- Query: `SELECT * FROM landing_site_revisions WHERE chat_id = ? ORDER BY revision_number DESC LIMIT 1`
+- Used to display latest site state in preview panel
 
 ## Validation Rules
 
-### Code Content Validation
+### File path validation
 
-- **Non-empty**: Code content must not be empty
-- **Size limit**: Code content must be under 1MB (enforced at application level)
-- **HTML structure**: Should be valid HTML (validated by HTML parser before save)
+- Must be a normalized relative path (no leading `/`, no `..` segments)
+- Must end with `.html`
+- Use `/` separators (POSIX-style)
+
+### HTML content validation
+
+- **Non-empty**: Content must not be empty
+- **Size limit**: Keep under 1MB per file (MVP)
+- **HTML structure**:
+  - `layout` / entry documents may be full HTML docs (include `<!DOCTYPE html>` etc.)
+  - `section` documents should be fragment-safe (ideally one root `<section>`)
 - **Encoding**: UTF-8 encoding assumed
 
-### Version Number Validation
+### Revision number validation
 
 - **Positive integer**: Must be >= 1
-- **Sequential**: Must be MAX(version_number) + 1 for session
-- **Unique per session**: Cannot duplicate version_number within same session_id
+- **Sequential per chat**: Must be MAX(revision_number) + 1 for chat_id
+- **Unique per chat**: Cannot duplicate revision_number within same chat_id
 
-### Session ID Validation
+### Chat ID validation
 
-- **Non-empty**: Session ID must not be null or empty
-- **Format**: Should be consistent format (e.g., UUID or timestamp-based)
-- **Uniqueness**: Different sessions can have same version numbers (isolated per session)
+- **Non-empty**: chatId must not be null or empty
+- **Format**: constrained to existing `chats.public_id` format (length 32)
+- **Uniqueness**: Different chats can have the same revision numbers (isolated per chat)
 
 ## Data Volume Assumptions
 
-- **Average code size**: ~50-200KB per landing page (HTML + Tailwind classes)
-- **Maximum code size**: 1MB per landing page (per spec assumption)
-- **Versions per session**: Typically 1-10 versions (iterative refinement)
-- **Sessions per user**: Multiple concurrent sessions possible
-- **Storage estimate**: ~100KB average per version × 10 versions = ~1MB per session
+- **Average file size**: ~5-50KB per file
+- **Files per site**: ~5-20 (layout + 1 page + sections)
+- **Revisions per chat**: typically 5-30
+- **Storage estimate**: ~15 files × 20KB × 20 revisions worst-case ≈ 6MB per chat (acceptable for MVP; can prune later)
 
 ## Migration Strategy
 
-1. Create `landing_page_versions` table with all fields
-2. Add foreign key constraint to `users` table
-3. Create indexes for performance
-4. Add unique constraint on (session_id, version_number)
-5. No data migration needed (new feature)
+1. Create `landing_site_files`, `landing_site_revisions`, `landing_site_file_versions`
+2. Add FKs to `users` and `chats`
+3. Add unique constraints and indexes
+4. Keep existing `landing_page_versions` as legacy until preview is fully migrated
 
-## Query Patterns
+## Query Patterns (MVP)
 
-### Get Most Recent Version for Session
+### Get most recent revision for chat
 
 ```typescript
-const latestVersion = await db
+const latestRevision = await db
   .select()
-  .from(landingPageVersions)
-  .where(eq(landingPageVersions.sessionId, sessionId))
-  .orderBy(desc(landingPageVersions.versionNumber))
+  .from(landingSiteRevisions)
+  .where(eq(landingSiteRevisions.chatId, chatId))
+  .orderBy(desc(landingSiteRevisions.revisionNumber))
   .limit(1);
 ```
 
-### Get All Versions for Session
+### Get next revision number
 
 ```typescript
-const allVersions = await db
-  .select()
-  .from(landingPageVersions)
-  .where(eq(landingPageVersions.sessionId, sessionId))
-  .orderBy(asc(landingPageVersions.versionNumber));
+const maxRevision = await db
+  .select({ max: max(landingSiteRevisions.revisionNumber) })
+  .from(landingSiteRevisions)
+  .where(eq(landingSiteRevisions.chatId, chatId));
+
+const nextRevision = (maxRevision[0]?.max ?? 0) + 1;
 ```
 
-### Get Next Version Number
+### Upsert file + create file version at a new revision
 
 ```typescript
-const maxVersion = await db
-  .select({ max: max(landingPageVersions.versionNumber) })
-  .from(landingPageVersions)
-  .where(eq(landingPageVersions.sessionId, sessionId));
+const revision = await db
+  .insert(landingSiteRevisions)
+  .values({ chatId, userId, revisionNumber: nextRevision })
+  .returning();
 
-const nextVersion = (maxVersion[0]?.max ?? 0) + 1;
-```
-
-### Create New Version
-
-```typescript
-const newVersion = await db
-  .insert(landingPageVersions)
-  .values({
-    userId: userId,
-    sessionId: sessionId,
-    versionNumber: nextVersion,
-    codeContent: codeContent,
+const file = await db
+  .insert(landingSiteFiles)
+  .values({ chatId, path, kind })
+  .onConflictDoUpdate({
+    target: [landingSiteFiles.chatId, landingSiteFiles.path],
+    set: { updatedAt: sql`now()` },
   })
   .returning();
+
+await db.insert(landingSiteFileVersions).values({
+  fileId: file[0].id,
+  revisionId: revision[0].id,
+  content,
+});
 ```

@@ -168,6 +168,113 @@ export const landingPageVersionsRelations = relations(
 export type LandingPageVersion = typeof landingPageVersions.$inferSelect;
 export type NewLandingPageVersion = typeof landingPageVersions.$inferInsert;
 
+export const landingSiteFiles = pgTable(
+  "landing_site_files",
+  {
+    id: serial("id").primaryKey(),
+    chatId: varchar("chat_id", { length: 32 })
+      .notNull()
+      .references(() => chats.publicId),
+    path: varchar("path", { length: 255 }).notNull(),
+    kind: varchar("kind", { length: 20 }).notNull().default("section"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    chatPathUnique: unique().on(table.chatId, table.path),
+    chatIdIdx: index("landing_site_files_chat_id_idx").on(table.chatId),
+  })
+);
+
+export const landingSiteRevisions = pgTable(
+  "landing_site_revisions",
+  {
+    id: serial("id").primaryKey(),
+    chatId: varchar("chat_id", { length: 32 })
+      .notNull()
+      .references(() => chats.publicId),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id),
+    revisionNumber: integer("revision_number").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    chatRevisionUnique: unique().on(table.chatId, table.revisionNumber),
+    chatRevisionIdx: index("landing_site_revisions_chat_revision_idx").on(
+      table.chatId,
+      table.revisionNumber
+    ),
+    userIdIdx: index("landing_site_revisions_user_id_idx").on(table.userId),
+  })
+);
+
+export const landingSiteFileVersions = pgTable(
+  "landing_site_file_versions",
+  {
+    id: serial("id").primaryKey(),
+    fileId: integer("file_id")
+      .notNull()
+      .references(() => landingSiteFiles.id),
+    revisionId: integer("revision_id")
+      .notNull()
+      .references(() => landingSiteRevisions.id),
+    content: text("content").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    fileRevisionUnique: unique().on(table.fileId, table.revisionId),
+    fileIdIdx: index("landing_site_file_versions_file_id_idx").on(table.fileId),
+    revisionIdIdx: index("landing_site_file_versions_revision_id_idx").on(
+      table.revisionId
+    ),
+  })
+);
+
+export const landingSiteFilesRelations = relations(landingSiteFiles, ({ one, many }) => ({
+  chat: one(chats, {
+    fields: [landingSiteFiles.chatId],
+    references: [chats.publicId],
+  }),
+  versions: many(landingSiteFileVersions),
+}));
+
+export const landingSiteRevisionsRelations = relations(
+  landingSiteRevisions,
+  ({ one, many }) => ({
+    chat: one(chats, {
+      fields: [landingSiteRevisions.chatId],
+      references: [chats.publicId],
+    }),
+    user: one(users, {
+      fields: [landingSiteRevisions.userId],
+      references: [users.id],
+    }),
+    fileVersions: many(landingSiteFileVersions),
+  })
+);
+
+export const landingSiteFileVersionsRelations = relations(
+  landingSiteFileVersions,
+  ({ one }) => ({
+    file: one(landingSiteFiles, {
+      fields: [landingSiteFileVersions.fileId],
+      references: [landingSiteFiles.id],
+    }),
+    revision: one(landingSiteRevisions, {
+      fields: [landingSiteFileVersions.revisionId],
+      references: [landingSiteRevisions.id],
+    }),
+  })
+);
+
+export type LandingSiteFile = typeof landingSiteFiles.$inferSelect;
+export type NewLandingSiteFile = typeof landingSiteFiles.$inferInsert;
+export type LandingSiteRevision = typeof landingSiteRevisions.$inferSelect;
+export type NewLandingSiteRevision = typeof landingSiteRevisions.$inferInsert;
+export type LandingSiteFileVersion = typeof landingSiteFileVersions.$inferSelect;
+export type NewLandingSiteFileVersion = typeof landingSiteFileVersions.$inferInsert;
+
 export const chats = pgTable(
   "chats",
   {

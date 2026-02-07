@@ -1,7 +1,7 @@
 const rateLimitStore = new Map<number, { count: number; resetAt: number }>();
 
 const RATE_LIMIT_WINDOW_MS = 60 * 1000;
-const RATE_LIMIT_MAX_REQUESTS = 10;
+const RATE_LIMIT_MAX_REQUESTS = 1000000; //infinite for now
 
 export function checkRateLimit(userId: number): {
   allowed: boolean;

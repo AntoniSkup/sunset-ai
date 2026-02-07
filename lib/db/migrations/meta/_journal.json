@@ -50,6 +50,13 @@
       "when": 1768690780714,
       "tag": "0006_jittery_sumo",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1770232187528,
+      "tag": "0007_stormy_mephisto",
+      "breakpoints": true
     }
   ]
 }
