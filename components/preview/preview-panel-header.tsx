@@ -49,7 +49,7 @@ export default function PreviewPanelHeader({ chatId }: PreviewPanelHeaderProps) 
 
     return (
         <>
-            <header className="h-12 border-b border-gray-200">
+            <header className="h-12 ">
                 <div className="h-full px-4 sm:px-6 lg:px-8 flex justify-end items-center">
                     {publishedUrl ? (
                         <Button

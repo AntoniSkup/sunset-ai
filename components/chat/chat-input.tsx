@@ -30,7 +30,7 @@ export function ChatInput({
   };
 
   return (
-    <form ref={formRef} onSubmit={handleSubmit} className="bg-background p-4">
+    <form ref={formRef} onSubmit={handleSubmit} className="bg-background p-2">
       <div className="relative bg-white rounded-lg border shadow-xs">
         <textarea
           value={input}

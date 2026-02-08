@@ -43,7 +43,7 @@ function BuilderContent({
     <div className="h-full flex">
       <Group orientation="horizontal" className="flex-1 h-full">
         <Panel defaultSize={30}>
-          <div className="h-full w-full border rounded-lg bg-background overflow-hidden flex flex-col">
+          <div className="h-full w-full rounded-lg bg-background overflow-hidden flex flex-col">
             <div className="shrink-0">
               <ChatHeader chatId={chatId} chatName={chatName} />
             </div>
@@ -54,11 +54,11 @@ function BuilderContent({
         </Panel>
         <Separator />
         <Panel defaultSize={70}>
-          <div className="h-full w-full border rounded-lg bg-background overflow-hidden flex flex-col">
+          <div className="h-full w-full rounded-lg bg-background overflow-hidden flex flex-col">
             <div className="shrink-0">
               <PreviewPanelHeader chatId={chatId} />
             </div>
-            <div className="flex-1 min-h-0">
+            <div className="flex-1 min-h-0 rounded-lg p-2">
               <PreviewPanel chatId={chatId} />
             </div>
           </div>

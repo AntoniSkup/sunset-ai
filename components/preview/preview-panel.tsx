@@ -112,7 +112,7 @@ export function PreviewPanel({ className, chatId }: PreviewPanelProps) {
   }, [chatId]);
 
   return (
-    <div className={`relative h-full w-full ${className || ""}`}>
+    <div className={`relative h-full w-full ${className || ""} rounded-lg border shadow-xs overflow-hidden  `}>
       {isLoading && (
         <div className="absolute inset-0 flex items-center justify-center bg-background z-10">
           <div className="flex flex-col items-center gap-3">
@@ -127,7 +127,7 @@ export function PreviewPanel({ className, chatId }: PreviewPanelProps) {
         ref={iframeRef}
         data-preview="true"
         id="preview-iframe"
-        className="h-full w-full border-0"
+        className="h-full w-full  rounded-lg"
         title="Website Preview"
         sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
       />
