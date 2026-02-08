@@ -54,11 +54,11 @@ function BuilderContent({
         </Panel>
         <Separator />
         <Panel defaultSize={70}>
-          <div className="h-full w-full rounded-lg bg-background overflow-hidden flex flex-col">
+          <div className="h-full w-full rounded-lg bg-background overflow-hidden flex flex-col pr-1">
             <div className="shrink-0">
               <PreviewPanelHeader chatId={chatId} />
             </div>
-            <div className="flex-1 min-h-0 rounded-lg p-2">
+            <div className="flex-1 min-h-0 rounded-lg pb-2">
               <PreviewPanel chatId={chatId} />
             </div>
           </div>

@@ -49,8 +49,8 @@ export default function PreviewPanelHeader({ chatId }: PreviewPanelHeaderProps) 
 
     return (
         <>
-            <header className="h-12 ">
-                <div className="h-full px-4 sm:px-6 lg:px-8 flex justify-end items-center">
+            <header className="py-2">
+                <div className="h-full px-4 sm:px-6 lg:px-8 flex justify-end ">
                     {publishedUrl ? (
                         <Button
                             variant="outline"
@@ -60,19 +60,7 @@ export default function PreviewPanelHeader({ chatId }: PreviewPanelHeaderProps) 
                             Published
                         </Button>
                     ) : (
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button variant="outline" size="sm" className="h-8 w-8 p-0">
-                                    <MoreVertical className="h-4 w-4" />
-                                    <span className="sr-only">Open menu</span>
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => setIsPublishModalOpen(true)}>
-                                    Publish
-                                </DropdownMenuItem>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
+                        <Button variant="default" size="sm" onClick={() => setIsPublishModalOpen(true)}>Publish</Button>
                     )}
                 </div>
             </header>

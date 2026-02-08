@@ -116,7 +116,7 @@ export function PublishModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange} >
-      <DialogContent className="sm:max-w-[600px] !fixed !left-[50%] !bottom-4 !translate-x-[-50%] !translate-y-0 !top-auto data-[state=open]:slide-in-from-bottom data-[state=closed]:slide-out-to-bottom">
+      <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
           <DialogTitle className="text-2xl font-bold">Publish Your App</DialogTitle>
         </DialogHeader>

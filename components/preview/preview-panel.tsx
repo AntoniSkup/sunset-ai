@@ -112,7 +112,7 @@ export function PreviewPanel({ className, chatId }: PreviewPanelProps) {
   }, [chatId]);
 
   return (
-    <div className={`relative h-full w-full ${className || ""} rounded-lg border shadow-xs overflow-hidden  `}>
+    <div className={`relative h-full w-full ${className || ""} rounded-lg border shadow-xs overflow-hidden `}>
       {isLoading && (
         <div className="absolute inset-0 flex items-center justify-center bg-background z-10">
           <div className="flex flex-col items-center gap-3">
