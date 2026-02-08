@@ -4,6 +4,8 @@ import {
   getChatByPublicId,
   createChatMessage,
   createChatToolCall,
+  updateChatByPublicId,
+  generateChatName,
 } from "@/lib/db/queries";
 import { streamText, convertToModelMessages, stepCountIs } from "ai";
 import type { UIMessage } from "ai";
@@ -158,6 +160,11 @@ export async function POST(request: NextRequest) {
           role: "user",
           content: userText.trim(),
         });
+
+        if (!chat.title) {
+          const title = await generateChatName(userText.trim());
+          await updateChatByPublicId(chatId, user.id, { title });
+        }
       }
     }
 

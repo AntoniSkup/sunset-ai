@@ -37,7 +37,7 @@ export default function PreviewPanelHeader({ chatId }: PreviewPanelHeaderProps) 
                 }
             }
         } catch (err) {
-            // Not published yet
+            // soft
         }
     };
 

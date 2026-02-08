@@ -25,7 +25,7 @@ export default function StartPage() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ userQuery: message }),
       });
 
       if (!response.ok) {

@@ -13,11 +13,12 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { title } = body;
+    const { title, userQuery } = body;
 
     const chat = await createChat({
       userId: user.id,
       title: title || undefined,
+      userQuery: userQuery || undefined,
     });
 
     return NextResponse.json({ chat }, { status: 201 });

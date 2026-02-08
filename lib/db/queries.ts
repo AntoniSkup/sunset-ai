@@ -17,6 +17,22 @@ import {
 import { nanoid } from "nanoid";
 import { cookies } from "next/headers";
 import { verifyToken } from "@/lib/auth/session";
+import { generateText } from "ai";
+import { getAIModel } from "@/lib/ai/get-ai-model";
+
+export async function generateChatName(userQuery: string): Promise<string> {
+  const model = await getAIModel(true);
+  const { text } = await generateText({
+    model,
+    prompt: `Generate a short, descriptive title (max 60 characters) for a website project based on this request: "${userQuery}"`,
+  });
+  let cleaned = text.trim();
+  if ((cleaned.startsWith('"') && cleaned.endsWith('"')) ||
+    (cleaned.startsWith("'") && cleaned.endsWith("'"))) {
+    cleaned = cleaned.slice(1, -1).trim();
+  }
+  return cleaned.slice(0, 60) || "New Project";
+}
 
 export async function getUser() {
   const sessionCookie = (await cookies()).get("session");
@@ -332,14 +348,21 @@ export async function getLandingSiteFileContentAtOrBeforeRevision(data: {
 export async function createChat(data: {
   userId: number;
   title?: string;
+  userQuery?: string;
 }) {
   const publicId = nanoid();
+  let title = data.title;
+
+  if (!title && data.userQuery) {
+    title = await generateChatName(data.userQuery);
+  }
+
   const result = await db
     .insert(chats)
     .values({
       publicId,
       userId: data.userId,
-      title: data.title || null,
+      title: title || null,
     })
     .returning();
 

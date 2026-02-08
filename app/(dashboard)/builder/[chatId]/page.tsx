@@ -3,7 +3,7 @@
 import { Chat } from "@/components/chat/chat";
 import { PreviewPanel } from "@/components/preview/preview-panel";
 import { Group, Panel, Separator } from "react-resizable-panels";
-import { Suspense, use } from "react";
+import { Suspense, use, useState, useEffect } from "react";
 import { ChatHeader } from "@/components/chat/chat-header";
 import PreviewPanelHeader from "@/components/preview/preview-panel-header";
 
@@ -12,13 +12,40 @@ function BuilderContent({
 }: {
   chatId: string;
 }) {
+  const [chatName, setChatName] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const res = await fetch(`/api/chats/${encodeURIComponent(chatId)}`);
+        if (!res.ok) {
+          throw new Error("Failed to load chat");
+        }
+        const data = await res.json();
+        if (!cancelled) {
+          setChatName(data.chat?.title || null);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setChatName(null);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [chatId]);
+
   return (
     <div className="h-full flex">
       <Group orientation="horizontal" className="flex-1 h-full">
         <Panel defaultSize={30}>
           <div className="h-full w-full border rounded-lg bg-background overflow-hidden flex flex-col">
             <div className="shrink-0">
-              <ChatHeader />
+              <ChatHeader chatId={chatId} chatName={chatName} />
             </div>
             <div className="flex-1 min-h-0">
               <Chat chatId={chatId} />
