@@ -363,6 +363,42 @@ export type NewChatMessage = typeof chatMessages.$inferInsert;
 export type ChatToolCall = typeof chatToolCalls.$inferSelect;
 export type NewChatToolCall = typeof chatToolCalls.$inferInsert;
 
+export const publishedSites = pgTable(
+  "published_sites",
+  {
+    id: serial("id").primaryKey(),
+    publicId: varchar("public_id", { length: 32 }).notNull(),
+    chatId: varchar("chat_id", { length: 32 })
+      .notNull()
+      .references(() => chats.publicId),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id),
+    revisionNumber: integer("revision_number").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    publicIdUnique: unique("published_sites_public_id_unique").on(table.publicId),
+    chatIdIdx: index("published_sites_chat_id_idx").on(table.chatId),
+    userIdIdx: index("published_sites_user_id_idx").on(table.userId),
+  })
+);
+
+export const publishedSitesRelations = relations(publishedSites, ({ one }) => ({
+  chat: one(chats, {
+    fields: [publishedSites.chatId],
+    references: [chats.publicId],
+  }),
+  user: one(users, {
+    fields: [publishedSites.userId],
+    references: [users.id],
+  }),
+}));
+
+export type PublishedSite = typeof publishedSites.$inferSelect;
+export type NewPublishedSite = typeof publishedSites.$inferInsert;
+
 export enum ActivityType {
   SIGN_UP = "SIGN_UP",
   SIGN_IN = "SIGN_IN",

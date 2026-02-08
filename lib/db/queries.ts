@@ -12,6 +12,7 @@ import {
   chats,
   chatMessages,
   chatToolCalls,
+  publishedSites,
 } from "./schema";
 import { nanoid } from "nanoid";
 import { cookies } from "next/headers";
@@ -443,4 +444,61 @@ export async function createChatToolCall(data: {
   await db.update(chats).set({ updatedAt: new Date() }).where(eq(chats.id, data.chatId));
 
   return result[0];
+}
+
+export async function createPublishedSite(data: {
+  chatId: string;
+  userId: number;
+  revisionNumber: number;
+}) {
+  const publicId = nanoid();
+  const result = await db
+    .insert(publishedSites)
+    .values({
+      publicId,
+      chatId: data.chatId,
+      userId: data.userId,
+      revisionNumber: data.revisionNumber,
+    })
+    .returning();
+
+  return result[0];
+}
+
+export async function getPublishedSiteByPublicId(publicId: string) {
+  const result = await db
+    .select()
+    .from(publishedSites)
+    .where(eq(publishedSites.publicId, publicId))
+    .limit(1);
+
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function getPublishedSiteByChatId(chatId: string, userId: number) {
+  const result = await db
+    .select()
+    .from(publishedSites)
+    .where(and(eq(publishedSites.chatId, chatId), eq(publishedSites.userId, userId)))
+    .orderBy(desc(publishedSites.createdAt))
+    .limit(1);
+
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function updatePublishedSite(
+  publicId: string,
+  userId: number,
+  data: { revisionNumber: number }
+) {
+  const result = await db
+    .update(publishedSites)
+    .set({
+      ...data,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(publishedSites.publicId, publicId), eq(publishedSites.userId, userId)))
+    .returning();
+
+  return result.length > 0 ? result[0] : null;
 }

@@ -57,6 +57,13 @@
       "when": 1770232187528,
       "tag": "0007_stormy_mephisto",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1770556804026,
+      "tag": "0008_lean_zaran",
+      "breakpoints": true
     }
   ]
 }

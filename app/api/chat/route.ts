@@ -135,6 +135,7 @@ export async function POST(request: NextRequest) {
     );
 
     const useLighterModel = await decideOnLighterModel(messages as Array<Omit<UIMessage, "id">>);
+    console.log("useLighterModel", useLighterModel);
     const model = await getAIModel(useLighterModel);
 
     const createSiteToolCall = createSiteTool(chatId);
