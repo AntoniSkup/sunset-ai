@@ -1,16 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from '../ui/button'
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-} from '../ui/dropdown-menu'
 import { PublishModal } from './publish-modal'
 import { PublishedSuccessModal } from './published-success-modal'
-import { MoreVertical } from 'lucide-react'
 
 interface PreviewPanelHeaderProps {
     chatId: string;
@@ -55,12 +48,12 @@ export default function PreviewPanelHeader({ chatId }: PreviewPanelHeaderProps) 
                         <Button
                             variant="outline"
                             onClick={() => setIsSuccessModalOpen(true)}
-                            className="text-sm"
+                            className="text-sm bg-[#FF9FFC] hover:bg-[#FF9FFC]/80"
                         >
                             Published
                         </Button>
                     ) : (
-                        <Button variant="default" size="sm" onClick={() => setIsPublishModalOpen(true)}>Publish</Button>
+                        <Button variant="default" size="sm" onClick={() => setIsPublishModalOpen(true)} className="bg-[#FF69B4]">Publish</Button>
                     )}
                 </div>
             </header>
