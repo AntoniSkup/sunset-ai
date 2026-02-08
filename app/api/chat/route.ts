@@ -9,6 +9,7 @@ import { streamText, convertToModelMessages, stepCountIs } from "ai";
 import type { UIMessage } from "ai";
 import { createSectionTool, createSiteTool } from "@/lib/code-generation/generate-code";
 import { getAIModel } from "@/lib/ai/get-ai-model";
+import { shouldUseLighterModel } from "@/lib/ai/should-use-lighter-model";
 import { chatSystemPrompt } from "@/prompts/chat-system-prompt";
 
 const requestQueues = new Map<string, Promise<void>>();
@@ -129,14 +130,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const model = await getAIModel();
-
     const modelMessages = await convertToModelMessages(
       messages as Array<Omit<UIMessage, "id">>
     );
 
-    // const generateLandingPageCodeToolWithChatId =
-    //   createGenerateLandingPageTool(chatId);
+    const useLighterModel = await decideOnLighterModel(messages as Array<Omit<UIMessage, "id">>);
+    const model = await getAIModel(useLighterModel);
 
     const createSiteToolCall = createSiteTool(chatId);
     const createSectionToolCall = createSectionTool(chatId);
@@ -244,4 +243,31 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+const decideOnLighterModel = async (messages: Array<Omit<UIMessage, "id">>): Promise<boolean> => {
+  if (!messages || !Array.isArray(messages) || messages.length === 0) {
+    return false;
+  }
+
+  const hasAssistantMessages = messages.some(
+    (msg: any) => msg?.role === "assistant"
+  );
+
+  const lastMessage = messages[messages.length - 1] as any;
+  let userQuestion = "";
+  if (lastMessage?.role === "user" && Array.isArray(lastMessage.parts)) {
+    userQuestion = lastMessage.parts
+      .filter((p: any) => p?.type === "text")
+      .map((p: any) => p.text)
+      .join("");
+  } else if (lastMessage?.role === "user" && typeof lastMessage.content === "string") {
+    userQuestion = lastMessage.content;
+  }
+
+  let useLighterModel = false;
+  if (hasAssistantMessages && userQuestion.trim()) {
+    useLighterModel = await shouldUseLighterModel(userQuestion.trim());
+  }
+  return useLighterModel;
 }
