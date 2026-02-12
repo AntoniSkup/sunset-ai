@@ -8,11 +8,8 @@ import type {
   PreviewLoadingPayload,
 } from "@/lib/preview/update-preview";
 import { PREVIEW_EVENT_TYPE } from "@/lib/preview/update-preview";
-import { GridScan } from "@/components/GridScan";
-import ShinyText from "@/components/ShinyText";
-import Hyperspeed from "@/components/Hyperspeed";
-import RippleGrid from "@/components/RippleGrid";
-import LiquidEther from "../LiquidEther";
+import loader from "@/components/icons/loader.svg";
+import SplitText from "@/components/SplitText";
 
 interface PreviewPanelProps {
   className?: string;
@@ -24,6 +21,7 @@ export function PreviewPanel({ className, chatId }: PreviewPanelProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState<string>("");
   const [currentVersionId, setCurrentVersionId] = useState<number | null>(null);
+  const loaderSrc = typeof loader === "string" ? loader : loader.src;
 
   useEffect(() => {
     const handlePreviewUpdate = (event: CustomEvent<PreviewMessagePayload>) => {
@@ -137,84 +135,27 @@ export function PreviewPanel({ className, chatId }: PreviewPanelProps) {
         sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
       />
       {!isLoading && !currentVersionId && (
-        <div className="absolute inset-0 bg-white">
-          <LiquidEther
-            className="h-full w-full rounded-lg"
-            style={{ width: "100%", height: "100%" }}
-            theme="auto"
-            useSunsetColors={true}
-            isBounce={false}
-            viscous={86}
-            iterationsViscous={50}
-            iterationsPoisson={1}
+        <div className="absolute inset-0 bg-white rounded-lg ">
 
-          />
-          {/* <GridScan
-            sensitivity={0.55}
-            lineThickness={1}
-            linesColor="#392e4e"
-            gridScale={0.4}
-            scanColor="#FF9FFC"
-            scanOpacity={0.4}
-            enablePost={false}
-            bloomIntensity={0.6}
-            chromaticAberration={0.002}
-            noiseIntensity={0.01}
-            className="h-full w-full"
-            style={{ width: "100%", height: "100%" }}
-
-          /> */}
-          {/* <RippleGrid
-            enableRainbow={false}
-            gridColor="#FF69B4"
-            rippleIntensity={0.05}
-            gridSize={10}
-            gridThickness={15}
-            mouseInteraction={true}
-            mouseInteractionRadius={1.2}
-            opacity={0.8}
-          /> */}
-
-          {/* <Hyperspeed
-          /> */}
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-6 px-4">
-            {/* <div className="flex items-center gap-2">
-              <div 
-                className="h-2 w-2 rounded-full bg-[#FF9FFC]"
-                style={{ 
-                  animation: 'pulse-dot 1.4s ease-in-out infinite',
-                  animationDelay: '0s'
-                }}
-              />
-              <div 
-                className="h-2 w-2 rounded-full bg-[#FF9FFC]"
-                style={{ 
-                  animation: 'pulse-dot 1.4s ease-in-out infinite',
-                  animationDelay: '0.2s'
-                }}
-              />
-              <div 
-                className="h-2 w-2 rounded-full bg-[#FF9FFC]"
-                style={{ 
-                  animation: 'pulse-dot 1.4s ease-in-out infinite',
-                  animationDelay: '0.4s'
-                }}
-              />
-            </div> */}
+
             <div className="text-center">
-              <ShinyText
-                text="Generating landing page"
-                speed={2}
-                delay={0}
-                color="#000000"
-                shineColor="#ffffff"
-                spread={120}
-                direction="left"
-                yoyo={false}
-                pauseOnHover={false}
-                disabled={false}
-                className="text-3xl md:text-4xl font-semibold tracking-tight h-12"
-              />
+              <object
+                key={loaderSrc}
+                data={loaderSrc}
+                type="image/svg+xml"
+                aria-label="Loading"
+                className="mx-auto mb-3 h-72 w-72"
+              >
+                <img
+                  src={loaderSrc}
+                  alt="Loading"
+                  className="mx-auto mb-3 h-72 w-72"
+                />
+              </object>
+              <span className="text-2xl font-medium">
+                Bringing your idea to life...
+              </span>
             </div>
             <p className="text-sm text-gray-400 font-medium">
               This may take a few moments

@@ -53,7 +53,15 @@ export default function PreviewPanelHeader({ chatId }: PreviewPanelHeaderProps) 
                             Published
                         </Button>
                     ) : (
-                        <Button variant="default" size="sm" onClick={() => setIsPublishModalOpen(true)} className="bg-[#FF69B4]">Publish</Button>
+                        <Button
+                            variant="default"
+                            size="sm"
+                            onClick={() => setIsPublishModalOpen(true)}
+                            className="text-white bg-gradient-to-br from-pink-500 via-rose-500 to-orange-300"
+
+                        >
+                            Publish
+                        </Button>
                     )}
                 </div>
             </header>

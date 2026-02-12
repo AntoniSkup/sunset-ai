@@ -55,7 +55,7 @@ export function ChatInput({
           disabled={isLoading || !input.trim()}
           size="icon"
           className={cn(
-            "absolute top-4 right-4 w-[28px] h-[28px] p-1 rounded-lg",
+            "absolute top-4 right-4 w-[28px] h-[28px] p-1 rounded-lg bg-gradient-to-br from-pink-500 via-rose-500 to-orange-300",
             isLoading || !input.trim()
               ? "bg-muted text-muted-foreground hover:bg-muted"
               : ""

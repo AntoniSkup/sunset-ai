@@ -12,7 +12,10 @@ export function ChatHeader({ chatId, chatName }: ChatHeaderProps) {
         <header className="h-12 ">
             <div className="h-full px-4 sm:px-6 lg:px-8 flex justify-between items-center">
                 <div className="flex items-center space-x-3 flex-1 min-w-0">
-                    <div className="w-6 h-6 rounded-full bg-[#FF69B4] flex-shrink-0" />
+                    <div
+                        className="w-6 h-6 rounded-full flex-shrink-0 bg-gradient-to-br from-pink-500 via-rose-500 to-orange-300"
+
+                    />
 
                     <div className="flex flex-col min-w-0 ">
                         <span className="text-sm font-medium text-gray-900 truncate">
