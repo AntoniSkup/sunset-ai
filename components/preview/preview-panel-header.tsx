@@ -57,7 +57,7 @@ export default function PreviewPanelHeader({ chatId }: PreviewPanelHeaderProps) 
                             variant="default"
                             size="sm"
                             onClick={() => setIsPublishModalOpen(true)}
-                            className="text-white bg-gradient-to-br from-pink-500 via-rose-500 to-orange-300"
+                            className="text-white bg-gradient-to-r from-[#DF5171] via-[#E6736A] to-[#EEAC7A]"
 
                         >
                             Publish

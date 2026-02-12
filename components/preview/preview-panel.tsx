@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
 import type {
   PreviewMessagePayload,
   PreviewUpdatePayload,
@@ -9,11 +10,70 @@ import type {
 } from "@/lib/preview/update-preview";
 import { PREVIEW_EVENT_TYPE } from "@/lib/preview/update-preview";
 import loader from "@/components/icons/loader.svg";
-import SplitText from "@/components/SplitText";
 
 interface PreviewPanelProps {
   className?: string;
   chatId: string;
+}
+
+function BuilderTipsFromButton({
+  active,
+  className,
+}: {
+  active: boolean;
+  className?: string;
+}) {
+  const tips = [
+    {
+      title: "Be specific",
+      body: "Tell the AI the goal, audience, and vibe.",
+    },
+    {
+      title: "Ask for sections",
+      body: "Request a hero, features, social proof, pricing, FAQ, and a clear CTA.",
+    },
+    {
+      title: "Iterate quickly",
+      body: "Say what to change: “shorter hero copy”, “more contrast”.",
+    },
+  ] as const;
+
+  const [tipIndex, setTipIndex] = useState(0);
+
+  useEffect(() => {
+    if (!active) return;
+    const id = window.setInterval(() => {
+      setTipIndex((i) => (i + 1) % tips.length);
+    }, 5000);
+    return () => {
+      window.clearInterval(id);
+    };
+  }, [active, tips.length]);
+
+  if (!active) return null;
+
+  const tip = tips[tipIndex];
+
+  return (
+    <div className={className}>
+      <div className="flex flex-col items-center">
+        <div className="relative min-h-[3.5rem] w-[min(320px,calc(100vw-2rem))] flex items-center justify-center text-center">
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.p
+              key={tipIndex}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.22, ease: "easeOut" }}
+              className="absolute inset-x-0 text-sm text-muted-foreground font-medium leading-relaxed"
+            >
+              {tip.title} — {tip.body}
+            </motion.p>
+          </AnimatePresence>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function PreviewPanel({ className, chatId }: PreviewPanelProps) {
@@ -139,7 +199,7 @@ export function PreviewPanel({ className, chatId }: PreviewPanelProps) {
 
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-6 px-4">
 
-            <div className="text-center">
+            <div className="text-center flex-col flex">
               <object
                 key={loaderSrc}
                 data={loaderSrc}
@@ -157,9 +217,7 @@ export function PreviewPanel({ className, chatId }: PreviewPanelProps) {
                 Bringing your idea to life...
               </span>
             </div>
-            <p className="text-sm text-gray-400 font-medium">
-              This may take a few moments
-            </p>
+            <BuilderTipsFromButton active className="mt-1" />
           </div>
         </div>
       )}

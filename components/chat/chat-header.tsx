@@ -13,7 +13,7 @@ export function ChatHeader({ chatId, chatName }: ChatHeaderProps) {
             <div className="h-full px-4 sm:px-6 lg:px-8 flex justify-between items-center">
                 <div className="flex items-center space-x-3 flex-1 min-w-0">
                     <div
-                        className="w-6 h-6 rounded-full flex-shrink-0 bg-gradient-to-br from-pink-500 via-rose-500 to-orange-300"
+                        className="w-6 h-6 rounded-full flex-shrink-0 bg-gradient-to-r from-[#DF5171] via-[#E6736A] to-[#EEAC7A]"
 
                     />
 
