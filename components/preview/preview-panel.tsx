@@ -16,6 +16,33 @@ interface PreviewPanelProps {
   chatId: string;
 }
 
+function LoadingDots() {
+  const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    const id = setInterval(() => setIndex((i) => (i + 1) % 3), 1800);
+    return () => clearInterval(id);
+  }, []);
+
+  return (
+    <span className="inline-block min-w-[1.5em] text-left">
+      {[0, 1, 2].map((i) =>
+        index >= i ? (
+          <motion.span
+            key={i}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.2 }}
+            className="inline-block"
+          >
+            .
+          </motion.span>
+        ) : null
+      )}
+    </span>
+  );
+}
+
 function BuilderTipsFromButton({
   active,
   className,
@@ -25,15 +52,12 @@ function BuilderTipsFromButton({
 }) {
   const tips = [
     {
-      title: "Be specific",
       body: "Tell the AI the goal, audience, and vibe.",
     },
     {
-      title: "Ask for sections",
       body: "Request a hero, features, social proof, pricing, FAQ, and a clear CTA.",
     },
     {
-      title: "Iterate quickly",
       body: "Say what to change: “shorter hero copy”, “more contrast”.",
     },
   ] as const;
@@ -67,7 +91,7 @@ function BuilderTipsFromButton({
               transition={{ duration: 0.22, ease: "easeOut" }}
               className="absolute inset-x-0 text-sm text-muted-foreground font-medium leading-relaxed"
             >
-              {tip.title} — {tip.body}
+              {tip.body}
             </motion.p>
           </AnimatePresence>
         </div>
@@ -214,7 +238,8 @@ export function PreviewPanel({ className, chatId }: PreviewPanelProps) {
                 />
               </object>
               <span className="text-2xl font-medium">
-                Bringing your idea to life...
+                Bringing your idea to life
+                <LoadingDots />
               </span>
             </div>
             <BuilderTipsFromButton active className="mt-1" />
