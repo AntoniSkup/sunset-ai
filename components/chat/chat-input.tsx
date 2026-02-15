@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { ArrowUp } from "lucide-react";
+import { ArrowUp, Loader2 } from "lucide-react";
 import { FormEvent, useRef } from "react";
 import { cn } from "@/lib/utils";
 
@@ -30,7 +30,7 @@ export function ChatInput({
   };
 
   return (
-    <form ref={formRef} onSubmit={handleSubmit} className="bg-background p-4">
+    <form ref={formRef} onSubmit={handleSubmit} className="bg-transparent p-2 ">
       <div className="relative bg-white rounded-lg border shadow-xs">
         <textarea
           value={input}
@@ -55,7 +55,7 @@ export function ChatInput({
           disabled={isLoading || !input.trim()}
           size="icon"
           className={cn(
-            "absolute top-4 right-4 w-[28px] h-[28px] p-1 rounded-lg",
+            "absolute top-4 right-4 w-[28px] h-[28px] p-1 rounded-lg bg-gradient-to-br from-pink-500 via-rose-500 to-orange-300",
             isLoading || !input.trim()
               ? "bg-muted text-muted-foreground hover:bg-muted"
               : ""
@@ -63,7 +63,11 @@ export function ChatInput({
           aria-label="Send message"
           title="Send message"
         >
-          <ArrowUp className="h-6 w-6" />
+          {isLoading ? (
+            <Loader2 className="h-5 w-5 animate-spin" />
+          ) : (
+            <ArrowUp className="h-6 w-6" />
+          )}
         </Button>
       </div>
       <input

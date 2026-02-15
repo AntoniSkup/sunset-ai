@@ -2,7 +2,7 @@ export interface PreviewUpdatePayload {
   type: "UPDATE_PREVIEW";
   versionId: number;
   versionNumber: number;
-  sessionId: string;
+  chatId: string;
   previewUrl?: string;
 }
 
@@ -11,9 +11,14 @@ export interface PreviewLoadingPayload {
   message?: string;
 }
 
+export interface PreviewStopLoadingPayload {
+  type: "STOP_LOADING";
+}
+
 export type PreviewMessagePayload =
   | PreviewUpdatePayload
-  | PreviewLoadingPayload;
+  | PreviewLoadingPayload
+  | PreviewStopLoadingPayload;
 
 const PREVIEW_EVENT_NAME = "preview-update";
 
@@ -42,17 +47,24 @@ export function showPreviewLoader(message?: string): void {
   dispatchPreviewEvent(payload);
 }
 
+export function hidePreviewLoader(): void {
+  const payload: PreviewStopLoadingPayload = {
+    type: "STOP_LOADING",
+  };
+  dispatchPreviewEvent(payload);
+}
+
 export function updatePreviewPanel(
   versionId: number,
   versionNumber: number,
-  sessionId: string,
+  chatId: string,
   previewUrl?: string
 ): void {
   const payload: PreviewUpdatePayload = {
     type: "UPDATE_PREVIEW",
     versionId,
     versionNumber,
-    sessionId,
+    chatId,
     previewUrl,
   };
   dispatchPreviewEvent(payload);

@@ -1,7 +1,7 @@
 import { parse } from "node-html-parser";
 import type { CodeValidationResult } from "./types";
 
-function stripMarkdownCodeFences(input: string): {
+export function stripMarkdownCodeFences(input: string): {
   code: string;
   stripped: boolean;
 } {
@@ -22,7 +22,10 @@ function stripMarkdownCodeFences(input: string): {
   return { code, stripped };
 }
 
-export function parseAndValidateHTML(html: string): {
+export function parseAndValidateHTML(
+  html: string,
+  options?: { requireDocumentTags?: boolean }
+): {
   isValid: boolean;
   root: ReturnType<typeof parse> | null;
   errors: string[];
@@ -31,16 +34,25 @@ export function parseAndValidateHTML(html: string): {
     const root = parse(html);
     const errors: string[] = [];
 
-    if (!root.querySelector("html")) {
-      errors.push("Missing <html> tag");
-    }
+    const requireDocumentTags = options?.requireDocumentTags ?? true;
+    if (requireDocumentTags) {
+      if (!root.querySelector("html")) {
+        errors.push("Missing <html> tag");
+      }
 
-    if (!root.querySelector("head")) {
-      errors.push("Missing <head> tag");
-    }
+      if (!root.querySelector("head")) {
+        errors.push("Missing <head> tag");
+      }
 
-    if (!root.querySelector("body")) {
-      errors.push("Missing <body> tag");
+      if (!root.querySelector("body")) {
+        errors.push("Missing <body> tag");
+      }
+    } else {
+      const hasAnyElement =
+        root.querySelector("*") !== null || root.childNodes.length > 0;
+      if (!hasAnyElement) {
+        errors.push("HTML fragment is empty");
+      }
     }
 
     return {
@@ -57,7 +69,10 @@ export function parseAndValidateHTML(html: string): {
   }
 }
 
-export function fixCommonErrors(html: string): {
+export function fixCommonErrors(
+  html: string,
+  options?: { addDoctype?: boolean; wrapHtml?: boolean }
+): {
   fixedCode: string;
   fixesApplied: string[];
 } {
@@ -87,12 +102,15 @@ export function fixCommonErrors(html: string): {
     fixesApplied.push(`Closed ${tagStack.length} unclosed tag(s)`);
   }
 
-  if (!fixedCode.includes("<!DOCTYPE html>")) {
+  const addDoctype = options?.addDoctype ?? true;
+  const wrapHtml = options?.wrapHtml ?? true;
+
+  if (addDoctype && !fixedCode.includes("<!DOCTYPE html>")) {
     fixedCode = "<!DOCTYPE html>\n" + fixedCode;
     fixesApplied.push("Added missing DOCTYPE declaration");
   }
 
-  if (!fixedCode.includes("<html")) {
+  if (wrapHtml && !fixedCode.includes("<html")) {
     fixedCode = "<html>\n" + fixedCode + "\n</html>";
     fixesApplied.push("Wrapped content in <html> tags");
   }
@@ -103,8 +121,13 @@ export function fixCommonErrors(html: string): {
   };
 }
 
-export async function validateAndFixCode(
-  code: string
+async function validateAndFixWithOptions(
+  code: string,
+  options: {
+    requireDocumentTags: boolean;
+    addDoctype: boolean;
+    wrapHtml: boolean;
+  }
 ): Promise<CodeValidationResult> {
   if (!code || code.trim().length === 0) {
     return {
@@ -129,7 +152,9 @@ export async function validateAndFixCode(
     ? ["Removed markdown code fences"]
     : [];
 
-  const parseResult = parseAndValidateHTML(stripped.code);
+  const parseResult = parseAndValidateHTML(stripped.code, {
+    requireDocumentTags: options.requireDocumentTags,
+  });
 
   if (parseResult.isValid) {
     return {
@@ -140,8 +165,13 @@ export async function validateAndFixCode(
     };
   }
 
-  const fixResult = fixCommonErrors(stripped.code);
-  const reparseResult = parseAndValidateHTML(fixResult.fixedCode);
+  const fixResult = fixCommonErrors(stripped.code, {
+    addDoctype: options.addDoctype,
+    wrapHtml: options.wrapHtml,
+  });
+  const reparseResult = parseAndValidateHTML(fixResult.fixedCode, {
+    requireDocumentTags: options.requireDocumentTags,
+  });
 
   return {
     isValid: reparseResult.isValid,
@@ -149,4 +179,28 @@ export async function validateAndFixCode(
     fixesApplied: [...fixesAppliedPrefix, ...fixResult.fixesApplied],
     errors: reparseResult.errors,
   };
+}
+
+export async function validateAndFixCode(code: string): Promise<CodeValidationResult> {
+  return await validateAndFixWithOptions(code, {
+    requireDocumentTags: true,
+    addDoctype: true,
+    wrapHtml: true,
+  });
+}
+
+export async function validateAndFixDocument(code: string): Promise<CodeValidationResult> {
+  return await validateAndFixWithOptions(code, {
+    requireDocumentTags: true,
+    addDoctype: true,
+    wrapHtml: true,
+  });
+}
+
+export async function validateAndFixFragment(code: string): Promise<CodeValidationResult> {
+  return await validateAndFixWithOptions(code, {
+    requireDocumentTags: false,
+    addDoctype: false,
+    wrapHtml: false,
+  });
 }

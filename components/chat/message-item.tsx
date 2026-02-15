@@ -15,6 +15,74 @@ interface MessageItemProps {
   isStreaming?: boolean;
 }
 
+type RenderToken =
+  | { type: "text"; text: string }
+  | { type: "tool-marker"; id: string; title: string; toolName: string }
+  | {
+    type: "tool-call";
+    toolCallId: string;
+    toolName: string;
+    isComplete: boolean;
+    destination?: string;
+  };
+
+function unescapeAttr(value: string): string {
+  return value
+    .replace(/&quot;/g, '"')
+    .replace(/&gt;/g, ">")
+    .replace(/&lt;/g, "<")
+    .replace(/&amp;/g, "&");
+}
+
+function tokenizeTextWithToolMarkers(text: string): RenderToken[] {
+  if (!text) return [];
+
+  const tokens: RenderToken[] = [];
+  const toolTagRegex = /<tool\s+([^>]*?)\/>/gi;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = toolTagRegex.exec(text)) !== null) {
+    const start = match.index;
+    const end = toolTagRegex.lastIndex;
+    const attrs = match[1] ?? "";
+
+    if (start > lastIndex) {
+      const chunk = text.slice(lastIndex, start);
+      if (chunk) tokens.push({ type: "text", text: chunk });
+    }
+
+    const titleMatch = String(attrs).match(/title\s*=\s*"([^"]*)"/i);
+    const toolNameMatch = String(attrs).match(/toolName\s*=\s*"([^"]*)"/i);
+    const idMatch = String(attrs).match(/id\s*=\s*("?)([0-9]+)\1/i);
+    const titleRaw = titleMatch?.[1] ?? "tool";
+    const toolNameRaw = toolNameMatch?.[1] ?? "unknown";
+    const idRaw = idMatch?.[2] ?? "";
+
+    tokens.push({
+      type: "tool-marker",
+      id: idRaw,
+      title: unescapeAttr(titleRaw),
+      toolName: unescapeAttr(toolNameRaw),
+    });
+
+    lastIndex = end;
+  }
+
+  if (lastIndex < text.length) {
+    const chunk = text.slice(lastIndex);
+    if (chunk) tokens.push({ type: "text", text: chunk });
+  }
+
+  return tokens
+    .map((t) =>
+      t.type === "text"
+        ? { ...t, text: t.text.replace(/\n{3,}/g, "\n\n") }
+        : t
+    )
+    .filter((t) => (t.type === "text" ? t.text.trim().length > 0 : true));
+}
+
 function getTextContent(message: UIMessage): string {
   const textParts = message.parts
     .filter((part) => part.type === "text")
@@ -22,96 +90,93 @@ function getTextContent(message: UIMessage): string {
   return textParts.join("");
 }
 
-function getToolCalls(message: UIMessage): Array<{
-  toolCallId: string;
-  toolName: string;
-  state: "call" | "result";
-}> {
-  const toolCalls: Array<{
-    toolCallId: string;
-    toolName: string;
-    state: "call" | "result";
-  }> = [];
+function getDefaultFileNameForTool(toolName: string): string {
+  if (toolName === "create_site") return "landing/index.html";
+  if (toolName === "create_section") return "landing/sections/section.html";
+  return "file.html";
+}
 
-  for (const part of message.parts) {
-    const partType = part.type as string;
+function buildRenderTokens(message: UIMessage): RenderToken[] {
+  const tokens: RenderToken[] = [];
+  if (!message.parts || message.parts.length === 0) return tokens;
 
+  const hasResultById = new Map<string, boolean>();
+  for (const part of message.parts as any[]) {
+    const partType = String(part?.type || "");
+    if (partType === "tool-result") {
+      const toolCallId = String(part?.toolCallId || "");
+      if (toolCallId) hasResultById.set(toolCallId, true);
+    }
     if (partType.startsWith("tool-")) {
-      const toolCallId =
-        "toolCallId" in part ? (part.toolCallId as string) : "";
-      const toolName = partType.replace("tool-", "");
-
-      const hasResult =
-        "result" in part ||
-        "output" in part ||
-        ("state" in part && (part as any).state === "result") ||
-        partType.includes("result");
-
-      const state = hasResult ? "result" : "call";
-
-      toolCalls.push({
-        toolCallId,
-        toolName,
-        state,
-      });
-    } else if (partType === "tool-call") {
-      const toolCallId =
-        "toolCallId" in part ? (part.toolCallId as string) : "";
-      const toolName =
-        "toolName" in part ? (part.toolName as string) : "unknown";
-      toolCalls.push({
-        toolCallId,
-        toolName,
-        state: "call",
-      });
-    } else if (partType === "tool-result") {
-      const toolCallId =
-        "toolCallId" in part ? (part.toolCallId as string) : "";
-      const toolName =
-        "toolName" in part ? (part.toolName as string) : "unknown";
-      toolCalls.push({
-        toolCallId,
-        toolName,
-        state: "result",
-      });
+      const toolCallId = String(part?.toolCallId || "");
+      const hasResult = part?.result != null || part?.output != null;
+      if (toolCallId && hasResult) hasResultById.set(toolCallId, true);
     }
   }
 
-  return toolCalls;
+  for (const part of message.parts as any[]) {
+    const partType = String(part?.type || "");
+
+    if (partType === "text") {
+      const text = String(part?.text || "");
+      tokens.push(...tokenizeTextWithToolMarkers(text));
+      continue;
+    }
+
+    if (partType === "tool-call") {
+      const toolCallId = String(part?.toolCallId || "");
+      const toolName = String(part?.toolName || "unknown");
+      const destination =
+        typeof part?.args?.destination === "string"
+          ? String(part.args.destination)
+          : typeof part?.input?.destination === "string"
+            ? String(part.input.destination)
+            : undefined;
+      tokens.push({
+        type: "tool-call",
+        toolCallId,
+        toolName,
+        isComplete: !!(toolCallId && hasResultById.get(toolCallId)),
+        destination,
+      });
+      continue;
+    }
+
+    if (partType === "tool-result") {
+      continue;
+    }
+
+    if (partType.startsWith("tool-")) {
+      const toolName = partType.replace("tool-", "");
+      const toolCallId = String(part?.toolCallId || "");
+      const hasResult = part?.result != null || part?.output != null;
+      const destination =
+        typeof part?.args?.destination === "string"
+          ? String(part.args.destination)
+          : typeof part?.input?.destination === "string"
+            ? String(part.input.destination)
+            : undefined;
+      tokens.push({
+        type: "tool-call",
+        toolCallId,
+        toolName,
+        isComplete: hasResult || !!(toolCallId && hasResultById.get(toolCallId)),
+        destination,
+      });
+      continue;
+    }
+  }
+
+  return tokens;
 }
 
 export const MessageItem = React.memo(function MessageItem({
   message,
   isStreaming,
 }: MessageItemProps) {
-  const content = getTextContent(message);
   const isUser = message.role === "user";
-  const toolCalls = !isUser ? getToolCalls(message) : [];
-
-  const toolCallMap = new Map<
-    string,
-    { toolName: string; hasCall: boolean; hasResult: boolean }
-  >();
-
-  for (const toolCall of toolCalls) {
-    const mapKey = toolCall.toolCallId || toolCall.toolName;
-    const existing = toolCallMap.get(mapKey) || {
-      toolName: toolCall.toolName,
-      hasCall: false,
-      hasResult: false,
-    };
-    if (toolCall.state === "call") {
-      existing.hasCall = true;
-    } else if (toolCall.state === "result") {
-      existing.hasCall = true;
-      existing.hasResult = true;
-    }
-    toolCallMap.set(mapKey, existing);
-  }
-
-  const allToolCalls = Array.from(toolCallMap.values()).filter(
-    (tc) => tc.hasCall
-  );
+  const tokens = !isUser ? buildRenderTokens(message) : [];
+  const content = isUser ? getTextContent(message) : "";
 
   return (
     <Message from={message.role}>
@@ -120,20 +185,35 @@ export const MessageItem = React.memo(function MessageItem({
           <p className="whitespace-pre-wrap">{content}</p>
         ) : (
           <>
-            <MessageResponse>{content}</MessageResponse>
+            {tokens.map((t, idx) => {
+              if (t.type === "text") {
+                return <MessageResponse key={`t-${idx}`}>{t.text}</MessageResponse>;
+              }
 
-            {allToolCalls.length > 0 && (
-              <div className="flex flex-col gap-2 mb-2">
-                {allToolCalls.map((toolCall, index) => (
+              if (t.type === "tool-marker") {
+                return (
+                  <div key={`m-${t.id || idx}`} className="my-1">
+                    <ToolCallIndicator
+                      toolName={t.toolName}
+                      fileName={t.title}
+                      isComplete={true}
+                    />
+                  </div>
+                );
+              }
+
+              const fileName = t.destination || getDefaultFileNameForTool(t.toolName);
+              return (
+                <div key={`c-${t.toolCallId || idx}`} className="my-1">
                   <ToolCallIndicator
-                    key={`${toolCall.toolName}-${index}`}
-                    toolName={toolCall.toolName}
-                    fileName="file/index.html"
-                    isComplete={toolCall.hasResult && !isStreaming}
+                    toolName={t.toolName}
+                    fileName={fileName}
+                    isComplete={t.isComplete}
                   />
-                ))}
-              </div>
-            )}
+                </div>
+              );
+            })}
+
             {isStreaming && (
               <span className="inline-block w-2 h-4 bg-current animate-pulse ml-1" />
             )}

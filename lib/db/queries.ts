@@ -1,4 +1,4 @@
-import { desc, and, eq, isNull, max, asc } from "drizzle-orm";
+import { desc, and, eq, isNull, max, asc, lte } from "drizzle-orm";
 import { db } from "./drizzle";
 import {
   activityLogs,
@@ -6,9 +6,33 @@ import {
   teams,
   users,
   landingPageVersions,
+  landingSiteFiles,
+  landingSiteRevisions,
+  landingSiteFileVersions,
+  chats,
+  chatMessages,
+  chatToolCalls,
+  publishedSites,
 } from "./schema";
+import { nanoid } from "nanoid";
 import { cookies } from "next/headers";
 import { verifyToken } from "@/lib/auth/session";
+import { generateText } from "ai";
+import { getAIModel } from "@/lib/ai/get-ai-model";
+
+export async function generateChatName(userQuery: string): Promise<string> {
+  const model = await getAIModel(true);
+  const { text } = await generateText({
+    model,
+    prompt: `Generate a short, descriptive title (max 60 characters) for a website project based on this request: "${userQuery}"`,
+  });
+  let cleaned = text.trim();
+  if ((cleaned.startsWith('"') && cleaned.endsWith('"')) ||
+    (cleaned.startsWith("'") && cleaned.endsWith("'"))) {
+    cleaned = cleaned.slice(1, -1).trim();
+  }
+  return cleaned.slice(0, 60) || "New Project";
+}
 
 export async function getUser() {
   const sessionCookie = (await cookies()).get("session");
@@ -135,20 +159,20 @@ export async function getTeamForUser() {
   return result?.team || null;
 }
 
-export async function getNextVersionNumber(sessionId: string) {
+export async function getNextVersionNumber(chatId: string) {
   const result = await db
     .select({ max: max(landingPageVersions.versionNumber) })
     .from(landingPageVersions)
-    .where(eq(landingPageVersions.sessionId, sessionId));
+    .where(eq(landingPageVersions.chatId, chatId));
 
   return (result[0]?.max ?? 0) + 1;
 }
 
-export async function getLatestVersion(sessionId: string) {
+export async function getLatestVersion(chatId: string) {
   const result = await db
     .select()
     .from(landingPageVersions)
-    .where(eq(landingPageVersions.sessionId, sessionId))
+    .where(eq(landingPageVersions.chatId, chatId))
     .orderBy(desc(landingPageVersions.versionNumber))
     .limit(1);
 
@@ -157,7 +181,7 @@ export async function getLatestVersion(sessionId: string) {
 
 export async function createLandingPageVersion(data: {
   userId: number;
-  sessionId: string;
+  chatId: string;
   versionNumber: number;
   codeContent: string;
 }) {
@@ -165,7 +189,7 @@ export async function createLandingPageVersion(data: {
     .insert(landingPageVersions)
     .values({
       userId: data.userId,
-      sessionId: data.sessionId,
+      chatId: data.chatId,
       versionNumber: data.versionNumber,
       codeContent: data.codeContent,
     })
@@ -174,10 +198,330 @@ export async function createLandingPageVersion(data: {
   return result[0];
 }
 
-export async function getAllVersionsForSession(sessionId: string) {
+export async function getAllVersionsForChat(chatId: string) {
   return await db
     .select()
     .from(landingPageVersions)
-    .where(eq(landingPageVersions.sessionId, sessionId))
+    .where(eq(landingPageVersions.chatId, chatId))
     .orderBy(asc(landingPageVersions.versionNumber));
+}
+
+export async function getNextLandingSiteRevisionNumber(chatId: string) {
+  const result = await db
+    .select({ max: max(landingSiteRevisions.revisionNumber) })
+    .from(landingSiteRevisions)
+    .where(eq(landingSiteRevisions.chatId, chatId));
+
+  return (result[0]?.max ?? 0) + 1;
+}
+
+export async function getLatestLandingSiteRevision(chatId: string) {
+  const result = await db
+    .select()
+    .from(landingSiteRevisions)
+    .where(eq(landingSiteRevisions.chatId, chatId))
+    .orderBy(desc(landingSiteRevisions.revisionNumber))
+    .limit(1);
+
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function upsertLandingSiteFile(data: {
+  chatId: string;
+  path: string;
+  kind?: string;
+}) {
+  const kind = data.kind ?? "section";
+  const result = await db
+    .insert(landingSiteFiles)
+    .values({
+      chatId: data.chatId,
+      path: data.path,
+      kind,
+      updatedAt: new Date(),
+    })
+    .onConflictDoUpdate({
+      target: [landingSiteFiles.chatId, landingSiteFiles.path],
+      set: { kind, updatedAt: new Date() },
+    })
+    .returning();
+
+  return result[0];
+}
+
+export async function createLandingSiteRevision(data: {
+  chatId: string;
+  userId: number;
+}) {
+  const revisionNumber = await getNextLandingSiteRevisionNumber(data.chatId);
+  const result = await db
+    .insert(landingSiteRevisions)
+    .values({
+      chatId: data.chatId,
+      userId: data.userId,
+      revisionNumber,
+    })
+    .returning();
+
+  return result[0];
+}
+
+export async function createLandingSiteFileVersion(data: {
+  fileId: number;
+  revisionId: number;
+  content: string;
+}) {
+  const result = await db
+    .insert(landingSiteFileVersions)
+    .values({
+      fileId: data.fileId,
+      revisionId: data.revisionId,
+      content: data.content,
+    })
+    .returning();
+
+  return result[0];
+}
+
+export async function getLandingSiteFileByPath(chatId: string, path: string) {
+  const result = await db
+    .select()
+    .from(landingSiteFiles)
+    .where(and(eq(landingSiteFiles.chatId, chatId), eq(landingSiteFiles.path, path)))
+    .limit(1);
+
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function getLatestLandingSiteFileContent(chatId: string, path: string) {
+  const result = await db
+    .select({
+      content: landingSiteFileVersions.content,
+      revisionNumber: landingSiteRevisions.revisionNumber,
+      revisionId: landingSiteRevisions.id,
+      fileId: landingSiteFiles.id,
+    })
+    .from(landingSiteFiles)
+    .innerJoin(landingSiteFileVersions, eq(landingSiteFileVersions.fileId, landingSiteFiles.id))
+    .innerJoin(
+      landingSiteRevisions,
+      eq(landingSiteRevisions.id, landingSiteFileVersions.revisionId)
+    )
+    .where(and(eq(landingSiteFiles.chatId, chatId), eq(landingSiteFiles.path, path)))
+    .orderBy(desc(landingSiteRevisions.revisionNumber))
+    .limit(1);
+
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function getLandingSiteFileContentAtOrBeforeRevision(data: {
+  chatId: string;
+  path: string;
+  revisionNumber: number;
+}) {
+  const result = await db
+    .select({
+      content: landingSiteFileVersions.content,
+      revisionNumber: landingSiteRevisions.revisionNumber,
+      revisionId: landingSiteRevisions.id,
+      fileId: landingSiteFiles.id,
+    })
+    .from(landingSiteFiles)
+    .innerJoin(landingSiteFileVersions, eq(landingSiteFileVersions.fileId, landingSiteFiles.id))
+    .innerJoin(
+      landingSiteRevisions,
+      eq(landingSiteRevisions.id, landingSiteFileVersions.revisionId)
+    )
+    .where(
+      and(
+        eq(landingSiteFiles.chatId, data.chatId),
+        eq(landingSiteFiles.path, data.path),
+        lte(landingSiteRevisions.revisionNumber, data.revisionNumber)
+      )
+    )
+    .orderBy(desc(landingSiteRevisions.revisionNumber))
+    .limit(1);
+
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function createChat(data: {
+  userId: number;
+  title?: string;
+  userQuery?: string;
+}) {
+  const publicId = nanoid();
+  let title = data.title;
+
+  if (!title && data.userQuery) {
+    title = await generateChatName(data.userQuery);
+  }
+
+  const result = await db
+    .insert(chats)
+    .values({
+      publicId,
+      userId: data.userId,
+      title: title || null,
+    })
+    .returning();
+
+  return result[0];
+}
+
+export async function getChatByPublicId(chatPublicId: string, userId: number) {
+  const result = await db
+    .select()
+    .from(chats)
+    .where(and(eq(chats.publicId, chatPublicId), eq(chats.userId, userId)))
+    .limit(1);
+
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function getChatsByUser(userId: number) {
+  return await db
+    .select()
+    .from(chats)
+    .where(eq(chats.userId, userId))
+    .orderBy(desc(chats.updatedAt));
+}
+
+export async function updateChatByPublicId(
+  chatPublicId: string,
+  userId: number,
+  data: { title?: string }
+) {
+  const result = await db
+    .update(chats)
+    .set({
+      ...data,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(chats.publicId, chatPublicId), eq(chats.userId, userId)))
+    .returning();
+
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function createChatMessage(data: {
+  chatId: number;
+  role: "user" | "assistant";
+  content: string;
+}) {
+  const result = await db
+    .insert(chatMessages)
+    .values({
+      chatId: data.chatId,
+      role: data.role,
+      content: data.content,
+    })
+    .returning();
+
+  await db
+    .update(chats)
+    .set({ updatedAt: new Date() })
+    .where(eq(chats.id, data.chatId));
+
+  return result[0];
+}
+
+export async function getChatMessagesByPublicId(
+  chatPublicId: string,
+  userId: number
+) {
+  const chat = await getChatByPublicId(chatPublicId, userId);
+  if (!chat) return null;
+
+  const messages = await db
+    .select()
+    .from(chatMessages)
+    .where(eq(chatMessages.chatId, chat.id))
+    .orderBy(asc(chatMessages.createdAt), asc(chatMessages.id));
+
+  return { chat, messages };
+}
+
+export async function createChatToolCall(data: {
+  chatId: number;
+  stepNumber?: number | null;
+  state: "call" | "result";
+  toolName: string;
+  toolCallId?: string | null;
+  input?: unknown;
+  output?: unknown;
+}) {
+  const result = await db
+    .insert(chatToolCalls)
+    .values({
+      chatId: data.chatId,
+      stepNumber: data.stepNumber ?? null,
+      state: data.state,
+      toolName: data.toolName,
+      toolCallId: data.toolCallId ?? null,
+      input: data.input ?? null,
+      output: data.output ?? null,
+    })
+    .returning();
+
+  await db.update(chats).set({ updatedAt: new Date() }).where(eq(chats.id, data.chatId));
+
+  return result[0];
+}
+
+export async function createPublishedSite(data: {
+  chatId: string;
+  userId: number;
+  revisionNumber: number;
+}) {
+  const publicId = nanoid();
+  const result = await db
+    .insert(publishedSites)
+    .values({
+      publicId,
+      chatId: data.chatId,
+      userId: data.userId,
+      revisionNumber: data.revisionNumber,
+    })
+    .returning();
+
+  return result[0];
+}
+
+export async function getPublishedSiteByPublicId(publicId: string) {
+  const result = await db
+    .select()
+    .from(publishedSites)
+    .where(eq(publishedSites.publicId, publicId))
+    .limit(1);
+
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function getPublishedSiteByChatId(chatId: string, userId: number) {
+  const result = await db
+    .select()
+    .from(publishedSites)
+    .where(and(eq(publishedSites.chatId, chatId), eq(publishedSites.userId, userId)))
+    .orderBy(desc(publishedSites.createdAt))
+    .limit(1);
+
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function updatePublishedSite(
+  publicId: string,
+  userId: number,
+  data: { revisionNumber: number }
+) {
+  const result = await db
+    .update(publishedSites)
+    .set({
+      ...data,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(publishedSites.publicId, publicId), eq(publishedSites.userId, userId)))
+    .returning();
+
+  return result.length > 0 ? result[0] : null;
 }

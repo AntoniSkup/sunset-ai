@@ -15,6 +15,55 @@
       "when": 1767234556549,
       "tag": "0001_lively_patch",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1768671065482,
+      "tag": "0002_heavy_thena",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1768673729549,
+      "tag": "0003_left_spirit",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1768679001141,
+      "tag": "0004_blushing_colonel_america",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1768679527051,
+      "tag": "0005_worthless_lady_bullseye",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1768690780714,
+      "tag": "0006_jittery_sumo",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1770232187528,
+      "tag": "0007_stormy_mephisto",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1770556804026,
+      "tag": "0008_lean_zaran",
+      "breakpoints": true
     }
   ]
 }

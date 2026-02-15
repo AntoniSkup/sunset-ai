@@ -11,7 +11,7 @@ export interface CodeGenerationRequest {
   userRequest: string;
   isModification?: boolean;
   previousCodeVersion?: string;
-  sessionId: string;
+  chatId: string;
 }
 
 export interface CodeValidationResult {

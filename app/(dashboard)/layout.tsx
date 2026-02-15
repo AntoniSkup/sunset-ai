@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { use, useState, Suspense } from "react";
+import { useState, Suspense } from "react";
 import { Button } from "@/components/ui/button";
 import { CircleIcon, Home, LogOut } from "lucide-react";
 import {
@@ -82,15 +82,19 @@ function Header() {
   return (
     <header className="border-b border-gray-200">
       <div className="px-4 sm:px-6 lg:px-8 py-2 flex justify-between items-center">
-        <Link href="/" className="flex items-center">
-          <CircleIcon className="h-6 w-6 text-orange-500" />
-          <span className="ml-2 text-sm font-semibold text-gray-900">ACME</span>
-        </Link>
         <div className="flex items-center space-x-4">
           <Suspense fallback={<div className="h-7" />}>
             <UserMenu />
           </Suspense>
         </div>
+
+        <div className="flex items-center space-x-4 ">
+          <Button variant={"default"} >
+            <span className="text-white text-xs">Publish</span>
+          </Button>
+        </div>
+
+
       </div>
     </header>
   );
@@ -99,7 +103,7 @@ function Header() {
 export default function Layout({ children }: { children: React.ReactNode }) {
   return (
     <section className="flex flex-col h-screen">
-      <Header />
+      {/* <Header /> */}
       <div className="flex-1 min-h-0">{children}</div>
     </section>
   );

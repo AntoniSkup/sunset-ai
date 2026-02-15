@@ -4,9 +4,11 @@
  * Kept in `lib/` so other server-only modules (e.g. code generation) can use it
  * without importing Next.js route handlers (which can cause circular imports).
  */
-export async function getAIModel() {
+export async function getAIModel(useLighterModel: boolean = false) {
   const modelProvider = process.env.AI_MODEL_PROVIDER;
   const modelName = process.env.AI_MODEL_NAME || "gpt-5.2";
+  const lighterModelName = process.env.AI_LIGHTER_MODEL_NAME || "gpt-4o-mini";
+  // const modelName = process.env.AI_MODEL_NAME || "gpt-5-mini";
 
   if (!modelProvider) {
     throw new Error("AI_MODEL_PROVIDER environment variable is not set");
@@ -14,7 +16,7 @@ export async function getAIModel() {
 
   if (modelProvider === "openai") {
     const { openai } = await import("@ai-sdk/openai");
-    return openai(modelName);
+    return openai(useLighterModel ? lighterModelName : modelName);
   }
 
   throw new Error(`Unsupported AI model provider: ${modelProvider}`);

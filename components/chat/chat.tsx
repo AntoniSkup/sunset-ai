@@ -9,26 +9,143 @@ import { MessageList } from "./message-list";
 import { ChatInput } from "./chat-input";
 import {
   showPreviewLoader,
+  hidePreviewLoader,
   updatePreviewPanel,
 } from "@/lib/preview/update-preview";
+import { usePendingMessageStore } from "@/lib/stores/usePendingMessageStore";
 
-export function Chat() {
+interface ChatProps {
+  chatId?: string;
+}
+
+export function Chat({ chatId: providedChatId }: ChatProps = {}) {
+  if (providedChatId) {
+    return <ChatWithHistory chatId={providedChatId} />;
+  }
+
+  return <ChatInner />;
+}
+
+function ChatWithHistory({ chatId }: { chatId: string }) {
+  const [initialMessages, setInitialMessages] = useState<UIMessage[] | null>(
+    null
+  );
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setInitialMessages(null);
+    setLoadError(null);
+
+    (async () => {
+      try {
+        const res = await fetch(`/api/chats/${encodeURIComponent(chatId)}/messages`);
+        if (!res.ok) {
+          const data = await res.json().catch(() => null);
+          throw new Error(data?.error || "Failed to load chat messages");
+        }
+        const data = await res.json();
+        if (!cancelled) {
+          setInitialMessages(Array.isArray(data?.messages) ? data.messages : []);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setLoadError(e instanceof Error ? e.message : "Failed to load chat");
+          setInitialMessages([]);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [chatId]);
+
+  if (initialMessages === null) {
+    return (
+      <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
+        Loading chat…
+      </div>
+    );
+  }
+
+  if (loadError) {
+    console.warn(loadError);
+  }
+
+  return <ChatInner chatId={chatId} initialMessages={initialMessages} />;
+}
+
+function ChatInner({
+  chatId: providedChatId,
+  initialMessages = [],
+}: {
+  chatId?: string;
+  initialMessages?: UIMessage[];
+}) {
   const [input, setInput] = useState("");
+  const [chatId, setChatId] = useState<string | null>(providedChatId || null);
+  const [isCreatingChat, setIsCreatingChat] = useState(false);
   const lastUserMessageRef = useRef<string>("");
+  const lastPreviewVersionIdRef = useRef<number | null>(null);
+  const previewLoaderShownForToolCallIdsRef = useRef<Set<string>>(new Set());
+  const pendingMessage = usePendingMessageStore((s) => s.pendingMessage);
+  const setPendingMessage = usePendingMessageStore((s) => s.setPendingMessage);
+  const consumedPendingIdsRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    const createNewChat = async () => {
+      if (chatId || isCreatingChat || providedChatId) return;
+
+      setIsCreatingChat(true);
+      try {
+        const response = await fetch("/api/chats", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({}),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setChatId(data.chat.publicId);
+        } else {
+          console.error("Failed to create chat");
+        }
+      } catch (error) {
+        console.error("Error creating chat:", error);
+      } finally {
+        setIsCreatingChat(false);
+      }
+    };
+
+    createNewChat();
+  }, [chatId, isCreatingChat, providedChatId]);
 
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
         api: "/api/chat",
+        async fetch(url, options) {
+          if (chatId && options?.body) {
+            const body = JSON.parse(options.body as string);
+            body.chatId = chatId;
+            options.body = JSON.stringify(body);
+          }
+          return fetch(url, options);
+        },
       }),
-    []
+    [chatId]
   );
 
   const [errorMessages, setErrorMessages] = useState<
     Array<{ id: string; message: string; userMessageId?: string }>
   >([]);
+  const toolErrorKeysRef = useRef<Set<string>>(new Set());
 
   const { messages, sendMessage, status } = useChat({
+    messages: initialMessages,
     transport,
     onError: (error) => {
       const errorMessage =
@@ -47,11 +164,32 @@ export function Chat() {
     },
   });
 
+  useEffect(() => {
+    if (
+      chatId &&
+      pendingMessage &&
+      pendingMessage.chatId === chatId &&
+      messages.length === 0 &&
+      status !== "streaming" &&
+      status !== "submitted"
+    ) {
+      if (consumedPendingIdsRef.current.has(pendingMessage.id)) return;
+      consumedPendingIdsRef.current.add(pendingMessage.id);
+
+      setPendingMessage(null);
+
+      sendMessage({
+        role: "user",
+        parts: [{ type: "text", text: pendingMessage.message }],
+      });
+    }
+  }, [chatId, pendingMessage, messages.length, status, sendMessage, setPendingMessage]);
+
   const isLoading = status === "streaming" || status === "submitted";
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!input.trim() || isLoading) return;
+    if (!input.trim() || isLoading || !chatId) return;
 
     const message = input.trim();
     lastUserMessageRef.current = message;
@@ -96,60 +234,139 @@ export function Chat() {
   };
 
   useEffect(() => {
-    const lastMessage = messages[messages.length - 1];
-    if (!lastMessage || lastMessage.role !== "assistant") {
-      return;
-    }
+    let newestSuccessful:
+      | { versionId: number; versionNumber: number; chatId: string }
+      | null = null;
+    let newestFailure: { error: string; toolCallId?: string } | null = null;
+    const lastUserMessageId = [...messages].reverse().find((m) => m.role === "user")?.id;
 
-    for (const part of lastMessage.parts) {
-      const partType = part.type as string;
+    const builderToolNames = new Set([
+      "create_site",
+      "create_section",
+      "generate_landing_page_code",
+    ]);
 
-      if (
-        partType.startsWith("tool-") &&
-        partType === "tool-generate_landing_page_code" &&
-        !("result" in part) &&
-        !("output" in part)
-      ) {
-        showPreviewLoader("Generating landing page...");
-      }
+    const isBuilderTool = (toolName: unknown) =>
+      typeof toolName === "string" && builderToolNames.has(toolName);
 
-      if (
-        partType.startsWith("tool-") &&
-        partType === "tool-generate_landing_page_code" &&
-        ("result" in part || "output" in part)
-      ) {
-        try {
-          const result =
-            "result" in part
-              ? (part as any).result
-              : "output" in part
-                ? (part as any).output
-                : null;
+    const extractVersionLike = (result: any) => {
+      if (!result || result.success !== true) return null;
+      const id = result.revisionId ?? result.versionId;
+      const num = result.revisionNumber ?? result.versionNumber;
+      if (!id || !num) return null;
+      return { versionId: Number(id), versionNumber: Number(num) };
+    };
 
-          if (
-            result &&
-            typeof result === "object" &&
-            result.success === true &&
-            result.versionId &&
-            result.versionNumber
-          ) {
-            const sessionId =
-              result.sessionId ||
-              ("input" in part ? (part as any).input?.sessionId : null) ||
-              `session-${Date.now()}`;
+    for (const message of messages) {
+      if (message.role !== "assistant") continue;
 
-            updatePreviewPanel(
-              result.versionId,
-              result.versionNumber,
-              sessionId
-            );
+      for (const part of message.parts as any[]) {
+        const partType = String(part?.type || "");
+
+        if (partType === "tool-call" && isBuilderTool(part?.toolName)) {
+          const toolCallId = String(part?.toolCallId || part?.toolName || "tool");
+          if (!previewLoaderShownForToolCallIdsRef.current.has(toolCallId)) {
+            previewLoaderShownForToolCallIdsRef.current.add(toolCallId);
+            showPreviewLoader("Generating website...");
           }
-        } catch (error) {
-          console.error("Failed to update preview from tool result:", error);
+        }
+
+        if (partType.startsWith("tool-")) {
+          const toolName = partType.replace("tool-", "");
+          if (isBuilderTool(toolName)) {
+            const hasResult = "result" in part || "output" in part;
+            if (!hasResult) {
+              const toolCallId = String(part?.toolCallId || toolName || "tool");
+              if (!previewLoaderShownForToolCallIdsRef.current.has(toolCallId)) {
+                previewLoaderShownForToolCallIdsRef.current.add(toolCallId);
+                showPreviewLoader("Generating website...");
+              }
+            }
+          }
+        }
+
+        if (partType === "tool-result" && isBuilderTool(part?.toolName)) {
+          const result = part?.result ?? part?.output ?? null;
+          const extracted = extractVersionLike(result);
+          if (extracted) {
+            const candidate = {
+              versionId: extracted.versionId,
+              versionNumber: extracted.versionNumber,
+              chatId: String(chatId || ""),
+            };
+            if (!newestSuccessful || candidate.versionNumber > newestSuccessful.versionNumber) {
+              newestSuccessful = candidate;
+            }
+          }
+          if (result?.success === false && typeof result?.error === "string" && result.error) {
+            newestFailure = {
+              error: result.error,
+              toolCallId: String(part?.toolCallId || ""),
+            };
+          }
+        }
+
+        if (partType.startsWith("tool-")) {
+          const toolName = partType.replace("tool-", "");
+          if (!isBuilderTool(toolName)) continue;
+          const result = part?.result ?? part?.output ?? null;
+          const extracted = extractVersionLike(result);
+          if (extracted) {
+            const candidate = {
+              versionId: extracted.versionId,
+              versionNumber: extracted.versionNumber,
+              chatId: String(chatId || ""),
+            };
+            if (!newestSuccessful || candidate.versionNumber > newestSuccessful.versionNumber) {
+              newestSuccessful = candidate;
+            }
+          }
+          if (result?.success === false && typeof result?.error === "string" && result.error) {
+            newestFailure = {
+              error: result.error,
+              toolCallId: String(part?.toolCallId || ""),
+            };
+          }
         }
       }
     }
-  }, [messages]);
+
+    if (newestFailure?.error) {
+      const key = `${newestFailure.toolCallId || "tool"}:${newestFailure.error}`;
+      if (!toolErrorKeysRef.current.has(key)) {
+        toolErrorKeysRef.current.add(key);
+        setErrorMessages((prev) => [
+          ...prev,
+          {
+            id: `tool-error-${Date.now()}-${Math.random()}`,
+            message: `Generation failed: ${newestFailure.error}`,
+            userMessageId: lastUserMessageId,
+          },
+        ]);
+      }
+    }
+
+    const isTurnFinished = status !== "streaming" && status !== "submitted";
+    if (!isTurnFinished) return;
+
+    if (newestSuccessful?.versionId && newestSuccessful.chatId) {
+      if (lastPreviewVersionIdRef.current !== newestSuccessful.versionId) {
+        lastPreviewVersionIdRef.current = newestSuccessful.versionId;
+        updatePreviewPanel(
+          newestSuccessful.versionId,
+          newestSuccessful.versionNumber,
+          newestSuccessful.chatId
+        );
+      } else {
+        hidePreviewLoader();
+      }
+      return;
+    }
+
+    if (newestFailure?.error) {
+      hidePreviewLoader();
+    }
+  }, [messages, status]);
 
   useEffect(() => {
     const lastMessage = messages[messages.length - 1];

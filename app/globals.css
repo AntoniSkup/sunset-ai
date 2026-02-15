@@ -68,6 +68,7 @@
   color utility to any element that depends on these defaults.
 */
 @layer base {
+
   *,
   ::after,
   ::before,
@@ -185,6 +186,7 @@
   * {
     @apply border-border;
   }
+
   body {
     @apply bg-background text-foreground;
   }
@@ -296,6 +298,7 @@
   * {
     @apply border-border outline-ring/50;
   }
+
   body {
     font-family:
       ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji",
@@ -306,5 +309,20 @@
     line-height: 24px;
 
     @apply bg-background text-foreground;
+  }
+}
+
+@keyframes pulse-dot {
+
+  0%,
+  80%,
+  100% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+
+  40% {
+    opacity: 1;
+    transform: scale(1);
   }
 }

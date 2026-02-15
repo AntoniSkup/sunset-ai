@@ -7,6 +7,7 @@ import {
   integer,
   index,
   unique,
+  jsonb,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
@@ -79,6 +80,7 @@ export const teamsRelations = relations(teams, ({ many }) => ({
 export const usersRelations = relations(users, ({ many }) => ({
   teamMembers: many(teamMembers),
   invitationsSent: many(invitations),
+  chats: many(chats),
 }));
 
 export const invitationsRelations = relations(invitations, ({ one }) => ({
@@ -137,18 +139,17 @@ export const landingPageVersions = pgTable(
     userId: integer("user_id")
       .notNull()
       .references(() => users.id),
-    sessionId: varchar("session_id", { length: 255 }).notNull(),
+    chatId: varchar("chat_id", { length: 32 })
+      .notNull()
+      .references(() => chats.publicId),
     versionNumber: integer("version_number").notNull(),
     codeContent: text("code_content").notNull(),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
   (table) => ({
-    sessionVersionUnique: unique().on(table.sessionId, table.versionNumber),
-    sessionVersionIdx: index("session_version_idx").on(
-      table.sessionId,
-      table.versionNumber
-    ),
+    chatVersionUnique: unique().on(table.chatId, table.versionNumber),
+    chatVersionIdx: index("chat_version_idx").on(table.chatId, table.versionNumber),
     userIdIdx: index("user_id_idx").on(table.userId),
     createdAtIdx: index("created_at_idx").on(table.createdAt),
   })
@@ -166,6 +167,237 @@ export const landingPageVersionsRelations = relations(
 
 export type LandingPageVersion = typeof landingPageVersions.$inferSelect;
 export type NewLandingPageVersion = typeof landingPageVersions.$inferInsert;
+
+export const landingSiteFiles = pgTable(
+  "landing_site_files",
+  {
+    id: serial("id").primaryKey(),
+    chatId: varchar("chat_id", { length: 32 })
+      .notNull()
+      .references(() => chats.publicId),
+    path: varchar("path", { length: 255 }).notNull(),
+    kind: varchar("kind", { length: 20 }).notNull().default("section"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    chatPathUnique: unique().on(table.chatId, table.path),
+    chatIdIdx: index("landing_site_files_chat_id_idx").on(table.chatId),
+  })
+);
+
+export const landingSiteRevisions = pgTable(
+  "landing_site_revisions",
+  {
+    id: serial("id").primaryKey(),
+    chatId: varchar("chat_id", { length: 32 })
+      .notNull()
+      .references(() => chats.publicId),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id),
+    revisionNumber: integer("revision_number").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    chatRevisionUnique: unique().on(table.chatId, table.revisionNumber),
+    chatRevisionIdx: index("landing_site_revisions_chat_revision_idx").on(
+      table.chatId,
+      table.revisionNumber
+    ),
+    userIdIdx: index("landing_site_revisions_user_id_idx").on(table.userId),
+  })
+);
+
+export const landingSiteFileVersions = pgTable(
+  "landing_site_file_versions",
+  {
+    id: serial("id").primaryKey(),
+    fileId: integer("file_id")
+      .notNull()
+      .references(() => landingSiteFiles.id),
+    revisionId: integer("revision_id")
+      .notNull()
+      .references(() => landingSiteRevisions.id),
+    content: text("content").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    fileRevisionUnique: unique().on(table.fileId, table.revisionId),
+    fileIdIdx: index("landing_site_file_versions_file_id_idx").on(table.fileId),
+    revisionIdIdx: index("landing_site_file_versions_revision_id_idx").on(
+      table.revisionId
+    ),
+  })
+);
+
+export const landingSiteFilesRelations = relations(landingSiteFiles, ({ one, many }) => ({
+  chat: one(chats, {
+    fields: [landingSiteFiles.chatId],
+    references: [chats.publicId],
+  }),
+  versions: many(landingSiteFileVersions),
+}));
+
+export const landingSiteRevisionsRelations = relations(
+  landingSiteRevisions,
+  ({ one, many }) => ({
+    chat: one(chats, {
+      fields: [landingSiteRevisions.chatId],
+      references: [chats.publicId],
+    }),
+    user: one(users, {
+      fields: [landingSiteRevisions.userId],
+      references: [users.id],
+    }),
+    fileVersions: many(landingSiteFileVersions),
+  })
+);
+
+export const landingSiteFileVersionsRelations = relations(
+  landingSiteFileVersions,
+  ({ one }) => ({
+    file: one(landingSiteFiles, {
+      fields: [landingSiteFileVersions.fileId],
+      references: [landingSiteFiles.id],
+    }),
+    revision: one(landingSiteRevisions, {
+      fields: [landingSiteFileVersions.revisionId],
+      references: [landingSiteRevisions.id],
+    }),
+  })
+);
+
+export type LandingSiteFile = typeof landingSiteFiles.$inferSelect;
+export type NewLandingSiteFile = typeof landingSiteFiles.$inferInsert;
+export type LandingSiteRevision = typeof landingSiteRevisions.$inferSelect;
+export type NewLandingSiteRevision = typeof landingSiteRevisions.$inferInsert;
+export type LandingSiteFileVersion = typeof landingSiteFileVersions.$inferSelect;
+export type NewLandingSiteFileVersion = typeof landingSiteFileVersions.$inferInsert;
+
+export const chats = pgTable(
+  "chats",
+  {
+    id: serial("id").primaryKey(),
+    publicId: varchar("public_id", { length: 32 }).notNull(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id),
+    title: varchar("title", { length: 255 }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    publicIdUnique: unique("chats_public_id_unique").on(table.publicId),
+    userIdIdx: index("chat_user_id_idx").on(table.userId),
+    createdAtIdx: index("chat_created_at_idx").on(table.createdAt),
+  })
+);
+
+export const chatMessages = pgTable(
+  "chat_messages",
+  {
+    id: serial("id").primaryKey(),
+    chatId: integer("chat_id")
+      .notNull()
+      .references(() => chats.id),
+    role: varchar("role", { length: 20 }).notNull(),
+    content: text("content").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    chatIdIdx: index("chat_messages_chat_id_idx").on(table.chatId),
+    createdAtIdx: index("chat_messages_created_at_idx").on(table.createdAt),
+  })
+);
+
+export const chatToolCalls = pgTable(
+  "chat_tool_calls",
+  {
+    id: serial("id").primaryKey(),
+    chatId: integer("chat_id")
+      .notNull()
+      .references(() => chats.id),
+    stepNumber: integer("step_number"),
+    state: varchar("state", { length: 20 }).notNull(), // "call" | "result"
+    toolCallId: varchar("tool_call_id", { length: 255 }),
+    toolName: varchar("tool_name", { length: 255 }).notNull(),
+    input: jsonb("input"),
+    output: jsonb("output"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    chatIdIdx: index("chat_tool_calls_chat_id_idx").on(table.chatId),
+    toolCallIdIdx: index("chat_tool_calls_tool_call_id_idx").on(table.toolCallId),
+    createdAtIdx: index("chat_tool_calls_created_at_idx").on(table.createdAt),
+  })
+);
+
+export const chatsRelations = relations(chats, ({ one, many }) => ({
+  user: one(users, {
+    fields: [chats.userId],
+    references: [users.id],
+  }),
+  messages: many(chatMessages),
+  toolCalls: many(chatToolCalls),
+}));
+
+export const chatMessagesRelations = relations(chatMessages, ({ one }) => ({
+  chat: one(chats, {
+    fields: [chatMessages.chatId],
+    references: [chats.id],
+  }),
+}));
+
+export const chatToolCallsRelations = relations(chatToolCalls, ({ one }) => ({
+  chat: one(chats, {
+    fields: [chatToolCalls.chatId],
+    references: [chats.id],
+  }),
+}));
+
+export type Chat = typeof chats.$inferSelect;
+export type NewChat = typeof chats.$inferInsert;
+export type ChatMessage = typeof chatMessages.$inferSelect;
+export type NewChatMessage = typeof chatMessages.$inferInsert;
+export type ChatToolCall = typeof chatToolCalls.$inferSelect;
+export type NewChatToolCall = typeof chatToolCalls.$inferInsert;
+
+export const publishedSites = pgTable(
+  "published_sites",
+  {
+    id: serial("id").primaryKey(),
+    publicId: varchar("public_id", { length: 32 }).notNull(),
+    chatId: varchar("chat_id", { length: 32 })
+      .notNull()
+      .references(() => chats.publicId),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id),
+    revisionNumber: integer("revision_number").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    publicIdUnique: unique("published_sites_public_id_unique").on(table.publicId),
+    chatIdIdx: index("published_sites_chat_id_idx").on(table.chatId),
+    userIdIdx: index("published_sites_user_id_idx").on(table.userId),
+  })
+);
+
+export const publishedSitesRelations = relations(publishedSites, ({ one }) => ({
+  chat: one(chats, {
+    fields: [publishedSites.chatId],
+    references: [chats.publicId],
+  }),
+  user: one(users, {
+    fields: [publishedSites.userId],
+    references: [users.id],
+  }),
+}));
+
+export type PublishedSite = typeof publishedSites.$inferSelect;
+export type NewPublishedSite = typeof publishedSites.$inferInsert;
 
 export enum ActivityType {
   SIGN_UP = "SIGN_UP",
