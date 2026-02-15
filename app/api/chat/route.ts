@@ -13,6 +13,9 @@ import { createSectionTool, createSiteTool } from "@/lib/code-generation/generat
 import { getAIModel } from "@/lib/ai/get-ai-model";
 import { shouldUseLighterModel } from "@/lib/ai/should-use-lighter-model";
 import { chatSystemPrompt } from "@/prompts/chat-system-prompt";
+import { captureLandingPageScreenshot } from "@/lib/screenshots/capture";
+
+const BUILDER_TOOLS = new Set(["create_site", "create_section"]);
 
 const requestQueues = new Map<string, Promise<void>>();
 
@@ -170,6 +173,10 @@ export async function POST(request: NextRequest) {
 
     const toolMarkers: Array<{ id: number; title: string; toolName: string }> =
       [];
+    let lastSuccessfulRevision: {
+      chatId: string;
+      revisionNumber: number;
+    } | null = null;
 
     const result = streamText({
       model,
@@ -217,6 +224,16 @@ export async function POST(request: NextRequest) {
               toolCallId,
               output: res,
             });
+
+            if (BUILDER_TOOLS.has(toolName)) {
+              const output = (res as any).output ?? (res as any).result ?? res;
+              if (output?.success === true && output?.revisionNumber != null) {
+                lastSuccessfulRevision = {
+                  chatId,
+                  revisionNumber: Number(output.revisionNumber),
+                };
+              }
+            }
           }
         } catch (e) {
           console.error("Failed to persist tool calls/results:", e);
@@ -237,6 +254,14 @@ export async function POST(request: NextRequest) {
           } catch (e) {
             console.error("Failed to persist assistant message:", e);
           }
+        }
+
+        if (lastSuccessfulRevision) {
+          void captureLandingPageScreenshot({
+            chatId: lastSuccessfulRevision.chatId,
+            revisionNumber: lastSuccessfulRevision.revisionNumber,
+            userId: user.id,
+          });
         }
       },
     });

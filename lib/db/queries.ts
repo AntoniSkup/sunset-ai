@@ -249,21 +249,34 @@ export async function upsertLandingSiteFile(data: {
   return result[0];
 }
 
+const MAX_REVISION_RETRIES = 5;
+
 export async function createLandingSiteRevision(data: {
   chatId: string;
   userId: number;
 }) {
-  const revisionNumber = await getNextLandingSiteRevisionNumber(data.chatId);
-  const result = await db
-    .insert(landingSiteRevisions)
-    .values({
-      chatId: data.chatId,
-      userId: data.userId,
-      revisionNumber,
-    })
-    .returning();
+  for (let attempt = 0; attempt < MAX_REVISION_RETRIES; attempt++) {
+    const revisionNumber = await getNextLandingSiteRevisionNumber(data.chatId);
+    try {
+      const result = await db
+        .insert(landingSiteRevisions)
+        .values({
+          chatId: data.chatId,
+          userId: data.userId,
+          revisionNumber,
+        })
+        .returning();
 
-  return result[0];
+      return result[0];
+    } catch (err: unknown) {
+      const code = (err as { code?: string })?.code;
+      if (code === "23505" && attempt < MAX_REVISION_RETRIES - 1) {
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new Error("Failed to create revision after retries");
 }
 
 export async function createLandingSiteFileVersion(data: {
@@ -390,7 +403,7 @@ export async function getChatsByUser(userId: number) {
 export async function updateChatByPublicId(
   chatPublicId: string,
   userId: number,
-  data: { title?: string }
+  data: { title?: string; screenshotUrl?: string | null }
 ) {
   const result = await db
     .update(chats)
@@ -402,6 +415,14 @@ export async function updateChatByPublicId(
     .returning();
 
   return result.length > 0 ? result[0] : null;
+}
+
+export async function updateChatScreenshotUrl(
+  chatPublicId: string,
+  userId: number,
+  screenshotUrl: string
+) {
+  return updateChatByPublicId(chatPublicId, userId, { screenshotUrl });
 }
 
 export async function createChatMessage(data: {

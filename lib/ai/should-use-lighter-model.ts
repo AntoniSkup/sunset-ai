@@ -35,7 +35,6 @@ export async function shouldUseLighterModel(userQuestion: string): Promise<boole
 
       Respond with ONLY "true" or "false" (lowercase, no quotes, no explanation). Default to "false" if uncertain.`,
       prompt: userQuestion,
-      maxTokens: 10,
     });
 
     const response = result.text.trim().toLowerCase();

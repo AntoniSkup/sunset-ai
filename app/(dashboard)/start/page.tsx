@@ -14,6 +14,8 @@ type Chat = {
   id: number;
   publicId: string;
   title: string | null;
+  screenshotUrl?: string | null;
+  screenshot_url?: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -190,10 +192,18 @@ export default function StartPage() {
                     href={`/builder/${chat.publicId}`}
                     className="group flex flex-col rounded-xl border border-gray-200 bg-white overflow-hidden shadow-sm transition-all hover:border-gray-300 hover:shadow-md"
                   >
-                    <div className="aspect-video w-full bg-gray-100 flex items-center justify-center border-b border-gray-100">
-                      <div className="text-gray-400 text-4xl font-bold">
-                        {(chat.title || "U").charAt(0).toUpperCase()}
-                      </div>
+                    <div className="aspect-video w-full bg-gray-100 flex items-center justify-center border-b border-gray-100 overflow-hidden">
+                      {(chat.screenshotUrl ?? chat.screenshot_url) ? (
+                        <img
+                          src={chat.screenshotUrl ?? chat.screenshot_url ?? ""}
+                          alt={chat.title || "Landing page preview"}
+                          className="w-full h-full object-cover object-top"
+                        />
+                      ) : (
+                        <div className="text-gray-400 text-4xl font-bold">
+                          {(chat.title || "U").charAt(0).toUpperCase()}
+                        </div>
+                      )}
                     </div>
                     <div className="p-4 flex flex-col gap-1">
                       <p className="font-medium text-gray-900 truncate">
