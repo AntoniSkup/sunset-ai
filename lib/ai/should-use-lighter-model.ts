@@ -1,4 +1,7 @@
-export async function shouldUseLighterModel(userQuestion: string): Promise<boolean> {
+export async function shouldUseLighterModel(
+  userQuestion: string,
+  context?: { userId?: number; chatId?: string }
+): Promise<boolean> {
   const modelProvider = process.env.AI_MODEL_PROVIDER;
 
   if (!modelProvider) {
@@ -18,6 +21,16 @@ export async function shouldUseLighterModel(userQuestion: string): Promise<boole
 
     const result = await generateText({
       model: routerModel,
+      experimental_telemetry: {
+        isEnabled: true,
+        functionId: "model-router",
+        metadata: context
+          ? {
+              ...(context.userId != null && { userId: context.userId }),
+              ...(context.chatId != null && { chatId: context.chatId }),
+            }
+          : undefined,
+      },
       system: `You are a routing assistant. Analyze the user's question and determine if it's a simple change request that can be answered with a lighter, faster model.
 
       Simple questions include:

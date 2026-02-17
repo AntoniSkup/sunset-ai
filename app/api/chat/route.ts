@@ -1,4 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { after } from "next/server";
+import { trace } from "@opentelemetry/api";
+import {
+  observe,
+  updateActiveObservation,
+  updateActiveTrace,
+} from "@langfuse/tracing";
 import {
   getUser,
   getChatByPublicId,
@@ -14,6 +21,7 @@ import { getAIModel } from "@/lib/ai/get-ai-model";
 import { shouldUseLighterModel } from "@/lib/ai/should-use-lighter-model";
 import { chatSystemPrompt } from "@/prompts/chat-system-prompt";
 import { captureLandingPageScreenshot } from "@/lib/screenshots/capture";
+import { langfuseSpanProcessor } from "@/instrumentation";
 
 const BUILDER_TOOLS = new Set(["create_site", "create_section"]);
 
@@ -99,7 +107,7 @@ async function processRequestQueue(chatId: string): Promise<void> {
   }
 }
 
-export async function POST(request: NextRequest) {
+async function chatHandler(request: NextRequest) {
   const user = await getUser();
 
   if (!user) {
@@ -139,7 +147,10 @@ export async function POST(request: NextRequest) {
       messages as Array<Omit<UIMessage, "id">>
     );
 
-    const useLighterModel = await decideOnLighterModel(messages as Array<Omit<UIMessage, "id">>);
+    const useLighterModel = await decideOnLighterModel(messages as Array<Omit<UIMessage, "id">>, {
+      userId: user.id,
+      chatId,
+    });
     console.log("useLighterModel", useLighterModel);
     const model = await getAIModel(useLighterModel);
 
@@ -165,7 +176,10 @@ export async function POST(request: NextRequest) {
         });
 
         if (!chat.title) {
-          const title = await generateChatName(userText.trim());
+          const title = await generateChatName(userText.trim(), {
+            userId: user.id,
+            chatId,
+          });
           await updateChatByPublicId(chatId, user.id, { title });
         }
       }
@@ -178,12 +192,38 @@ export async function POST(request: NextRequest) {
       revisionNumber: number;
     } | null = null;
 
+    const lastUserText =
+      (lastMessage?.role === "user" && Array.isArray(lastMessage.parts)
+        ? lastMessage.parts
+          .filter((p: any) => p?.type === "text")
+          .map((p: any) => p.text)
+          .join("")
+        : lastMessage?.role === "user" && typeof lastMessage.content === "string"
+          ? lastMessage.content
+          : "") || "";
+    updateActiveObservation({ input: lastUserText.trim() || undefined });
+    updateActiveTrace({
+      name: "chat-message",
+      sessionId: chatId,
+      userId: String(user.id),
+      input: lastUserText.trim() || undefined,
+    });
+
     const result = streamText({
       model,
       system: chatSystemPrompt,
       messages: modelMessages,
       tools,
       stopWhen: stepCountIs(20),
+      experimental_telemetry: {
+        isEnabled: true,
+        functionId: "chat-stream",
+        metadata: {
+          userId: user.id,
+          chatId,
+          sessionId: chatId,
+        },
+      },
       onStepFinish: async (step) => {
         try {
           const stepNumber = (step as any).step ?? null;
@@ -240,12 +280,12 @@ export async function POST(request: NextRequest) {
         }
       },
       onFinish: async ({ text }) => {
-        if (text && text.trim()) {
+        const finalText =
+          text && text.trim()
+            ? injectToolMarkersIntoAssistantText(text.trim(), toolMarkers)
+            : text ?? "";
+        if (finalText) {
           try {
-            const finalText = injectToolMarkersIntoAssistantText(
-              text.trim(),
-              toolMarkers
-            );
             await createChatMessage({
               chatId: chat.id,
               role: "assistant",
@@ -255,6 +295,9 @@ export async function POST(request: NextRequest) {
             console.error("Failed to persist assistant message:", e);
           }
         }
+        updateActiveObservation({ output: finalText || undefined });
+        updateActiveTrace({ output: finalText || undefined });
+        trace.getActiveSpan()?.end();
 
         if (lastSuccessfulRevision) {
           void captureLandingPageScreenshot({
@@ -264,7 +307,15 @@ export async function POST(request: NextRequest) {
           });
         }
       },
+      onError: async (error) => {
+        const errMsg = error instanceof Error ? error.message : String(error);
+        updateActiveObservation({ output: errMsg, level: "ERROR" });
+        updateActiveTrace({ output: errMsg });
+        trace.getActiveSpan()?.end();
+      },
     });
+
+    after(async () => langfuseSpanProcessor.forceFlush());
 
     return result.toUIMessageStreamResponse();
   } catch (error) {
@@ -278,7 +329,10 @@ export async function POST(request: NextRequest) {
   }
 }
 
-const decideOnLighterModel = async (messages: Array<Omit<UIMessage, "id">>): Promise<boolean> => {
+const decideOnLighterModel = async (
+  messages: Array<Omit<UIMessage, "id">>,
+  context?: { userId?: number; chatId?: string }
+): Promise<boolean> => {
   if (!messages || !Array.isArray(messages) || messages.length === 0) {
     return false;
   }
@@ -300,7 +354,12 @@ const decideOnLighterModel = async (messages: Array<Omit<UIMessage, "id">>): Pro
 
   let useLighterModel = false;
   if (hasAssistantMessages && userQuestion.trim()) {
-    useLighterModel = await shouldUseLighterModel(userQuestion.trim());
+    useLighterModel = await shouldUseLighterModel(userQuestion.trim(), context);
   }
   return useLighterModel;
 }
+
+export const POST = observe(chatHandler, {
+  name: "chat-message",
+  endOnExit: false,
+});

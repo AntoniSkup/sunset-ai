@@ -20,11 +20,24 @@ import { verifyToken } from "@/lib/auth/session";
 import { generateText } from "ai";
 import { getAIModel } from "@/lib/ai/get-ai-model";
 
-export async function generateChatName(userQuery: string): Promise<string> {
+export async function generateChatName(
+  userQuery: string,
+  context?: { userId?: number; chatId?: string }
+): Promise<string> {
   const model = await getAIModel(true);
   const { text } = await generateText({
     model,
     prompt: `Generate a short, descriptive title (max 60 characters) for a website project based on this request: "${userQuery}"`,
+    experimental_telemetry: {
+      isEnabled: true,
+      functionId: "generate-chat-name",
+      metadata: context
+        ? {
+            ...(context.userId != null && { userId: context.userId }),
+            ...(context.chatId != null && { chatId: context.chatId }),
+          }
+        : undefined,
+    },
   });
   let cleaned = text.trim();
   if ((cleaned.startsWith('"') && cleaned.endsWith('"')) ||
@@ -367,7 +380,7 @@ export async function createChat(data: {
   let title = data.title;
 
   if (!title && data.userQuery) {
-    title = await generateChatName(data.userQuery);
+    title = await generateChatName(data.userQuery, { userId: data.userId });
   }
 
   const result = await db

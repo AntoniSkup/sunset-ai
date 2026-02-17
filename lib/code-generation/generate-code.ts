@@ -181,6 +181,15 @@ async function generateAndSaveSingleFile(params: {
     const result = await generateText({
       model,
       prompt,
+      experimental_telemetry: {
+        isEnabled: true,
+        functionId: "code-generation",
+        metadata: {
+          chatId: params.chatId,
+          userId: params.userId,
+          destination: normalizedDestination,
+        },
+      },
     });
 
     const generatedCode = result.text;
