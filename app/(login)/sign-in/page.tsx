@@ -1,10 +1,14 @@
 import { Suspense } from "react";
-import { Login } from "../login";
+import { LoginForm } from "@/components/login-form";
 
 export default function SignInPage() {
   return (
-    <Suspense>
-      <Login mode="signin" />
-    </Suspense>
+    <div className="bg-muted flex min-h-svh flex-col items-center justify-center p-6 md:p-10">
+      <div className="w-full max-w-sm md:max-w-4xl">
+        <Suspense>
+          <LoginForm />
+        </Suspense>
+      </div>
+    </div>
   );
 }
