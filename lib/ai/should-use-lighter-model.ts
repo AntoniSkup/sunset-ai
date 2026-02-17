@@ -10,7 +10,11 @@ export async function shouldUseLighterModel(
 
   try {
     let routerModel;
-    if (modelProvider === "openai") {
+    if (modelProvider === "google") {
+      const { google } = await import("@ai-sdk/google");
+      const lighterModel = process.env.AI_LIGHTER_MODEL_NAME || "gemini-3-flash-preview";
+      routerModel = google(lighterModel);
+    } else if (modelProvider === "openai") {
       const { openai } = await import("@ai-sdk/openai");
       routerModel = openai("gpt-4o-mini");
     } else {
