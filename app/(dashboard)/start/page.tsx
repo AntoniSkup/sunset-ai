@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { nanoid } from "nanoid";
 import { usePendingMessageStore } from "@/lib/stores/usePendingMessageStore";
+import TextareaAutosize from "react-textarea-autosize";
 import { Plus, ArrowUp, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -129,7 +130,7 @@ export default function StartPage() {
               >
                 <Plus className="h-5 w-5" />
               </button>
-              <textarea
+              <TextareaAutosize
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => {
@@ -142,16 +143,12 @@ export default function StartPage() {
                 }}
                 placeholder="Describe your idea. Attach a design to guide the result."
                 disabled={isLoading}
+                maxRows={10}
                 className={cn(
                   "flex-1 min-w-0 bg-transparent text-gray-900 text-sm resize-none overflow-auto",
                   "focus:outline-none placeholder:text-gray-400",
                   "disabled:opacity-50"
                 )}
-                rows={1}
-                style={{
-                  minHeight: "24px",
-                  maxHeight: "120px",
-                }}
               />
               <Button
                 type="submit"
