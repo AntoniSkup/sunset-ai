@@ -11,11 +11,13 @@ import {
 import {
   createLandingSiteFileVersion,
   createLandingSiteRevision,
+  getExistingLandingSiteFilesContent,
   getLatestLandingSiteFileContent,
   upsertLandingSiteFile,
 } from "@/lib/db/queries";
 import { checkRateLimit } from "@/lib/code-generation/rate-limit";
 import {
+  buildExistingSectionsContext,
   buildModificationContext,
   buildUserRequestSection,
   createSectionPrompt,
@@ -72,6 +74,7 @@ export function buildCodeGenerationPrompt(params: {
   userRequest: string;
   previousCodeVersion?: string;
   isModification?: boolean;
+  existingSections?: Array<{ path: string; content: string }>;
 }): string {
   const previousCodeVersion = params.previousCodeVersion;
   const cleanedPreviousCodeVersion = previousCodeVersion
@@ -92,11 +95,17 @@ export function buildCodeGenerationPrompt(params: {
       ? buildModificationContext(cleanedPreviousCodeVersion)
       : "";
 
+  const existingSectionsContext = params.existingSections?.length
+    ? buildExistingSectionsContext(params.existingSections)
+    : "";
+
   const userRequestSection = buildUserRequestSection(
     `Destination: ${params.destination}\n\n${params.userRequest}`
   );
 
-  return basePrompt + modificationContext + userRequestSection;
+  return (
+    basePrompt + modificationContext + existingSectionsContext + userRequestSection
+  );
 }
 
 async function generateAndSaveSingleFile(params: {
@@ -169,11 +178,20 @@ async function generateAndSaveSingleFile(params: {
       if (latest?.content) previousCode = latest.content;
     }
 
+    let existingSections: Array<{ path: string; content: string }> = [];
+    if (!shouldModify) {
+      existingSections = await getExistingLandingSiteFilesContent(
+        params.chatId,
+        normalizedDestination
+      );
+    }
+
     const prompt = buildCodeGenerationPrompt({
       destination: normalizedDestination,
       userRequest: params.userRequest,
       previousCodeVersion: previousCode,
       isModification: shouldModify,
+      existingSections: existingSections.length > 0 ? existingSections : undefined,
     });
 
     const model = await getAIModel();
@@ -349,6 +367,7 @@ const createSiteToolExecute = async (
       destination: result.destination,
       revisionId: (result as any).revisionId,
       revisionNumber: (result as any).revisionNumber,
+      codeContent: (result as any).codeContent,
     };
   }
 
@@ -386,6 +405,7 @@ const createSectionToolExecute = async (
       destination: (result as any).destination,
       revisionId: (result as any).revisionId,
       revisionNumber: (result as any).revisionNumber,
+      codeContent: (result as any).codeContent,
     };
   }
 

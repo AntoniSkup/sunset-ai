@@ -33,9 +33,9 @@ export async function generateChatName(
       functionId: "generate-chat-name",
       metadata: context
         ? {
-            ...(context.userId != null && { userId: context.userId }),
-            ...(context.chatId != null && { chatId: context.chatId }),
-          }
+          ...(context.userId != null && { userId: context.userId }),
+          ...(context.chatId != null && { chatId: context.chatId }),
+        }
         : undefined,
     },
   });
@@ -338,6 +338,54 @@ export async function getLatestLandingSiteFileContent(chatId: string, path: stri
     .limit(1);
 
   return result.length > 0 ? result[0] : null;
+}
+
+export async function getExistingLandingSiteFilesContent(
+  chatId: string,
+  excludePath?: string
+): Promise<Array<{ path: string; content: string }>> {
+  const rows = await db
+    .select({
+      path: landingSiteFiles.path,
+      content: landingSiteFileVersions.content,
+      revisionNumber: landingSiteRevisions.revisionNumber,
+    })
+    .from(landingSiteFiles)
+    .innerJoin(
+      landingSiteFileVersions,
+      eq(landingSiteFileVersions.fileId, landingSiteFiles.id)
+    )
+    .innerJoin(
+      landingSiteRevisions,
+      eq(landingSiteRevisions.id, landingSiteFileVersions.revisionId)
+    )
+    .where(eq(landingSiteFiles.chatId, chatId));
+
+  const latestByPath = new Map<
+    string,
+    { content: string; revisionNumber: number }
+  >();
+  for (const row of rows) {
+    const existing = latestByPath.get(row.path);
+    if (
+      !existing ||
+      (row.revisionNumber ?? 0) > existing.revisionNumber
+    ) {
+      latestByPath.set(row.path, {
+        content: row.content,
+        revisionNumber: row.revisionNumber ?? 0,
+      });
+    }
+  }
+
+  if (excludePath) {
+    latestByPath.delete(excludePath);
+  }
+
+  return Array.from(latestByPath.entries()).map(([path, { content }]) => ({
+    path,
+    content,
+  }));
 }
 
 export async function getLandingSiteFileContentAtOrBeforeRevision(data: {
