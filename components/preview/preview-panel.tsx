@@ -151,47 +151,49 @@ export function PreviewPanel({ className, chatId }: PreviewPanelProps) {
   useEffect(() => {
     let cancelled = false;
 
-    async function loadLatestPreview() {
-      if (!chatId || typeof chatId !== "string") {
-        return;
-      }
+    async function loadPreview() {
+      if (!chatId || typeof chatId !== "string") return;
 
       try {
+        const statusRes = await fetch(
+          `/api/chat/${encodeURIComponent(chatId)}/stream/status`,
+          { cache: "no-store" }
+        );
+
+        if (cancelled) return;
+
+        if (statusRes.ok) {
+          const statusData = (await statusRes.json()) as { active?: boolean };
+          if (statusData.active) {
+            setIsLoading(true);
+            setLoadingMessage("Generating website...");
+            return;
+          }
+        }
+
         const res = await fetch(`/api/preview/${chatId}/latest`, {
           cache: "no-store",
         });
-
-        if (res.status === 204 || res.status === 404) {
-          return;
-        }
-
-        if (!res.ok) {
-          throw new Error(`Failed to load latest preview: ${res.status}`);
-        }
-
+        if (cancelled) return;
+        if (res.status === 204 || res.status === 404) return;
+        if (!res.ok) throw new Error(`Failed to load latest preview: ${res.status}`);
         const data = (await res.json()) as {
           versionId?: number;
-          versionNumber?: number;
           revisionId?: number;
-          revisionNumber?: number;
           previewUrl: string;
         };
-
-        if (cancelled) {
-          return;
-        }
-
+        if (cancelled) return;
         const id = Number(data?.revisionId ?? data?.versionId ?? 0);
         if (id && data?.previewUrl && iframeRef.current) {
           setCurrentVersionId(id);
           iframeRef.current.src = data.previewUrl;
         }
       } catch (e) {
-        console.error("Failed to load latest preview:", e);
+        console.error("Failed to load preview:", e);
       }
     }
 
-    loadLatestPreview();
+    loadPreview();
 
     return () => {
       cancelled = true;
