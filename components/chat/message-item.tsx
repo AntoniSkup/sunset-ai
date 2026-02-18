@@ -17,7 +17,6 @@ interface MessageItemProps {
 
 type RenderToken =
   | { type: "text"; text: string }
-  | { type: "tool-marker"; id: string; title: string; toolName: string }
   | {
     type: "tool-call";
     toolCallId: string;
@@ -38,41 +37,7 @@ function tokenizeTextWithToolMarkers(text: string): RenderToken[] {
   if (!text) return [];
 
   const tokens: RenderToken[] = [];
-  const toolTagRegex = /<tool\s+([^>]*?)\/>/gi;
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
-
-  while ((match = toolTagRegex.exec(text)) !== null) {
-    const start = match.index;
-    const end = toolTagRegex.lastIndex;
-    const attrs = match[1] ?? "";
-
-    if (start > lastIndex) {
-      const chunk = text.slice(lastIndex, start);
-      if (chunk) tokens.push({ type: "text", text: chunk });
-    }
-
-    const titleMatch = String(attrs).match(/title\s*=\s*"([^"]*)"/i);
-    const toolNameMatch = String(attrs).match(/toolName\s*=\s*"([^"]*)"/i);
-    const idMatch = String(attrs).match(/id\s*=\s*("?)([0-9]+)\1/i);
-    const titleRaw = titleMatch?.[1] ?? "tool";
-    const toolNameRaw = toolNameMatch?.[1] ?? "unknown";
-    const idRaw = idMatch?.[2] ?? "";
-
-    tokens.push({
-      type: "tool-marker",
-      id: idRaw,
-      title: unescapeAttr(titleRaw),
-      toolName: unescapeAttr(toolNameRaw),
-    });
-
-    lastIndex = end;
-  }
-
-  if (lastIndex < text.length) {
-    const chunk = text.slice(lastIndex);
-    if (chunk) tokens.push({ type: "text", text: chunk });
-  }
+  tokens.push({ type: "text", text });
 
   return tokens
     .map((t) =>
@@ -188,18 +153,6 @@ export const MessageItem = React.memo(function MessageItem({
             {tokens.map((t, idx) => {
               if (t.type === "text") {
                 return <MessageResponse key={`t-${idx}`}>{t.text}</MessageResponse>;
-              }
-
-              if (t.type === "tool-marker") {
-                return (
-                  <div key={`m-${t.id || idx}`} className="my-1">
-                    <ToolCallIndicator
-                      toolName={t.toolName}
-                      fileName={t.title}
-                      isComplete={true}
-                    />
-                  </div>
-                );
               }
 
               const fileName = t.destination || getDefaultFileNameForTool(t.toolName);

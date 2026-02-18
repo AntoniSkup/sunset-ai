@@ -127,6 +127,11 @@ function ChatInner({
     () =>
       new DefaultChatTransport({
         api: "/api/chat",
+        credentials: "include",
+        prepareReconnectToStreamRequest: ({ id }) => ({
+          api: `/api/chat/${encodeURIComponent(id)}/stream`,
+          credentials: "include",
+        }),
         async fetch(url, options) {
           if (chatId && options?.body) {
             const body = JSON.parse(options.body as string);
@@ -143,9 +148,12 @@ function ChatInner({
     Array<{ id: string; message: string; userMessageId?: string }>
   >([]);
   const toolErrorKeysRef = useRef<Set<string>>(new Set());
+  const resumeAttemptedForRef = useRef<string | null>(null);
 
-  const { messages, sendMessage, status } = useChat({
+  const { messages, sendMessage, status, resumeStream } = useChat({
+    id: chatId ?? undefined,
     messages: initialMessages,
+    resume: false,
     transport,
     onError: (error) => {
       const errorMessage =
@@ -163,6 +171,13 @@ function ChatInner({
       ]);
     },
   });
+
+  useEffect(() => {
+    if (chatId && resumeAttemptedForRef.current !== chatId) {
+      resumeAttemptedForRef.current = chatId;
+      resumeStream();
+    }
+  }, [chatId, resumeStream]);
 
   useEffect(() => {
     if (

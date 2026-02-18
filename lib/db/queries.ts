@@ -524,6 +524,14 @@ export async function getChatMessagesByPublicId(
   return { chat, messages };
 }
 
+export async function getChatToolCallsByChatId(chatId: number) {
+  return db
+    .select()
+    .from(chatToolCalls)
+    .where(eq(chatToolCalls.chatId, chatId))
+    .orderBy(asc(chatToolCalls.stepNumber), asc(chatToolCalls.createdAt), asc(chatToolCalls.id));
+}
+
 export async function createChatToolCall(data: {
   chatId: number;
   stepNumber?: number | null;

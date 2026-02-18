@@ -14,7 +14,12 @@ import {
   updateChatByPublicId,
   generateChatName,
 } from "@/lib/db/queries";
-import { streamText, convertToModelMessages, stepCountIs } from "ai";
+import {
+  streamText,
+  convertToModelMessages,
+  stepCountIs,
+  generateId,
+} from "ai";
 import type { UIMessage } from "ai";
 import { createSectionTool, createSiteTool } from "@/lib/code-generation/generate-code";
 import { getAIModel } from "@/lib/ai/get-ai-model";
@@ -22,6 +27,12 @@ import { shouldUseLighterModel } from "@/lib/ai/should-use-lighter-model";
 import { chatSystemPrompt } from "@/prompts/chat-system-prompt";
 import { captureLandingPageScreenshot } from "@/lib/screenshots/capture";
 import { langfuseSpanProcessor } from "@/instrumentation";
+import { createResumableStreamContext } from "resumable-stream";
+import {
+  clearActiveStreamId,
+  trySetActiveStreamId,
+  setActiveStreamId,
+} from "@/lib/streams/active-stream";
 
 const BUILDER_TOOLS = new Set(["create_site", "create_section"]);
 
@@ -143,6 +154,15 @@ async function chatHandler(request: NextRequest) {
       );
     }
 
+    const streamId = generateId();
+    const acquired = await trySetActiveStreamId(chatId, streamId);
+    if (!acquired) {
+      return NextResponse.json(
+        { error: "Stream already active", code: "STREAM_ACTIVE" },
+        { status: 409 }
+      );
+    }
+
     const modelMessages = await convertToModelMessages(
       messages as Array<Omit<UIMessage, "id">>
     );
@@ -154,8 +174,8 @@ async function chatHandler(request: NextRequest) {
     console.log("useLighterModel", useLighterModel);
     const model = await getAIModel(useLighterModel);
 
-    const createSiteToolCall = createSiteTool(chatId);
-    const createSectionToolCall = createSectionTool(chatId);
+    const createSiteToolCall = createSiteTool(chatId, user.id);
+    const createSectionToolCall = createSectionTool(chatId, user.id);
 
     const tools = {
       create_site: createSiteToolCall,
@@ -185,12 +205,11 @@ async function chatHandler(request: NextRequest) {
       }
     }
 
-    const toolMarkers: Array<{ id: number; title: string; toolName: string }> =
-      [];
     let lastSuccessfulRevision: {
       chatId: string;
       revisionNumber: number;
     } | null = null;
+    const persistedToolKeys = new Set<string>();
 
     const lastUserText =
       (lastMessage?.role === "user" && Array.isArray(lastMessage.parts)
@@ -242,14 +261,9 @@ async function chatHandler(request: NextRequest) {
               toolCallId,
               input: call,
             });
-            const destination = getDestinationFromToolCall(call);
-            toolMarkers.push({
-              id: toolRow.id,
-              title:
-                destination ||
-                (toolName === "create_site" ? "landing/index.html" : getToolTitle(toolName)),
-              toolName,
-            });
+            if (toolCallId) {
+              persistedToolKeys.add(`call:${toolCallId}`);
+            }
           }
 
           for (const res of staticResults) {
@@ -264,6 +278,9 @@ async function chatHandler(request: NextRequest) {
               toolCallId,
               output: res,
             });
+            if (toolCallId) {
+              persistedToolKeys.add(`result:${toolCallId}`);
+            }
 
             if (BUILDER_TOOLS.has(toolName)) {
               const output = (res as any).output ?? (res as any).result ?? res;
@@ -280,10 +297,7 @@ async function chatHandler(request: NextRequest) {
         }
       },
       onFinish: async ({ text }) => {
-        const finalText =
-          text && text.trim()
-            ? injectToolMarkersIntoAssistantText(text.trim(), toolMarkers)
-            : text ?? "";
+        const finalText = text?.trim() ?? "";
         if (finalText) {
           try {
             await createChatMessage({
@@ -317,7 +331,104 @@ async function chatHandler(request: NextRequest) {
 
     after(async () => langfuseSpanProcessor.forceFlush());
 
-    return result.toUIMessageStreamResponse();
+    return result.toUIMessageStreamResponse({
+      async consumeSseStream({ stream }) {
+        const streamContext = createResumableStreamContext({ waitUntil: after });
+
+        // Persist the outgoing UI message stream in Redis so the client can
+        // reconnect after a refresh and continue streaming.
+        await streamContext.createNewResumableStream(streamId, () => stream);
+        // ensure TTL refreshed even if lock existed long:
+        await setActiveStreamId(chatId, streamId);
+      },
+      onFinish: async ({ responseMessage }) => {
+        // Persist tool call/result parts from the UI message stream.
+        // This is more reliable than onStepFinish staticToolCalls/staticToolResults
+        // (which can be empty depending on AI SDK/tool execution mode).
+        try {
+          for (const part of (responseMessage as any)?.parts ?? []) {
+            const type = String(part?.type ?? "");
+
+            // Legacy tool parts
+            if (type === "tool-call") {
+              const toolCallId = String(part?.toolCallId || "");
+              const toolName = String(part?.toolName || "");
+              if (!toolCallId || !toolName) continue;
+              const key = `call:${toolCallId}`;
+              if (persistedToolKeys.has(key)) continue;
+              persistedToolKeys.add(key);
+              await createChatToolCall({
+                chatId: chat.id,
+                state: "call",
+                toolName,
+                toolCallId,
+                input: part,
+              });
+              continue;
+            }
+
+            if (type === "tool-result") {
+              const toolCallId = String(part?.toolCallId || "");
+              const toolName = String(part?.toolName || "");
+              if (!toolCallId || !toolName) continue;
+              const key = `result:${toolCallId}`;
+              if (persistedToolKeys.has(key)) continue;
+              persistedToolKeys.add(key);
+              await createChatToolCall({
+                chatId: chat.id,
+                state: "result",
+                toolName,
+                toolCallId,
+                output: part,
+              });
+              continue;
+            }
+
+            // AI SDK v5 tool UI parts: `tool-${name}` with state/input/output
+            if (type.startsWith("tool-")) {
+              const toolName = type.replace("tool-", "");
+              const toolCallId = String(part?.toolCallId || "");
+              if (!toolCallId || !toolName) continue;
+
+              const hasOutput = part?.output != null || part?.result != null;
+              const callKey = `call:${toolCallId}`;
+              const resultKey = `result:${toolCallId}`;
+
+              if (!persistedToolKeys.has(callKey)) {
+                persistedToolKeys.add(callKey);
+                await createChatToolCall({
+                  chatId: chat.id,
+                  state: "call",
+                  toolName,
+                  toolCallId,
+                  input: part,
+                });
+              }
+
+              if (hasOutput && !persistedToolKeys.has(resultKey)) {
+                persistedToolKeys.add(resultKey);
+                await createChatToolCall({
+                  chatId: chat.id,
+                  state: "result",
+                  toolName,
+                  toolCallId,
+                  output: part,
+                });
+              }
+            }
+          }
+        } catch (e) {
+          console.error("Failed to persist tool parts from UI stream:", e);
+        } finally {
+          // Clear the active stream mapping when the stream is finished.
+          try {
+            await clearActiveStreamId(chatId, streamId);
+          } catch (e) {
+            console.error("Failed to clear active stream id:", e);
+          }
+        }
+      },
+    });
   } catch (error) {
     console.error("Chat API error:", error);
     const errorMessage =

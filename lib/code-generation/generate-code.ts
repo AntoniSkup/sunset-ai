@@ -1,7 +1,6 @@
 import { generateText, tool } from "ai";
 import { z } from "zod";
 import { getAIModel } from "@/lib/ai/get-ai-model";
-import { getUser } from "@/lib/db/queries";
 import type { CodeGenerationResult } from "./types";
 import { parse } from "node-html-parser";
 import {
@@ -336,23 +335,16 @@ const createSectionSchema = z.object({
 
 const createSiteToolExecute = async (
   { userRequest }: z.infer<typeof createSiteSchema>,
-  chatId: string
+  chatId: string,
+  userId: number
 ): Promise<any> => {
-  const user = await getUser();
-  if (!user) {
-    return {
-      success: false,
-      error: "User not authenticated",
-    };
-  }
-
   if (!chatId) {
     return { success: false, error: "Chat ID is required" };
   }
 
   const result = await generateAndSaveSingleFile({
     chatId,
-    userId: user.id,
+    userId,
     destination: "landing/index.html",
     userRequest:
       userRequest +
@@ -376,23 +368,16 @@ const createSiteToolExecute = async (
 
 const createSectionToolExecute = async (
   { destination, userRequest, isModification }: z.infer<typeof createSectionSchema>,
-  chatId: string
+  chatId: string,
+  userId: number
 ): Promise<any> => {
-  const user = await getUser();
-  if (!user) {
-    return {
-      success: false,
-      error: "User not authenticated",
-    };
-  }
-
   if (!chatId) {
     return { success: false, error: "Chat ID is required" };
   }
 
   const result = await generateAndSaveSingleFile({
     chatId,
-    userId: user.id,
+    userId,
     destination,
     userRequest,
     isModification,
@@ -427,25 +412,25 @@ const createSectionToolExecute = async (
 //   } as any);
 // }
 
-export function createSiteTool(chatId: string) {
+export function createSiteTool(chatId: string, userId: number) {
   return tool({
     description:
       "Create a new index.html using the provided brand, goal, and audience, and return a siteId plus any initialized defaults (e.g., theme tokens, pages scaffold) so other tools can add pages/sections to it.",
     inputSchema: createSiteSchema,
     execute: async (input: z.infer<typeof createSiteSchema>) => {
-      return createSiteToolExecute(input, chatId);
+      return createSiteToolExecute(input, chatId, userId);
     },
   } as any);
 }
 
 
-export function createSectionTool(chatId: string) {
+export function createSectionTool(chatId: string, userId: number) {
   return tool({
     description:
       "Create or modify exactly one HTML file (layout/page/section) for the landing site. One tool call writes exactly one file.",
     inputSchema: createSectionSchema,
     execute: async (input: z.infer<typeof createSectionSchema>) => {
-      return createSectionToolExecute(input, chatId);
+      return createSectionToolExecute(input, chatId, userId);
     },
   } as any);
 }
