@@ -172,11 +172,38 @@ function ChatInner({
     },
   });
 
+  const statusRef = useRef(status);
   useEffect(() => {
-    if (chatId && resumeAttemptedForRef.current !== chatId) {
-      resumeAttemptedForRef.current = chatId;
-      resumeStream();
-    }
+    statusRef.current = status;
+  }, [status]);
+
+  useEffect(() => {
+    if (!chatId) return;
+    if (resumeAttemptedForRef.current === chatId) return;
+
+    resumeAttemptedForRef.current = chatId;
+
+    const controller = new AbortController();
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/chat/${encodeURIComponent(chatId)}/stream/status`,
+          { cache: "no-store", signal: controller.signal }
+        );
+        if (!res.ok) return;
+        const data = (await res.json().catch(() => null)) as { active?: boolean } | null;
+        if (!data?.active) return;
+
+        const s = statusRef.current;
+        if (s === "streaming" || s === "submitted") return;
+
+        resumeStream();
+      } catch {
+        // ignore
+      }
+    })();
+
+    return () => controller.abort();
   }, [chatId, resumeStream]);
 
   useEffect(() => {

@@ -22,7 +22,7 @@ export default function RootLayout({
       lang="en"
       className="bg-white dark:bg-gray-950 text-black dark:text-white"
     >
-      <body className="min-h-[100dvh] bg-gray-50">
+      <body className="min-h-[100dvh] bg-[#f8fafc]">
         <SWRConfig
           value={{
             fallback: {
