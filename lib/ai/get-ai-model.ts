@@ -64,10 +64,5 @@ export async function getAIModel(useLighterModel: boolean = false) {
     return openai(useLighterModel ? lighterModelName : modelName);
   }
 
-  if (modelProvider === "anthropic") {
-    const { anthropic } = await import("@ai-sdk/anthropic");
-    return anthropic(useLighterModel ? lighterModelName : modelName);
-  }
-
   throw new Error(`Unsupported AI model provider: ${modelProvider}`);
 }

@@ -89,7 +89,7 @@ export function SignUpForm({
                   name="password"
                   type="password"
                   autoComplete="new-password"
-                  placeholder="Enter new password"
+                  placeholder="Enter your password"
                   required
                   minLength={8}
                   maxLength={100}

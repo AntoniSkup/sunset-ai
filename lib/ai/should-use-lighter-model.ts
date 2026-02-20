@@ -17,10 +17,6 @@ export async function shouldUseLighterModel(
     } else if (modelProvider === "openai") {
       const { openai } = await import("@ai-sdk/openai");
       routerModel = openai("gpt-4o-mini");
-    } else if (modelProvider === "anthropic") {
-      const { anthropic } = await import("@ai-sdk/anthropic");
-      const lighterModel = process.env.AI_LIGHTER_MODEL_NAME || "claude-3-5-haiku-20241022";
-      routerModel = anthropic(lighterModel);
     } else {
       return false;
     }
