@@ -57,47 +57,24 @@ function escapeToolAttr(value: string): string {
     .replace(/>/g, "&gt;");
 }
 
-function buildToolMarkerLines(
-  markers: Array<{ id: number; title: string; toolName: string }>
-): string {
-  return markers
-    .map(
-      (m) =>
-        `<tool toolName="${escapeToolAttr(m.toolName)}" title="${escapeToolAttr(
-          m.title
-        )}" id=${m.id} />`
-    )
-    .join("\n");
-}
+/** Single segment of the assistant response: either text or a tool marker (in order). */
+type ContentSegment =
+  | { type: "text"; text: string }
+  | { type: "tool"; id: number; title: string; toolName: string };
 
-function injectToolMarkersIntoAssistantText(
-  text: string,
-  markers: Array<{ id: number; title: string; toolName: string }>
-): string {
-  if (!markers.length) return text;
-  const markerBlock = buildToolMarkerLines(markers);
-
-  const candidates = [
-    /(^Let me build this for you:\s*$)/im,
-    /(^Let me build this now:\s*$)/im,
-    /(^Let me build.*:\s*$)/im,
-  ];
-
-  for (const re of candidates) {
-    const match = text.match(re);
-    if (match && typeof match.index === "number") {
-      const insertPos = match.index + match[0].length;
-      return (
-        text.slice(0, insertPos).trimEnd() +
-        "\n\n" +
-        markerBlock +
-        "\n\n" +
-        text.slice(insertPos).trimStart()
-      ).trim();
+function buildOrderedAssistantContent(segments: ContentSegment[]): string {
+  const parts: string[] = [];
+  for (const seg of segments) {
+    if (seg.type === "text") {
+      const t = seg.text.trim();
+      if (t) parts.push(t);
+    } else {
+      parts.push(
+        `<tool toolName="${escapeToolAttr(seg.toolName)}" title="${escapeToolAttr(seg.title)}" id=${seg.id} />`
+      );
     }
   }
-
-  return `${text.trim()}\n\n${markerBlock}`.trim();
+  return parts.join("\n\n").trim();
 }
 
 async function processRequestQueue(chatId: string): Promise<void> {
@@ -151,7 +128,7 @@ async function chatHandler(request: NextRequest) {
       userId: user.id,
       chatId,
     });
-    console.log("useLighterModel", useLighterModel);
+
     const model = await getAIModel(useLighterModel);
 
     const createSiteToolCall = createSiteTool(chatId);
@@ -185,8 +162,10 @@ async function chatHandler(request: NextRequest) {
       }
     }
 
-    const toolMarkers: Array<{ id: number; title: string; toolName: string }> =
-      [];
+    // Here we start with the chat request
+    // Accumulate assistant content in true order: text, tool, text, tool, ... (per step.content)
+    const contentSegments: ContentSegment[] = [];
+    let stepCounter = 0;
     let lastSuccessfulRevision: {
       chatId: string;
       revisionNumber: number;
@@ -201,6 +180,8 @@ async function chatHandler(request: NextRequest) {
         : lastMessage?.role === "user" && typeof lastMessage.content === "string"
           ? lastMessage.content
           : "") || "";
+          
+    // Langfuse
     updateActiveObservation({ input: lastUserText.trim() || undefined });
     updateActiveTrace({
       name: "chat-message",
@@ -226,30 +207,48 @@ async function chatHandler(request: NextRequest) {
       },
       onStepFinish: async (step) => {
         try {
-          const stepNumber = (step as any).step ?? null;
-          const staticCalls = (step as any).staticToolCalls ?? [];
+          stepCounter += 1;
+          const stepNumber = stepCounter;
+          const content = Array.isArray((step as any).content)
+            ? ((step as any).content as Array<{ type: string; text?: string; toolCallId?: string; toolName?: string; args?: unknown; input?: unknown }>)
+            : [];
           const staticResults = (step as any).staticToolResults ?? [];
 
-          for (const call of staticCalls) {
-            const toolName =
-              (call as any).toolName ?? (call as any).name ?? "unknown";
-            const toolCallId = (call as any).toolCallId ?? (call as any).id ?? null;
-            const toolRow = await createChatToolCall({
-              chatId: chat.id,
-              stepNumber,
-              state: "call",
-              toolName,
-              toolCallId,
-              input: call,
-            });
-            const destination = getDestinationFromToolCall(call);
-            toolMarkers.push({
-              id: toolRow.id,
-              title:
-                destination ||
-                (toolName === "create_site" ? "landing/index.html" : getToolTitle(toolName)),
-              toolName,
-            });
+          // Process step.content in order so DB message reflects "Text 1" → tool 1 → "Text 2" structure
+          for (const part of content) {
+            if (part?.type === "text" && typeof part.text === "string") {
+              const t = part.text.trim();
+              if (t) contentSegments.push({ type: "text", text: t });
+            } else if (part?.type === "tool-call") {
+              const toolName =
+                (part as any).toolName ?? (part as any).name ?? "unknown";
+              const toolCallId =
+                (part as any).toolCallId ?? (part as any).id ?? null;
+              const callPayload = {
+                toolCallId,
+                toolName,
+                args: (part as any).args ?? (part as any).input,
+              };
+              const toolRow = await createChatToolCall({
+                chatId: chat.id,
+                stepNumber,
+                state: "call",
+                toolName,
+                toolCallId,
+                input: callPayload,
+              });
+              const destination = getDestinationFromToolCall(part as any);
+              contentSegments.push({
+                type: "tool",
+                id: toolRow.id,
+                title:
+                  destination ||
+                  (toolName === "create_site"
+                    ? "landing/index.html"
+                    : getToolTitle(toolName)),
+                toolName,
+              });
+            }
           }
 
           for (const res of staticResults) {
@@ -279,11 +278,8 @@ async function chatHandler(request: NextRequest) {
           console.error("Failed to persist tool calls/results:", e);
         }
       },
-      onFinish: async ({ text }) => {
-        const finalText =
-          text && text.trim()
-            ? injectToolMarkersIntoAssistantText(text.trim(), toolMarkers)
-            : text ?? "";
+      onFinish: async () => {
+        const finalText = buildOrderedAssistantContent(contentSegments);
         if (finalText) {
           try {
             await createChatMessage({
