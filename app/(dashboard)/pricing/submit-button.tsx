@@ -1,7 +1,10 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { ArrowRight, Loader2 } from "lucide-react";
+import {
+  ArrowRightIcon,
+  ArrowPathIcon,
+} from "@heroicons/react/24/outline";
 import { useFormStatus } from "react-dom";
 
 export function SubmitButton() {
@@ -16,13 +19,13 @@ export function SubmitButton() {
     >
       {pending ? (
         <>
-          <Loader2 className="animate-spin mr-2 h-4 w-4" />
+          <ArrowPathIcon className="animate-spin mr-2 h-4 w-4" />
           Loading...
         </>
       ) : (
         <>
           Get Started
-          <ArrowRight className="ml-2 h-4 w-4" />
+          <ArrowRightIcon className="ml-2 h-4 w-4" />
         </>
       )}
     </Button>

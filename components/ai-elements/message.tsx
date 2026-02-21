@@ -13,9 +13,9 @@ import type { FileUIPart, UIMessage } from "ai";
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
-  PaperclipIcon,
-  XIcon,
-} from "lucide-react";
+  PaperClipIcon,
+  XMarkIcon,
+} from "@heroicons/react/24/outline";
 import type { ComponentProps, HTMLAttributes, ReactElement } from "react";
 import { createContext, memo, useContext, useEffect, useState } from "react";
 import { Streamdown } from "streamdown";
@@ -45,7 +45,7 @@ export const MessageContent = ({
   <div
     className={cn(
       "is-user:bg-[#222424] flex w-fit max-w-full min-w-0 flex-col gap-2 overflow-hidden text-sm",
-      "group-[.is-user]:ml-auto group-[.is-user]:rounded-full group-[.is-user]:bg-[#222424] group-[.is-user]:px-4 group-[.is-user]:py-2 group-[.is-user]:text-white",
+      "group-[.is-user]:ml-auto group-[.is-user]:rounded-lg group-[.is-user]:bg-[#222424] group-[.is-user]:px-4 group-[.is-user]:py-2 group-[.is-user]:text-white",
       "group-[.is-assistant]:text-foreground",
       className
     )}
@@ -251,7 +251,7 @@ export const MessageBranchPrevious = ({
       variant="ghost"
       {...props}
     >
-      {children ?? <ChevronLeftIcon size={14} />}
+      {children ?? <ChevronLeftIcon className="size-3.5" />}
     </Button>
   );
 };
@@ -275,7 +275,7 @@ export const MessageBranchNext = ({
       variant="ghost"
       {...props}
     >
-      {children ?? <ChevronRightIcon size={14} />}
+      {children ?? <ChevronRightIcon className="size-3.5" />}
     </Button>
   );
 };
@@ -382,7 +382,7 @@ export function MessageAttachment({
               type="button"
               variant="ghost"
             >
-              <XIcon />
+              <XMarkIcon className="size-4" />
               <span className="sr-only">Remove</span>
             </Button>
           )}
@@ -392,7 +392,7 @@ export function MessageAttachment({
           <Tooltip>
             <TooltipTrigger asChild>
               <div className="flex size-full shrink-0 items-center justify-center rounded-lg bg-red-500 text-muted-foreground">
-                <PaperclipIcon className="size-4" />
+                <PaperClipIcon className="size-4" />
               </div>
             </TooltipTrigger>
             <TooltipContent>
@@ -410,7 +410,7 @@ export function MessageAttachment({
               type="button"
               variant="ghost"
             >
-              <XIcon />
+              <XMarkIcon className="size-4" />
               <span className="sr-only">Remove</span>
             </Button>
           )}

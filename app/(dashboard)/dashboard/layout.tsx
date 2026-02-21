@@ -4,7 +4,14 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Users, Settings, Shield, Activity, Menu, LogOut } from "lucide-react";
+import {
+  UsersIcon,
+  Cog6ToothIcon,
+  ShieldCheckIcon,
+  ChartBarIcon,
+  Bars3Icon,
+  ArrowRightOnRectangleIcon,
+} from "@heroicons/react/24/outline";
 import { signOut } from "@/app/(login)/actions";
 import { mutate } from "swr";
 
@@ -24,10 +31,10 @@ export default function DashboardLayout({
   }
 
   const navItems = [
-    { href: "/dashboard", icon: Users, label: "Team" },
-    { href: "/dashboard/general", icon: Settings, label: "General" },
-    { href: "/dashboard/activity", icon: Activity, label: "Activity" },
-    { href: "/dashboard/security", icon: Shield, label: "Security" },
+    { href: "/dashboard", icon: UsersIcon, label: "Team" },
+    { href: "/dashboard/general", icon: Cog6ToothIcon, label: "General" },
+    { href: "/dashboard/activity", icon: ChartBarIcon, label: "Activity" },
+    { href: "/dashboard/security", icon: ShieldCheckIcon, label: "Security" },
   ];
 
   return (
@@ -41,7 +48,7 @@ export default function DashboardLayout({
           variant="ghost"
           onClick={() => setIsSidebarOpen(!isSidebarOpen)}
         >
-          <Menu className="h-6 w-6" />
+          <Bars3Icon className="h-6 w-6" />
           <span className="sr-only">Toggle sidebar</span>
         </Button>
       </div>
@@ -78,7 +85,7 @@ export default function DashboardLayout({
                   handleSignOut();
                 }}
               >
-                <LogOut className="h-4 w-4 mr-2" />
+                <ArrowRightOnRectangleIcon className="h-4 w-4 mr-2" />
                 Log out
               </Button>
             </div>

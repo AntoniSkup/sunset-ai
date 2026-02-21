@@ -1,30 +1,32 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  Settings,
-  LogOut,
-  UserPlus,
-  Lock,
-  UserCog,
-  AlertCircle,
-  UserMinus,
-  Mail,
-  CheckCircle,
-  type LucideIcon,
-} from "lucide-react";
+  Cog6ToothIcon,
+  ArrowRightOnRectangleIcon,
+  UserPlusIcon,
+  LockClosedIcon,
+  UserCircleIcon,
+  ExclamationCircleIcon,
+  UserMinusIcon,
+  EnvelopeIcon,
+  CheckCircleIcon,
+} from "@heroicons/react/24/outline";
+import type { ComponentType, SVGProps } from "react";
 import { ActivityType } from "@/lib/db/schema";
 import { getActivityLogs } from "@/lib/db/queries";
 
-const iconMap: Record<ActivityType, LucideIcon> = {
-  [ActivityType.SIGN_UP]: UserPlus,
-  [ActivityType.SIGN_IN]: UserCog,
-  [ActivityType.SIGN_OUT]: LogOut,
-  [ActivityType.UPDATE_PASSWORD]: Lock,
-  [ActivityType.DELETE_ACCOUNT]: UserMinus,
-  [ActivityType.UPDATE_ACCOUNT]: Settings,
-  [ActivityType.CREATE_TEAM]: UserPlus,
-  [ActivityType.REMOVE_TEAM_MEMBER]: UserMinus,
-  [ActivityType.INVITE_TEAM_MEMBER]: Mail,
-  [ActivityType.ACCEPT_INVITATION]: CheckCircle,
+type IconComponent = ComponentType<SVGProps<SVGSVGElement>>;
+
+const iconMap: Record<ActivityType, IconComponent> = {
+  [ActivityType.SIGN_UP]: UserPlusIcon,
+  [ActivityType.SIGN_IN]: UserCircleIcon,
+  [ActivityType.SIGN_OUT]: ArrowRightOnRectangleIcon,
+  [ActivityType.UPDATE_PASSWORD]: LockClosedIcon,
+  [ActivityType.DELETE_ACCOUNT]: UserMinusIcon,
+  [ActivityType.UPDATE_ACCOUNT]: Cog6ToothIcon,
+  [ActivityType.CREATE_TEAM]: UserPlusIcon,
+  [ActivityType.REMOVE_TEAM_MEMBER]: UserMinusIcon,
+  [ActivityType.INVITE_TEAM_MEMBER]: EnvelopeIcon,
+  [ActivityType.ACCEPT_INVITATION]: CheckCircleIcon,
 };
 
 function getRelativeTime(date: Date) {
@@ -84,7 +86,7 @@ export default async function ActivityPage() {
           {logs.length > 0 ? (
             <ul className="space-y-4">
               {logs.map((log) => {
-                const Icon = iconMap[log.action as ActivityType] || Settings;
+                const Icon = iconMap[log.action as ActivityType] || Cog6ToothIcon;
                 const formattedAction = formatAction(
                   log.action as ActivityType,
                 );
@@ -109,7 +111,7 @@ export default async function ActivityPage() {
             </ul>
           ) : (
             <div className="flex flex-col items-center justify-center text-center py-12">
-              <AlertCircle className="h-12 w-12 text-orange-500 mb-4" />
+              <ExclamationCircleIcon className="h-12 w-12 text-orange-500 mb-4" />
               <h3 className="text-lg font-semibold text-gray-900 mb-2">
                 No activity yet
               </h3>

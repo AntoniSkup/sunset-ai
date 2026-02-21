@@ -9,7 +9,11 @@ import {
   DialogTitle,
 } from '../ui/dialog';
 import { Button } from '../ui/button';
-import { Check, ExternalLink, Copy } from 'lucide-react';
+import {
+  CheckIcon,
+  ArrowTopRightOnSquareIcon,
+  ClipboardDocumentIcon,
+} from "@heroicons/react/24/outline";
 import { useState } from 'react';
 
 interface PublishedSuccessModalProps {
@@ -50,7 +54,7 @@ export function PublishedSuccessModal({
         <DialogHeader>
           <div className="flex items-center gap-3 mb-2">
             <div className="flex items-center justify-center w-12 h-12 rounded-full bg-green-100">
-              <Check className="h-6 w-6 text-green-600" />
+              <CheckIcon className="h-6 w-6 text-green-600" />
             </div>
             <DialogTitle className="text-2xl font-bold">
               Your website has been published!
@@ -76,12 +80,12 @@ export function PublishedSuccessModal({
             >
               {copied ? (
                 <>
-                  <Check className="h-4 w-4 mr-1" />
+                  <CheckIcon className="h-4 w-4 mr-1" />
                   Copied!
                 </>
               ) : (
                 <>
-                  <Copy className="h-4 w-4 mr-1" />
+                  <ClipboardDocumentIcon className="h-4 w-4 mr-1" />
                   Copy
                 </>
               )}
@@ -94,7 +98,7 @@ export function PublishedSuccessModal({
               className="flex-1"
               onClick={() => window.open(fullUrl, '_blank')}
             >
-              <ExternalLink className="h-4 w-4 mr-2" />
+              <ArrowTopRightOnSquareIcon className="h-4 w-4 mr-2" />
               View Website
             </Button>
             <Button

@@ -18,7 +18,10 @@ import { Suspense } from "react";
 import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
-import { Loader2, PlusCircle } from "lucide-react";
+import {
+  ArrowPathIcon,
+  PlusCircleIcon,
+} from "@heroicons/react/24/outline";
 
 type ActionState = {
   error?: string;
@@ -246,12 +249,12 @@ function InviteTeamMember() {
           >
             {isInvitePending ? (
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
                 Inviting...
               </>
             ) : (
               <>
-                <PlusCircle className="mr-2 h-4 w-4" />
+                <PlusCircleIcon className="mr-2 h-4 w-4" />
                 Invite Member
               </>
             )}

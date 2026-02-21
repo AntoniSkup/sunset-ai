@@ -1,5 +1,9 @@
 import { Button } from "@/components/ui/button";
-import { ArrowRight, CreditCard, Database } from "lucide-react";
+import {
+  ArrowRightIcon,
+  CreditCardIcon,
+  CircleStackIcon,
+} from "@heroicons/react/24/outline";
 import { Terminal } from "./terminal";
 
 export default function HomePage() {
@@ -29,7 +33,7 @@ export default function HomePage() {
                     className="text-lg rounded-full"
                   >
                     Deploy your own
-                    <ArrowRight className="ml-2 h-5 w-5" />
+                    <ArrowRightIcon className="ml-2 h-5 w-5" />
                   </Button>
                 </a>
               </div>
@@ -66,7 +70,7 @@ export default function HomePage() {
 
             <div className="mt-10 lg:mt-0">
               <div className="flex items-center justify-center h-12 w-12 rounded-md bg-orange-500 text-white">
-                <Database className="h-6 w-6" />
+                <CircleStackIcon className="h-6 w-6" />
               </div>
               <div className="mt-5">
                 <h2 className="text-lg font-medium text-gray-900">
@@ -81,7 +85,7 @@ export default function HomePage() {
 
             <div className="mt-10 lg:mt-0">
               <div className="flex items-center justify-center h-12 w-12 rounded-md bg-orange-500 text-white">
-                <CreditCard className="h-6 w-6" />
+                <CreditCardIcon className="h-6 w-6" />
               </div>
               <div className="mt-5">
                 <h2 className="text-lg font-medium text-gray-900">
@@ -118,7 +122,7 @@ export default function HomePage() {
                   className="text-lg rounded-full"
                 >
                   View the code
-                  <ArrowRight className="ml-3 h-6 w-6" />
+                  <ArrowRightIcon className="ml-3 h-6 w-6" />
                 </Button>
               </a>
             </div>

@@ -16,7 +16,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { signIn } from "@/app/(login)/actions";
 import type { ActionState } from "@/lib/auth/middleware";
-import { Loader2 } from "lucide-react";
+import { ArrowPathIcon } from "@heroicons/react/24/outline";
 
 export function LoginForm({
   className,
@@ -104,7 +104,7 @@ export function LoginForm({
                 <Button type="submit" disabled={isPending} className="w-full">
                   {isPending ? (
                     <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
                       Signing in...
                     </>
                   ) : (

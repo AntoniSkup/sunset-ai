@@ -1,7 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Copy, Check } from "lucide-react";
+import {
+  ClipboardDocumentIcon,
+  CheckIcon,
+} from "@heroicons/react/24/outline";
 
 export function Terminal() {
   const [terminalStep, setTerminalStep] = useState(0);
@@ -46,9 +49,9 @@ export function Terminal() {
             aria-label="Copy to clipboard"
           >
             {copied ? (
-              <Check className="h-5 w-5" />
+              <CheckIcon className="h-5 w-5" />
             ) : (
-              <Copy className="h-5 w-5" />
+              <ClipboardDocumentIcon className="h-5 w-5" />
             )}
           </button>
         </div>

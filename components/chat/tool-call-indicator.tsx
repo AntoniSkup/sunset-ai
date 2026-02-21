@@ -1,7 +1,11 @@
 "use client";
 
 import React from "react";
-import { Loader2, FileCode, CheckCircle2 } from "lucide-react";
+import {
+  ArrowPathIcon,
+  CodeBracketSquareIcon,
+  CheckCircleIcon,
+} from "@heroicons/react/24/outline";
 import { cn } from "@/lib/utils";
 
 interface ToolCallIndicatorProps {
@@ -34,16 +38,16 @@ export function ToolCallIndicator({
     >
       {isComplete ? (
         <>
-          <CheckCircle2 className="h-4 w-4 text-green-600" />
+          <CheckCircleIcon className="h-4 w-4 text-green-600" />
           <span className="text-sm text-black">Wrote</span>
-          <FileCode className="h-4 w-4" />
+          <CodeBracketSquareIcon className="h-4 w-4" />
           <span className="font-mono text-xs">{file}</span>
         </>
       ) : (
         <>
-          <Loader2 className="h-4 w-4 animate-spin" />
+          <ArrowPathIcon className="h-4 w-4 animate-spin" />
           <span className="text-sm text-black">Writing</span>
-          <FileCode className="h-4 w-4" />
+          <CodeBracketSquareIcon className="h-4 w-4" />
           <span className="font-mono text-xs">{file}</span>
         </>
       )}

@@ -1,7 +1,10 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { ArrowUp, Loader2 } from "lucide-react";
+import {
+  ArrowUpIcon,
+  ArrowPathIcon,
+} from "@heroicons/react/24/outline";
 import { FormEvent, useRef } from "react";
 import { cn } from "@/lib/utils";
 
@@ -64,9 +67,9 @@ export function ChatInput({
           title="Send message"
         >
           {isLoading ? (
-            <Loader2 className="h-5 w-5 animate-spin" />
+            <ArrowPathIcon className="h-5 w-5 animate-spin" />
           ) : (
-            <ArrowUp className="h-6 w-6" />
+            <ArrowUpIcon className="h-6 w-6" />
           )}
         </Button>
       </div>

@@ -6,7 +6,11 @@ import Link from "next/link";
 import { nanoid } from "nanoid";
 import { usePendingMessageStore } from "@/lib/stores/usePendingMessageStore";
 import TextareaAutosize from "react-textarea-autosize";
-import { Plus, ArrowUp, Loader2 } from "lucide-react";
+import {
+  PlusIcon,
+  ArrowUpIcon,
+  ArrowPathIcon,
+} from "@heroicons/react/24/outline";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { motion } from "motion/react";
@@ -103,12 +107,21 @@ export default function StartPage() {
     <div
       className="min-h-full overflow-y-auto relative"
       style={{
-        backgroundImage: "url(/mesh-gradient-4.png)",
+        // backgroundImage: "url(/mesh-gradient-4.png)",
         backgroundSize: "cover",
         backgroundPosition: "center",
         backgroundAttachment: "fixed",
       }}
     >
+      <header className="sticky top-0 z-10 flex items-center h-12 justify-start w-full px-4 sm:px-6 bg-white/80 backdrop-blur-sm border-b border-gray-200/50 px-4 sm:px-6 lg:px-8">
+        <Link href="/start" className="flex items-center" aria-label="Sunset home">
+          <img
+            src="/sunset-logo.png"
+            alt="Sunset"
+            className="h-8 w-auto object-contain"
+          />
+        </Link>
+      </header>
 
       <div className="relative flex flex-col min-h-full">
         <div className="flex flex-col items-center justify-center pt-32 sm:pt-40 md:pt-48 pb-12 px-4">
@@ -116,7 +129,7 @@ export default function StartPage() {
             initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, ease: "easeOut" }}
-            className="text-3xl sm:text-4xl font-bold text-gray-900 tracking-tight text-center text-white"
+            className="text-3xl sm:text-4xl font-bold text-gray-900 tracking-tight text-center text-black"
           >
             What do you want to make?
           </motion.h1>
@@ -128,7 +141,7 @@ export default function StartPage() {
                 className="flex-shrink-0 p-1.5 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
                 aria-label="Add attachment"
               >
-                <Plus className="h-5 w-5" />
+                <PlusIcon className="h-5 w-5" />
               </button>
               <TextareaAutosize
                 value={input}
@@ -158,9 +171,9 @@ export default function StartPage() {
                 aria-label="Submit"
               >
                 {isLoading ? (
-                  <Loader2 className="h-5 w-5 animate-spin" />
+                  <ArrowPathIcon className="h-5 w-5 animate-spin" />
                 ) : (
-                  <ArrowUp className="h-5 w-5" />
+                  <ArrowUpIcon className="h-5 w-5" />
                 )}
               </Button>
             </div>

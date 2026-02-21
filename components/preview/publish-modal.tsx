@@ -19,7 +19,11 @@ import {
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
-import { Loader2, Eye, Pencil } from 'lucide-react';
+import {
+  ArrowPathIcon,
+  EyeIcon,
+  PencilSquareIcon,
+} from "@heroicons/react/24/outline";
 
 interface PublishModalProps {
   open: boolean;
@@ -142,7 +146,7 @@ export function PublishModal({
               onClick={() => setIsEditingUrl(!isEditingUrl)}
               disabled={!publishedUrl}
             >
-              <Pencil className="h-4 w-4 mr-1" />
+              <PencilSquareIcon className="h-4 w-4 mr-1" />
               Edit URL
             </Button>
           </div>
@@ -171,7 +175,7 @@ export function PublishModal({
 
         <div className="space-y-2">
           <div className="flex items-center gap-2">
-            <Eye className="h-4 w-4 text-muted-foreground" />
+            <EyeIcon className="h-4 w-4 text-muted-foreground" />
             <Label htmlFor="visibility">App Visibility</Label>
           </div>
           <Select value={visibility} onValueChange={setVisibility}>
@@ -200,7 +204,7 @@ export function PublishModal({
           >
             {isPublishing ? (
               <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                <ArrowPathIcon className="h-4 w-4 mr-2 animate-spin" />
                 Publishing...
               </>
             ) : (

@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { CircleIcon, Loader2 } from "lucide-react";
+import { SunIcon, ArrowPathIcon } from "@heroicons/react/24/outline";
 import { signIn, signUp } from "./actions";
 import { ActionState } from "@/lib/auth/middleware";
 
@@ -24,7 +24,7 @@ export function Login({ mode = "signin" }: { mode?: "signin" | "signup" }) {
     <div className="min-h-[100dvh] flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8 bg-gray-50">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="flex justify-center">
-          <CircleIcon className="h-12 w-12 text-orange-500" />
+          <SunIcon className="h-12 w-12 text-orange-500" />
         </div>
         <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
           {mode === "signin"
@@ -97,7 +97,7 @@ export function Login({ mode = "signin" }: { mode?: "signin" | "signup" }) {
             >
               {pending ? (
                 <>
-                  <Loader2 className="animate-spin mr-2 h-4 w-4" />
+                  <ArrowPathIcon className="animate-spin mr-2 h-4 w-4" />
                   Loading...
                 </>
               ) : mode === "signin" ? (

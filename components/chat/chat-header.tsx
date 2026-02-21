@@ -10,7 +10,8 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import sunsetLogo from "@/components/icons/sunset_logo.png";
+import sunsetLogo from "@/components/icons/sunset_logo_tree.png";
+import { HomeIcon, CreditCardIcon, Cog6ToothIcon, PencilSquareIcon } from "@heroicons/react/24/outline";
 
 interface ChatHeaderProps {
     chatId: string;
@@ -96,19 +97,19 @@ export function ChatHeader({ chatId, chatName, onRename }: ChatHeaderProps) {
                         <DropdownMenuContent align="start" className="w-48">
                             <DropdownMenuItem asChild>
                                 <Link href="/start" className="flex items-center cursor-pointer">
-                                    <Home className="mr-2 h-4 w-4" />
+                                    <HomeIcon className="mr-2 h-4 w-4 font-bold text-black" strokeWidth={1.5}/>
                                     Home
                                 </Link>
                             </DropdownMenuItem>
                             <DropdownMenuItem asChild>
                                 <Link href="/pricing" className="flex items-center cursor-pointer">
-                                    <CreditCard className="mr-2 h-4 w-4" />
+                                    <CreditCardIcon className="mr-2 h-4 w-4 font-bold text-black" strokeWidth={1.5}/>
                                     Preview payment
                                 </Link>
                             </DropdownMenuItem>
                             <DropdownMenuItem asChild>
                                 <Link href="/dashboard/general" className="flex items-center cursor-pointer">
-                                    <Settings className="mr-2 h-4 w-4" />
+                                    <Cog6ToothIcon className="mr-2 h-4 w-4 font-bold text-black" strokeWidth={1.5}/>
                                     Settings
                                 </Link>
                             </DropdownMenuItem>
@@ -143,7 +144,7 @@ export function ChatHeader({ chatId, chatName, onRename }: ChatHeaderProps) {
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="start" className="w-48">
                                     <DropdownMenuItem onSelect={handleRenameSelect}>
-                                        <Pencil className="mr-2 h-4 w-4" />
+                                        <PencilSquareIcon className="mr-2 h-4 w-4" />
                                         Rename chat
                                     </DropdownMenuItem>
                                 </DropdownMenuContent>
