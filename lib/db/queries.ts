@@ -20,11 +20,24 @@ import { verifyToken } from "@/lib/auth/session";
 import { generateText } from "ai";
 import { getAIModel } from "@/lib/ai/get-ai-model";
 
-export async function generateChatName(userQuery: string): Promise<string> {
+export async function generateChatName(
+  userQuery: string,
+  context?: { userId?: number; chatId?: string }
+): Promise<string> {
   const model = await getAIModel(true);
   const { text } = await generateText({
     model,
     prompt: `Generate a short, descriptive title (max 60 characters) for a website project based on this request: "${userQuery}"`,
+    experimental_telemetry: {
+      isEnabled: true,
+      functionId: "generate-chat-name",
+      metadata: context
+        ? {
+          ...(context.userId != null && { userId: context.userId }),
+          ...(context.chatId != null && { chatId: context.chatId }),
+        }
+        : undefined,
+    },
   });
   let cleaned = text.trim();
   if ((cleaned.startsWith('"') && cleaned.endsWith('"')) ||
@@ -249,21 +262,34 @@ export async function upsertLandingSiteFile(data: {
   return result[0];
 }
 
+const MAX_REVISION_RETRIES = 5;
+
 export async function createLandingSiteRevision(data: {
   chatId: string;
   userId: number;
 }) {
-  const revisionNumber = await getNextLandingSiteRevisionNumber(data.chatId);
-  const result = await db
-    .insert(landingSiteRevisions)
-    .values({
-      chatId: data.chatId,
-      userId: data.userId,
-      revisionNumber,
-    })
-    .returning();
+  for (let attempt = 0; attempt < MAX_REVISION_RETRIES; attempt++) {
+    const revisionNumber = await getNextLandingSiteRevisionNumber(data.chatId);
+    try {
+      const result = await db
+        .insert(landingSiteRevisions)
+        .values({
+          chatId: data.chatId,
+          userId: data.userId,
+          revisionNumber,
+        })
+        .returning();
 
-  return result[0];
+      return result[0];
+    } catch (err: unknown) {
+      const code = (err as { code?: string })?.code;
+      if (code === "23505" && attempt < MAX_REVISION_RETRIES - 1) {
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new Error("Failed to create revision after retries");
 }
 
 export async function createLandingSiteFileVersion(data: {
@@ -314,6 +340,54 @@ export async function getLatestLandingSiteFileContent(chatId: string, path: stri
   return result.length > 0 ? result[0] : null;
 }
 
+export async function getExistingLandingSiteFilesContent(
+  chatId: string,
+  excludePath?: string
+): Promise<Array<{ path: string; content: string }>> {
+  const rows = await db
+    .select({
+      path: landingSiteFiles.path,
+      content: landingSiteFileVersions.content,
+      revisionNumber: landingSiteRevisions.revisionNumber,
+    })
+    .from(landingSiteFiles)
+    .innerJoin(
+      landingSiteFileVersions,
+      eq(landingSiteFileVersions.fileId, landingSiteFiles.id)
+    )
+    .innerJoin(
+      landingSiteRevisions,
+      eq(landingSiteRevisions.id, landingSiteFileVersions.revisionId)
+    )
+    .where(eq(landingSiteFiles.chatId, chatId));
+
+  const latestByPath = new Map<
+    string,
+    { content: string; revisionNumber: number }
+  >();
+  for (const row of rows) {
+    const existing = latestByPath.get(row.path);
+    if (
+      !existing ||
+      (row.revisionNumber ?? 0) > existing.revisionNumber
+    ) {
+      latestByPath.set(row.path, {
+        content: row.content,
+        revisionNumber: row.revisionNumber ?? 0,
+      });
+    }
+  }
+
+  if (excludePath) {
+    latestByPath.delete(excludePath);
+  }
+
+  return Array.from(latestByPath.entries()).map(([path, { content }]) => ({
+    path,
+    content,
+  }));
+}
+
 export async function getLandingSiteFileContentAtOrBeforeRevision(data: {
   chatId: string;
   path: string;
@@ -354,7 +428,7 @@ export async function createChat(data: {
   let title = data.title;
 
   if (!title && data.userQuery) {
-    title = await generateChatName(data.userQuery);
+    title = await generateChatName(data.userQuery, { userId: data.userId });
   }
 
   const result = await db
@@ -390,7 +464,7 @@ export async function getChatsByUser(userId: number) {
 export async function updateChatByPublicId(
   chatPublicId: string,
   userId: number,
-  data: { title?: string }
+  data: { title?: string; screenshotUrl?: string | null }
 ) {
   const result = await db
     .update(chats)
@@ -402,6 +476,14 @@ export async function updateChatByPublicId(
     .returning();
 
   return result.length > 0 ? result[0] : null;
+}
+
+export async function updateChatScreenshotUrl(
+  chatPublicId: string,
+  userId: number,
+  screenshotUrl: string
+) {
+  return updateChatByPublicId(chatPublicId, userId, { screenshotUrl });
 }
 
 export async function createChatMessage(data: {

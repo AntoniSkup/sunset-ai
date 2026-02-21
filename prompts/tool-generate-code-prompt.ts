@@ -48,12 +48,35 @@ Generate exactly ONE HTML file for a landing site. Each tool call creates/update
 - Use consistent container and spacing patterns (e.g., max-w-6xl mx-auto px-4 py-12).
 - If the section needs a CTA button, use a clear label and a safe href (e.g., "#contact" or "#pricing").
 
+**Design consistency (when existing sections are provided)**
+- Match the design of existing sections: same colors, typography, spacing, button styles, and container patterns.
+- Use the same Tailwind classes for similar elements (e.g., if headings use text-2xl font-serif, use the same).
+- Keep the visual language consistent across the entire page.
+
 Now generate the section requested by the userRequest for the given destination.
   `.trim();
 }
 
 export function buildModificationContext(previousCodeVersion: string): string {
   return `\nThis is a modification request. The previous code version is:\n\n${previousCodeVersion}\n\nPlease modify ONLY the parts requested by the user while preserving the rest of the structure and content.`;
+}
+
+export function buildExistingSectionsContext(
+  sections: Array<{ path: string; content: string }>
+): string {
+  if (sections.length === 0) return "";
+
+  const blocks = sections
+    .map((s) => `--- ${s.path} ---\n${s.content}`)
+    .join("\n\n");
+
+  return `
+
+**Existing sections (match their design - colors, typography, spacing, button styles):**
+
+${blocks}
+
+`;
 }
 
 export function buildUserRequestSection(userRequest: string): string {

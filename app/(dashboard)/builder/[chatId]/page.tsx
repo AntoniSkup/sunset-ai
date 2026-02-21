@@ -45,7 +45,7 @@ function BuilderContent({
         <Panel defaultSize={30}>
           <div className="h-full w-full rounded-lg bg-background overflow-hidden flex flex-col">
             <div className="shrink-0">
-              <ChatHeader chatId={chatId} chatName={chatName} />
+              <ChatHeader chatId={chatId} chatName={chatName} onRename={setChatName} />
             </div>
             <div className="flex-1 min-h-0">
               <Chat chatId={chatId} />

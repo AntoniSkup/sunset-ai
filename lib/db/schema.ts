@@ -284,6 +284,7 @@ export const chats = pgTable(
       .notNull()
       .references(() => users.id),
     title: varchar("title", { length: 255 }),
+    screenshotUrl: text("screenshot_url"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },

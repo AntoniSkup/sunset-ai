@@ -1,0 +1,1 @@
+ALTER TABLE "chats" ADD COLUMN "screenshot_url" text;

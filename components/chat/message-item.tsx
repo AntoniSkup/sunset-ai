@@ -186,32 +186,34 @@ export const MessageItem = React.memo(function MessageItem({
         ) : (
           <>
             {tokens.map((t, idx) => {
-              if (t.type === "text") {
-                return <MessageResponse key={`t-${idx}`}>{t.text}</MessageResponse>;
+              switch (t.type) {
+                case "text":
+                  return <MessageResponse key={`t-${idx}`}>{t.text}</MessageResponse>;
+                case "tool-marker":
+                  return (
+                    <div key={`m-${t.id || idx}`} className="my-1">
+                      <ToolCallIndicator
+                        toolName={t.toolName}
+                        fileName={t.title}
+                        isComplete={true}
+                      />
+                    </div>
+                  );
+                case "tool-call": {
+                  const fileName = t.destination || getDefaultFileNameForTool(t.toolName);
+                  return (
+                    <div key={`c-${t.toolCallId || idx}`} className="my-1">
+                      <ToolCallIndicator
+                        toolName={t.toolName}
+                        fileName={fileName}
+                        isComplete={t.isComplete}
+                      />
+                    </div>
+                  );
+                }
+                default:
+                  return ((_: never) => null)(t);
               }
-
-              if (t.type === "tool-marker") {
-                return (
-                  <div key={`m-${t.id || idx}`} className="my-1">
-                    <ToolCallIndicator
-                      toolName={t.toolName}
-                      fileName={t.title}
-                      isComplete={true}
-                    />
-                  </div>
-                );
-              }
-
-              const fileName = t.destination || getDefaultFileNameForTool(t.toolName);
-              return (
-                <div key={`c-${t.toolCallId || idx}`} className="my-1">
-                  <ToolCallIndicator
-                    toolName={t.toolName}
-                    fileName={fileName}
-                    isComplete={t.isComplete}
-                  />
-                </div>
-              );
             })}
 
             {isStreaming && (

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { nanoid } from "nanoid";
 import { usePendingMessageStore } from "@/lib/stores/usePendingMessageStore";
+import TextareaAutosize from "react-textarea-autosize";
 import { Plus, ArrowUp, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -14,6 +15,8 @@ type Chat = {
   id: number;
   publicId: string;
   title: string | null;
+  screenshotUrl?: string | null;
+  screenshot_url?: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -127,7 +130,7 @@ export default function StartPage() {
               >
                 <Plus className="h-5 w-5" />
               </button>
-              <textarea
+              <TextareaAutosize
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => {
@@ -140,16 +143,12 @@ export default function StartPage() {
                 }}
                 placeholder="Describe your idea. Attach a design to guide the result."
                 disabled={isLoading}
+                maxRows={10}
                 className={cn(
                   "flex-1 min-w-0 bg-transparent text-gray-900 text-sm resize-none overflow-auto",
                   "focus:outline-none placeholder:text-gray-400",
                   "disabled:opacity-50"
                 )}
-                rows={1}
-                style={{
-                  minHeight: "24px",
-                  maxHeight: "120px",
-                }}
               />
               <Button
                 type="submit"
@@ -190,10 +189,18 @@ export default function StartPage() {
                     href={`/builder/${chat.publicId}`}
                     className="group flex flex-col rounded-xl border border-gray-200 bg-white overflow-hidden shadow-sm transition-all hover:border-gray-300 hover:shadow-md"
                   >
-                    <div className="aspect-video w-full bg-gray-100 flex items-center justify-center border-b border-gray-100">
-                      <div className="text-gray-400 text-4xl font-bold">
-                        {(chat.title || "U").charAt(0).toUpperCase()}
-                      </div>
+                    <div className="aspect-video w-full bg-gray-100 flex items-center justify-center border-b border-gray-100 overflow-hidden">
+                      {(chat.screenshotUrl ?? chat.screenshot_url) ? (
+                        <img
+                          src={chat.screenshotUrl ?? chat.screenshot_url ?? ""}
+                          alt={chat.title || "Landing page preview"}
+                          className="w-full h-full object-cover object-top"
+                        />
+                      ) : (
+                        <div className="text-gray-400 text-4xl font-bold">
+                          {(chat.title || "U").charAt(0).toUpperCase()}
+                        </div>
+                      )}
                     </div>
                     <div className="p-4 flex flex-col gap-1">
                       <p className="font-medium text-gray-900 truncate">

@@ -1,4 +1,7 @@
-export async function shouldUseLighterModel(userQuestion: string): Promise<boolean> {
+export async function shouldUseLighterModel(
+  userQuestion: string,
+  context?: { userId?: number; chatId?: string }
+): Promise<boolean> {
   const modelProvider = process.env.AI_MODEL_PROVIDER;
 
   if (!modelProvider) {
@@ -7,7 +10,11 @@ export async function shouldUseLighterModel(userQuestion: string): Promise<boole
 
   try {
     let routerModel;
-    if (modelProvider === "openai") {
+    if (modelProvider === "google") {
+      const { google } = await import("@ai-sdk/google");
+      const lighterModel = process.env.AI_LIGHTER_MODEL_NAME || "gemini-3-flash-preview";
+      routerModel = google(lighterModel);
+    } else if (modelProvider === "openai") {
       const { openai } = await import("@ai-sdk/openai");
       routerModel = openai("gpt-4o-mini");
     } else {
@@ -18,6 +25,16 @@ export async function shouldUseLighterModel(userQuestion: string): Promise<boole
 
     const result = await generateText({
       model: routerModel,
+      experimental_telemetry: {
+        isEnabled: true,
+        functionId: "model-router",
+        metadata: context
+          ? {
+              ...(context.userId != null && { userId: context.userId }),
+              ...(context.chatId != null && { chatId: context.chatId }),
+            }
+          : undefined,
+      },
       system: `You are a routing assistant. Analyze the user's question and determine if it's a simple change request that can be answered with a lighter, faster model.
 
       Simple questions include:
@@ -35,7 +52,6 @@ export async function shouldUseLighterModel(userQuestion: string): Promise<boole
 
       Respond with ONLY "true" or "false" (lowercase, no quotes, no explanation). Default to "false" if uncertain.`,
       prompt: userQuestion,
-      maxTokens: 10,
     });
 
     const response = result.text.trim().toLowerCase();

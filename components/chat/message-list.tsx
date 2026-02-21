@@ -28,6 +28,7 @@ export function MessageList({
   const bottomSpacerRef = useRef<HTMLDivElement>(null);
   const [isMounted, setIsMounted] = useState(false);
   const lastUserMessageIdRef = useRef<string | null>(null);
+  const hasScrolledToBottomInitiallyRef = useRef(false);
   type ScrollMode = "auto" | "smooth";
 
   useEffect(() => {
@@ -117,6 +118,16 @@ export function MessageList({
     }
   }, [mergedMessages.length, isLoading]);
 
+  useEffect(() => {
+    if (!isMounted || mergedMessages.length === 0 || hasScrolledToBottomInitiallyRef.current)
+      return;
+
+    hasScrolledToBottomInitiallyRef.current = true;
+    requestAnimationFrame(() => {
+      scrollToBottom("auto");
+    });
+  }, [isMounted, mergedMessages.length]);
+
   if (!isMounted) {
     return (
       <div className="message-list-scroll h-full overflow-y-auto overflow-x-hidden">
@@ -131,8 +142,8 @@ export function MessageList({
                     onRetry
                       ? () => onRetry(item.data.id)
                       : () => {
-                          /* no-op */
-                        }
+                        /* no-op */
+                      }
                   }
                 />
               );
@@ -198,8 +209,8 @@ export function MessageList({
                     onRetry
                       ? () => onRetry(item.data.id)
                       : () => {
-                          /* no-op */
-                        }
+                        /* no-op */
+                      }
                   }
                 />
               </div>

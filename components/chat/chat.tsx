@@ -164,7 +164,9 @@ function ChatInner({
     },
   });
 
+  const statusRef = useRef(status);
   useEffect(() => {
+    //consider removing the useefefct
     if (
       chatId &&
       pendingMessage &&
