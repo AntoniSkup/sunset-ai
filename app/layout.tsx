@@ -1,7 +1,14 @@
 import "./globals.css";
 import type { Metadata, Viewport } from "next";
+import { Manrope } from "next/font/google";
 import { getUser, getTeamForUser } from "@/lib/db/queries";
+
 import { SWRConfig } from "swr";
+
+const manrope = Manrope({
+  subsets: ["latin"],
+  variable: "--font-manrope",
+});
 
 export const metadata: Metadata = {
   title: "Next.js SaaS Starter",
@@ -20,9 +27,9 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className="bg-white dark:bg-gray-950 text-black dark:text-white"
+      className={`${manrope.variable} bg-white dark:bg-gray-950 text-black dark:text-white`}
     >
-      <body className="min-h-[100dvh] bg-[#f8fafc]">
+      <body className={`${manrope.className} min-h-[100dvh] bg-[#f8fafc]`}>
         <SWRConfig
           value={{
             fallback: {

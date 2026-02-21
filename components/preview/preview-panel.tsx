@@ -10,6 +10,7 @@ import type {
 } from "@/lib/preview/update-preview";
 import { PREVIEW_EVENT_TYPE } from "@/lib/preview/update-preview";
 import loader from "@/components/icons/loader.svg";
+import sunsetLogoLarge from "@/components/icons/sunset_logo_large.png";
 
 interface PreviewPanelProps {
   className?: string;
@@ -224,25 +225,17 @@ export function PreviewPanel({ className, chatId }: PreviewPanelProps) {
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-6 px-4">
 
             <div className="text-center flex-col flex">
-              <object
-                key={loaderSrc}
-                data={loaderSrc}
-                type="image/svg+xml"
-                aria-label="Loading"
-                className="mx-auto mb-3 h-72 w-72"
-              >
-                <img
-                  src={loaderSrc}
-                  alt="Loading"
-                  className="mx-auto mb-3 h-72 w-72"
-                />
-              </object>
-              <span className="text-2xl font-medium">
+              <img src={sunsetLogoLarge.src} alt="Sunset logo large"
+                className="mx-auto mb-12"
+              />
+              
+              <span className="text-2xl font-medium mb-2">
                 Bringing your idea to life
-                <LoadingDots />
               </span>
+
+              <BuilderTipsFromButton active  />
+
             </div>
-            <BuilderTipsFromButton active className="mt-1" />
           </div>
         </div>
       )}

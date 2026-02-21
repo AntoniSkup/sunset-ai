@@ -10,6 +10,7 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import sunsetLogo from "@/components/icons/sunset_logo.png";
 
 interface ChatHeaderProps {
     chatId: string;
@@ -86,9 +87,10 @@ export function ChatHeader({ chatId, chatName, onRename }: ChatHeaderProps) {
                 <div className="flex items-center space-x-3 flex-1 min-w-0">
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <button
-                                className="w-6 h-6 rounded-full flex-shrink-0 bg-gradient-to-r from-[#DF5171] via-[#E6736A] to-[#EEAC7A] cursor-pointer hover:opacity-90 transition-opacity focus:outline-none  focus:ring-[#E6736A] hover:scale-105"
+                           <img src={sunsetLogo.src} alt="Sunset logo "
+                            className="w-7 h-7 shrink-0 hover:scale-95 click:scale-105 transition-all duration-200 ease-in-out"                     
                                 aria-label="Open menu"
+                                title="Sunset logo"
                             />
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="start" className="w-48">

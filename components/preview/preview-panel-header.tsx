@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from 'react'
+import { RocketLaunchIcon } from '@heroicons/react/24/outline'
 import { Button } from '../ui/button'
 import { PublishModal } from './publish-modal'
 import { PublishedSuccessModal } from './published-success-modal'
@@ -57,9 +58,9 @@ export default function PreviewPanelHeader({ chatId }: PreviewPanelHeaderProps) 
                             variant="default"
                             size="sm"
                             onClick={() => setIsPublishModalOpen(true)}
-                            className="text-white bg-gradient-to-r from-[#DF5171] via-[#E6736A] to-[#EEAC7A]"
-
+                            className="group text-white bg-[#222424] rounded-lg"
                         >
+                            <RocketLaunchIcon className="size-4 transition-transform duration-200 ease-in-out group-hover:-rotate-45" />
                             Publish
                         </Button>
                     )}
