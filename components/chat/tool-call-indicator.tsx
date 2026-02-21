@@ -4,9 +4,10 @@ import React from "react";
 import {
   ArrowPathIcon,
   CodeBracketSquareIcon,
-  CheckCircleIcon,
 } from "@heroicons/react/24/outline";
 import { cn } from "@/lib/utils";
+import { CheckCircle2 } from "lucide-react";
+import { CheckCircleIcon  } from '@heroicons/react/24/solid';
 
 interface ToolCallIndicatorProps {
   toolName: string;
@@ -38,7 +39,7 @@ export function ToolCallIndicator({
     >
       {isComplete ? (
         <>
-          <CheckCircleIcon className="h-4 w-4 text-green-600" />
+          <CheckCircleIcon  className="h-4 w-4 text-[#f87c07] " strokeWidth={1.5} />
           <span className="text-sm text-black">Wrote</span>
           <CodeBracketSquareIcon className="h-4 w-4" />
           <span className="font-mono text-xs">{file}</span>

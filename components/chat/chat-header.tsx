@@ -116,6 +116,8 @@ export function ChatHeader({ chatId, chatName, onRename }: ChatHeaderProps) {
                         </DropdownMenuContent>
                     </DropdownMenu>
 
+                    <div className="h-5 w-px bg-gray-200 flex-shrink-0" aria-hidden />
+
                     <div className="flex-1 min-w-0 flex items-center h-9 px-2 rounded-lg hover:bg-gray-100 transition-colors duration-200 ease-in-out">
                         {isRenaming ? (
                             <Input

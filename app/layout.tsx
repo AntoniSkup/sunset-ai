@@ -1,13 +1,14 @@
 import "./globals.css";
 import type { Metadata, Viewport } from "next";
-import { Manrope } from "next/font/google";
+import { IBM_Plex_Sans } from "next/font/google";
 import { getUser, getTeamForUser } from "@/lib/db/queries";
 
 import { SWRConfig } from "swr";
 
-const manrope = Manrope({
+const ibmPlexSans = IBM_Plex_Sans({
   subsets: ["latin"],
-  variable: "--font-manrope",
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-ibm-plex-sans",
 });
 
 export const metadata: Metadata = {
@@ -27,9 +28,9 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${manrope.variable} bg-white dark:bg-gray-950 text-black dark:text-white`}
+      className={`${ibmPlexSans.variable} bg-white dark:bg-gray-950 text-black dark:text-white`}
     >
-      <body className={`${manrope.className} min-h-[100dvh] bg-[#f8fafc]`}>
+      <body className={`${ibmPlexSans.className} min-h-[100dvh] bg-[#f8fafc]`}>
         <SWRConfig
           value={{
             fallback: {

@@ -7,6 +7,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { FormEvent, useRef } from "react";
 import { cn } from "@/lib/utils";
+import { ArrowUpCircleIcon } from "@heroicons/react/24/solid";
 
 interface ChatInputProps {
   input: string;
@@ -42,7 +43,7 @@ export function ChatInput({
           placeholder="What would you like to change?"
           disabled={isLoading}
           className={cn(
-            "w-full pl-4 pt-4 pr-16 text-sm resize-none overflow-auto",
+            "w-full pl-4 pt-4 pr-16 text-sm resize-none overflow-auto ",
             "focus:outline-none bg-transparent rounded-t-lg",
             "placeholder:text-muted-foreground",
             "disabled:opacity-50"
@@ -58,7 +59,9 @@ export function ChatInput({
           disabled={isLoading || !input.trim()}
           size="icon"
           className={cn(
-            "absolute top-4 right-4 w-[28px] h-[28px] p-1 rounded-lg bg-gradient-to-br from-pink-500 via-rose-500 to-orange-300",
+            "absolute top-4 right-4 w-[28px] h-[28px] p-1 rounded-full bg-[#222424]",
+            // "absolute top-4 right-4 w-[28px] h-[28px] p-1 rounded-full bg-gradient-to-br from-[#ffac08]  to-[#ff6613]",
+
             isLoading || !input.trim()
               ? "bg-muted text-muted-foreground hover:bg-muted"
               : ""
@@ -69,7 +72,7 @@ export function ChatInput({
           {isLoading ? (
             <ArrowPathIcon className="h-5 w-5 animate-spin" />
           ) : (
-            <ArrowUpIcon className="h-6 w-6" />
+            <ArrowUpIcon className="h-6 w-6" strokeWidth={2} />
           )}
         </Button>
       </div>

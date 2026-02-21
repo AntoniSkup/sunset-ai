@@ -300,9 +300,7 @@
   }
 
   body {
-    font-family:
-      ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji",
-      "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+    font-family: var(--font-ibm-plex-sans), ui-sans-serif, system-ui, sans-serif;
     font-style: normal;
     font-weight: 400;
     font-size: 14px;

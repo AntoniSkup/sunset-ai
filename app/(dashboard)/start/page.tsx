@@ -10,7 +10,16 @@ import {
   PlusIcon,
   ArrowUpIcon,
   ArrowPathIcon,
+  HomeIcon,
+  CreditCardIcon,
+  Cog6ToothIcon,
 } from "@heroicons/react/24/outline";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { motion } from "motion/react";
@@ -114,13 +123,41 @@ export default function StartPage() {
       }}
     >
       <header className="sticky top-0 z-10 flex items-center h-12 justify-start w-full px-4 sm:px-6 bg-white/80 backdrop-blur-sm border-b border-gray-200/50 px-4 sm:px-6 lg:px-8">
-        <Link href="/start" className="flex items-center" aria-label="Sunset home">
-          <img
-            src="/sunset-logo.png"
-            alt="Sunset"
-            className="h-8 w-auto object-contain"
-          />
-        </Link>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              className="flex items-center transition-transform duration-200 ease-out hover:scale-110 focus:outline-none focus:ring-2 focus:ring-gray-300 rounded"
+              aria-label="Open menu"
+            >
+              <img
+                src="/sunset-logo.png"
+                alt="Sunset"
+                className="h-8 w-auto object-contain"
+              />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-48">
+            <DropdownMenuItem asChild>
+              <Link href="/start" className="flex items-center cursor-pointer">
+                <HomeIcon className="mr-2 h-4 w-4" />
+                Home
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/pricing" className="flex items-center cursor-pointer">
+                <CreditCardIcon className="mr-2 h-4 w-4" />
+                Preview payment
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/dashboard/general" className="flex items-center cursor-pointer">
+                <Cog6ToothIcon className="mr-2 h-4 w-4" />
+                Settings
+              </Link>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </header>
 
       <div className="relative flex flex-col min-h-full">
