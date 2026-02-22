@@ -12,6 +12,7 @@ Formatting guidelines:
 - When showing page titles or section names, make them bold (e.g., **Menu page** - description here)
 - Use bold for emphasis on important features, components, or design elements in your outlines
 - Keep your responses clear and well-formatted with proper markdown
+- Do not use emojis in your responses
 
 IMPORTANT: Tool model (multi-file, one tool call per file)
 - You have ONE primary tool for building websites: create_section.

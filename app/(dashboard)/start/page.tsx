@@ -7,7 +7,6 @@ import { nanoid } from "nanoid";
 import { usePendingMessageStore } from "@/lib/stores/usePendingMessageStore";
 import TextareaAutosize from "react-textarea-autosize";
 import {
-  PlusIcon,
   ArrowUpIcon,
   ArrowPathIcon,
   HomeIcon,
@@ -21,8 +20,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 import { motion } from "motion/react";
+import sunsetLogoTree from "@/components/icons/sunset_logo_tree.png";
+import { BorderBeam } from "@/components/ui/border-beam";
 
 type Chat = {
   id: number;
@@ -113,147 +113,187 @@ export default function StartPage() {
   };
 
   return (
-    <div
-      className="min-h-full overflow-y-auto relative"
-      style={{
-        // backgroundImage: "url(/mesh-gradient-4.png)",
-        backgroundSize: "cover",
-        backgroundPosition: "center",
-        backgroundAttachment: "fixed",
-      }}
-    >
-      <header className="sticky top-0 z-10 flex items-center h-12 justify-start w-full px-4 sm:px-6 bg-white/80 backdrop-blur-sm border-b border-gray-200/50 px-4 sm:px-6 lg:px-8">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              className="flex items-center transition-transform duration-200 ease-out hover:scale-110 focus:outline-none focus:ring-2 focus:ring-gray-300 rounded"
-              aria-label="Open menu"
-            >
-              <img
-                src="/sunset-logo.png"
-                alt="Sunset"
-                className="h-8 w-auto object-contain"
-              />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-48">
-            <DropdownMenuItem asChild>
-              <Link href="/start" className="flex items-center cursor-pointer">
-                <HomeIcon className="mr-2 h-4 w-4" />
-                Home
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link href="/pricing" className="flex items-center cursor-pointer">
-                <CreditCardIcon className="mr-2 h-4 w-4" />
-                Preview payment
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link href="/dashboard/general" className="flex items-center cursor-pointer">
-                <Cog6ToothIcon className="mr-2 h-4 w-4" />
-                Settings
-              </Link>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </header>
+    <div className="min-h-screen w-full bg-background">
+      <div className="flex min-h-screen">
+        <aside className="hidden md:flex w-56 shrink-0 ">
+          <div className="flex h-full w-full flex-col px-3 py-3">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="inline-flex w-fit items-center rounded px-1 py-1 transition-transform duration-200 ease-out hover:scale-105 focus:outline-none focus:ring-gray-300"
+                  aria-label="Open menu"
+                >
+                  <img
+                    src="/sunset-logo.png"
+                    alt="Sunset"
+                    className="h-8 w-auto object-contain"
+                  />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-48">
+                <DropdownMenuItem asChild>
+                  <Link
+                    href="/start"
+                    className="flex items-center cursor-pointer"
+                  >
+                    <HomeIcon className="mr-2 h-4 w-4" />
+                    Home
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link
+                    href="/pricing"
+                    className="flex items-center cursor-pointer"
+                  >
+                    <CreditCardIcon className="mr-2 h-4 w-4" />
+                    Preview payment
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link
+                    href="/dashboard/general"
+                    className="flex items-center cursor-pointer"
+                  >
+                    <Cog6ToothIcon className="mr-2 h-4 w-4" />
+                    Settings
+                  </Link>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
 
-      <div className="relative flex flex-col min-h-full">
-        <div className="flex flex-col items-center justify-center pt-32 sm:pt-40 md:pt-48 pb-12 px-4">
-          <motion.h1
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, ease: "easeOut" }}
-            className="text-3xl sm:text-4xl font-bold text-gray-900 tracking-tight text-center text-black"
-          >
-            What do you want to make?
-          </motion.h1>
-
-          <form onSubmit={handleSubmit} className="w-full max-w-2xl mt-8">
-            <div className="relative flex items-center gap-3 rounded-2xl bg-white border border-gray-200 shadow-sm px-4 py-3 min-h-[56px]">
-              <button
-                type="button"
-                className="flex-shrink-0 p-1.5 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
-                aria-label="Add attachment"
-              >
-                <PlusIcon className="h-5 w-5" />
-              </button>
-              <TextareaAutosize
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    if (!isLoading && input.trim()) {
-                      (e.target as HTMLTextAreaElement).form?.requestSubmit();
-                    }
-                  }
-                }}
-                placeholder="Describe your idea. Attach a design to guide the result."
-                disabled={isLoading}
-                maxRows={10}
-                className={cn(
-                  "flex-1 min-w-0 bg-transparent text-gray-900 text-sm resize-none overflow-auto",
-                  "focus:outline-none placeholder:text-gray-400",
-                  "disabled:opacity-50"
-                )}
-              />
-              <Button
-                type="submit"
-                disabled={isLoading || !input.trim()}
-                size="icon"
-                className="flex-shrink-0 w-9 h-9 rounded-full bg-gray-900 text-white hover:bg-gray-800 disabled:opacity-40 disabled:bg-gray-200 disabled:text-gray-500 disabled:hover:bg-gray-200"
-                aria-label="Submit"
-              >
-                {isLoading ? (
-                  <ArrowPathIcon className="h-5 w-5 animate-spin" />
-                ) : (
-                  <ArrowUpIcon className="h-5 w-5" />
-                )}
-              </Button>
+            <div className="mt-16">
+              <p className="px-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
+                Dummy menu
+              </p>
+              <nav className="mt-2 space-y-1">
+                {[
+                  { label: "Dashboard", icon: HomeIcon },
+                  { label: "Payments", icon: CreditCardIcon },
+                  { label: "Settings", icon: Cog6ToothIcon },
+                ].map((item) => (
+                  <button
+                    key={item.label}
+                    type="button"
+                    className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm text-gray-600 transition-colors hover:bg-gray-200/70 hover:text-gray-900"
+                  >
+                    <item.icon className="h-4 w-4" />
+                    {item.label}
+                  </button>
+                ))}
+              </nav>
             </div>
-          </form>
-        </div>
+          </div>
+        </aside>
 
-        <div className="px-4 sm:px-6">
-          <div className="pb-16 bg-gray-50 max-w-5xl mx-auto rounded-xl">
-            <div className="flex items-center justify-between px-4 sm:px-6 py-4">
-              <h2 className="text-lg font-semibold text-gray-900">
-                Start from an example
-              </h2>
-              <Link
-                href="/start"
-                className="text-sm font-medium text-gray-500 hover:text-gray-900 transition-colors"
-              >
-                See more
-              </Link>
-            </div>
+        <main className="min-w-0 flex-1 overflow-y-auto p-4 sm:p-6">
+          <div className="rounded-2xl border border-gray-200 bg-white px-4 py-6 sm:px-8 md:px-12">
+            <section className="flex min-h-[70vh] items-center justify-center flex-row">
+              <div className="mx-auto flex w-full max-w-3xl flex-col items-start text-start">
+                <div className="flex flex-row items-center justify-start">
+                  <motion.img
+                    initial={{ opacity: 0, y: 24 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.5, ease: "easeOut" }}
+                    src={sunsetLogoTree.src}
+                    alt="Sunset"
+                    className="w-10 h-10 mr-2"
+                  />
+                  <motion.h1
+                    initial={{ opacity: 0, y: 24 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.5, ease: "easeOut" }}
+                    className="text-3xl font-bold tracking-tight text-gray-900 sm:text-3xl"
+                  >
+                    What are we creating today?
+                  </motion.h1>
+                </div>
 
-            <div className="px-4 sm:px-6 pb-6">
-              <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+                <form onSubmit={handleSubmit} className="mt-8 w-full">
+                  <div className="relative min-h-[200px] rounded-2xl border border-gray-200 bg-white px-4 py-3 shadow-sm overflow-hidden">
+                    <TextareaAutosize
+                      value={input}
+                      onChange={(e) => setInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          if (!isLoading && input.trim()) {
+                            (
+                              e.target as HTMLTextAreaElement
+                            ).form?.requestSubmit();
+                          }
+                        }
+                      }}
+                      placeholder="Enter your message here..."
+                      disabled={isLoading}
+                      minRows={5}
+                      maxRows={10}
+                      className="w-full resize-none overflow-auto bg-transparent pr-12 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none disabled:opacity-50 h-full"
+                    />
+                    <Button
+                      type="submit"
+                      disabled={isLoading || !input.trim()}
+                      size="icon"
+                      className="absolute right-3 top-3 h-8 w-8 rounded-full bg-gray-900 text-white hover:bg-gray-800 disabled:bg-gray-200 disabled:text-gray-500"
+                      aria-label="Submit"
+                    >
+                      {isLoading ? (
+                        <ArrowPathIcon className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <ArrowUpIcon className="h-4 w-4" />
+                      )}
+                    </Button>
+                    {/* <BorderBeam
+                      duration={12}
+                      size={200}
+                      className="from-transparent via-gray-900 to-transparent"
+                    />
+                    <BorderBeam
+                      duration={12}
+                      delay={6}
+                      size={200}
+                      className="from-transparent via-gray-900 to-transparent"
+                    /> */}
+                  </div>
+                </form>
+              </div>
+            </section>
+
+            <section className="mx-auto w-full max-w-5xl pb-6">
+              <div className="mb-4 flex items-center justify-between">
+                <h2 className="text-base font-semibold text-gray-900">
+                  Your projects
+                </h2>
+                <Link
+                  href="/start"
+                  className="text-sm font-medium text-gray-500 transition-colors hover:text-gray-900"
+                >
+                  See more
+                </Link>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {chats.map((chat) => (
                   <Link
                     key={chat.publicId}
                     href={`/builder/${chat.publicId}`}
-                    className="group flex flex-col rounded-xl border border-gray-200 bg-white overflow-hidden shadow-sm transition-all hover:border-gray-300 hover:shadow-md"
+                    className="group flex flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm transition-all hover:border-gray-300 hover:shadow-md"
                   >
-                    <div className="aspect-video w-full bg-gray-100 flex items-center justify-center border-b border-gray-100 overflow-hidden">
+                    <div className="aspect-video w-full overflow-hidden border-b border-gray-100 bg-gray-100">
                       {(chat.screenshotUrl ?? chat.screenshot_url) ? (
                         <img
                           src={chat.screenshotUrl ?? chat.screenshot_url ?? ""}
                           alt={chat.title || "Landing page preview"}
-                          className="w-full h-full object-cover object-top"
+                          className="h-full w-full object-cover object-top"
                         />
                       ) : (
-                        <div className="text-gray-400 text-4xl font-bold">
+                        <div className="flex h-full items-center justify-center text-4xl font-bold text-gray-400">
                           {(chat.title || "U").charAt(0).toUpperCase()}
                         </div>
                       )}
                     </div>
-                    <div className="p-4 flex flex-col gap-1">
-                      <p className="font-medium text-gray-900 truncate">
+                    <div className="flex flex-col gap-1 p-4">
+                      <p className="truncate font-medium text-gray-900">
                         {chat.title || "Untitled"}
                       </p>
                       <p className="text-sm text-gray-500">
@@ -265,21 +305,21 @@ export default function StartPage() {
               </div>
 
               {chats.length === 0 && (
-                <div className="flex flex-col items-center justify-center py-16 text-center max-w-md mx-auto">
-                  <div className="w-24 h-24 rounded-xl bg-gray-100 border border-gray-200 flex items-center justify-center mb-4">
+                <div className="mx-auto flex max-w-md flex-col items-center justify-center py-16 text-center">
+                  <div className="mb-4 flex h-24 w-24 items-center justify-center rounded-xl border border-gray-200 bg-gray-100">
                     <span className="text-3xl font-bold text-gray-400">?</span>
                   </div>
                   <p className="text-base font-medium text-gray-500">
-                    No examples yet
+                    No projects yet
                   </p>
-                  <p className="text-sm text-gray-400 mt-1">
+                  <p className="mt-1 text-sm text-gray-400">
                     Create something above to see it here
                   </p>
                 </div>
               )}
-            </div>
+            </section>
           </div>
-        </div>
+        </main>
       </div>
     </div>
   );
