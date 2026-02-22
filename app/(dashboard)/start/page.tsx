@@ -67,47 +67,42 @@ export default function StartPage() {
   const router = useRouter();
   const setPendingMessage = usePendingMessageStore((s) => s.setPendingMessage);
 
-  const loadPage = useCallback(
-    async (cursor: string | null | undefined) => {
-      if (cursor === null) return;
-      const isFirst = cursor === undefined;
-      if (isFirst) {
-        try {
-          const response = await fetch(
-            `/api/chats?limit=${PROJECTS_PAGE_SIZE}`
-          );
-          if (response.ok) {
-            const data = await response.json();
-            setChats(data.chats ?? []);
-            setNextCursor(data.nextCursor ?? null);
-          }
-        } catch (error) {
-          console.error("Error fetching chats:", error);
-        }
-        return;
-      }
-      setLoadingMore(true);
-      setNextCursor(undefined);
+  const loadPage = useCallback(async (cursor: string | null | undefined) => {
+    if (cursor === null) return;
+    const isFirst = cursor === undefined;
+    if (isFirst) {
       try {
-        const response = await fetch(
-          `/api/chats?cursor=${encodeURIComponent(cursor)}&limit=${PROJECTS_PAGE_SIZE}`
-        );
+        const response = await fetch(`/api/chats?limit=${PROJECTS_PAGE_SIZE}`);
         if (response.ok) {
           const data = await response.json();
-          setChats((prev) => [...prev, ...(data.chats ?? [])]);
+          setChats(data.chats ?? []);
           setNextCursor(data.nextCursor ?? null);
-        } else {
-          setNextCursor(null);
         }
       } catch (error) {
-        console.error("Error fetching more chats:", error);
-        setNextCursor(cursor);
-      } finally {
-        setLoadingMore(false);
+        console.error("Error fetching chats:", error);
       }
-    },
-    []
-  );
+      return;
+    }
+    setLoadingMore(true);
+    setNextCursor(undefined);
+    try {
+      const response = await fetch(
+        `/api/chats?cursor=${encodeURIComponent(cursor)}&limit=${PROJECTS_PAGE_SIZE}`
+      );
+      if (response.ok) {
+        const data = await response.json();
+        setChats((prev) => [...prev, ...(data.chats ?? [])]);
+        setNextCursor(data.nextCursor ?? null);
+      } else {
+        setNextCursor(null);
+      }
+    } catch (error) {
+      console.error("Error fetching more chats:", error);
+      setNextCursor(cursor);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, []);
 
   useEffect(() => {
     loadPage(undefined);
@@ -295,17 +290,17 @@ export default function StartPage() {
                         <ArrowUpIcon className="h-4 w-4" />
                       )}
                     </Button>
-                    {/* <BorderBeam
-                      duration={12}
+                    <BorderBeam
+                      duration={18}
                       size={200}
                       className="from-transparent via-gray-900 to-transparent"
                     />
                     <BorderBeam
-                      duration={12}
-                      delay={6}
+                      duration={18}
+                      delay={9}
                       size={200}
                       className="from-transparent via-gray-900 to-transparent"
-                    /> */}
+                    />
                   </div>
                 </form>
               </div>

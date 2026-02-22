@@ -44,8 +44,15 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const chats = await getChatsByUser(user.id);
-    return NextResponse.json({ chats });
+    const { searchParams } = new URL(request.url);
+    const cursor = searchParams.get("cursor") ?? undefined;
+    const limitParam = searchParams.get("limit");
+    const limit = limitParam ? parseInt(limitParam, 10) : undefined;
+    const { chats, nextCursor } = await getChatsByUserPaginated(user.id, {
+      cursor,
+      limit: Number.isNaN(limit) ? undefined : limit,
+    });
+    return NextResponse.json({ chats, nextCursor });
   } catch (error) {
     console.error("Get chats error:", error);
     const errorMessage =
