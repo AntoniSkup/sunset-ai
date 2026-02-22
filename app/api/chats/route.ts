@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getUser, createChat, getChatsByUser } from "@/lib/db/queries";
+import { getUser, createChat, getChatsByUserPaginated } from "@/lib/db/queries";
 
 export async function POST(request: NextRequest) {
   const user = await getUser();

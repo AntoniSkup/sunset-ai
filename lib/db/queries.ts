@@ -1,4 +1,4 @@
-import { desc, and, eq, isNull, max, asc, lte } from "drizzle-orm";
+import { desc, and, eq, isNull, max, asc, lte, lt, or } from "drizzle-orm";
 import { db } from "./drizzle";
 import {
   activityLogs,
@@ -459,6 +459,48 @@ export async function getChatsByUser(userId: number) {
     .from(chats)
     .where(eq(chats.userId, userId))
     .orderBy(desc(chats.updatedAt));
+}
+
+const CHATS_PAGE_SIZE = 12;
+
+/** Cursor format: "updatedAt_id" (ISO date_id) for stable pagination */
+export async function getChatsByUserPaginated(
+  userId: number,
+  opts: { cursor?: string; limit?: number } = {}
+) {
+  const limit = Math.min(opts.limit ?? CHATS_PAGE_SIZE, 50);
+  const conditions = [eq(chats.userId, userId)];
+
+  if (opts.cursor) {
+    const [cursorUpdatedAt, cursorIdStr] = opts.cursor.split("_");
+    const cursorId = parseInt(cursorIdStr, 10);
+    if (!Number.isNaN(cursorId) && cursorUpdatedAt) {
+      const cursorDate = new Date(cursorUpdatedAt);
+      conditions.push(
+        or(
+          lt(chats.updatedAt, cursorDate),
+          and(eq(chats.updatedAt, cursorDate), lt(chats.id, cursorId))
+        )!
+      );
+    }
+  }
+
+  const rows = await db
+    .select()
+    .from(chats)
+    .where(and(...conditions))
+    .orderBy(desc(chats.updatedAt), desc(chats.id))
+    .limit(limit + 1);
+
+  const hasMore = rows.length > limit;
+  const chatsPage = hasMore ? rows.slice(0, limit) : rows;
+  const last = chatsPage[chatsPage.length - 1];
+  const nextCursor =
+    hasMore && last
+      ? `${last.updatedAt.toISOString()}_${last.id}`
+      : undefined;
+
+  return { chats: chatsPage, nextCursor };
 }
 
 export async function updateChatByPublicId(

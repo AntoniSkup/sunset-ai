@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, FormEvent, useEffect } from "react";
+import { useState, FormEvent, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { nanoid } from "nanoid";
@@ -53,27 +53,79 @@ function getRelativeTime(dateStr: string) {
   return date.toLocaleDateString();
 }
 
+const PROJECTS_PAGE_SIZE = 12;
+
 export default function StartPage() {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [chats, setChats] = useState<Chat[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null | undefined>(
+    undefined
+  );
+  const [loadingMore, setLoadingMore] = useState(false);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const setPendingMessage = usePendingMessageStore((s) => s.setPendingMessage);
 
-  useEffect(() => {
-    const fetchChats = async () => {
+  const loadPage = useCallback(
+    async (cursor: string | null | undefined) => {
+      if (cursor === null) return;
+      const isFirst = cursor === undefined;
+      if (isFirst) {
+        try {
+          const response = await fetch(
+            `/api/chats?limit=${PROJECTS_PAGE_SIZE}`
+          );
+          if (response.ok) {
+            const data = await response.json();
+            setChats(data.chats ?? []);
+            setNextCursor(data.nextCursor ?? null);
+          }
+        } catch (error) {
+          console.error("Error fetching chats:", error);
+        }
+        return;
+      }
+      setLoadingMore(true);
+      setNextCursor(undefined);
       try {
-        const response = await fetch("/api/chats");
+        const response = await fetch(
+          `/api/chats?cursor=${encodeURIComponent(cursor)}&limit=${PROJECTS_PAGE_SIZE}`
+        );
         if (response.ok) {
           const data = await response.json();
-          setChats(data.chats ?? []);
+          setChats((prev) => [...prev, ...(data.chats ?? [])]);
+          setNextCursor(data.nextCursor ?? null);
+        } else {
+          setNextCursor(null);
         }
       } catch (error) {
-        console.error("Error fetching chats:", error);
+        console.error("Error fetching more chats:", error);
+        setNextCursor(cursor);
+      } finally {
+        setLoadingMore(false);
       }
-    };
-    fetchChats();
-  }, []);
+    },
+    []
+  );
+
+  useEffect(() => {
+    loadPage(undefined);
+  }, [loadPage]);
+
+  useEffect(() => {
+    if (loadingMore || nextCursor === undefined || nextCursor === null) return;
+    const el = loadMoreRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) loadPage(nextCursor);
+      },
+      { rootMargin: "200px", threshold: 0 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [nextCursor, loadPage, loadingMore]);
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -303,6 +355,18 @@ export default function StartPage() {
                   </Link>
                 ))}
               </div>
+
+              {(nextCursor != null || loadingMore) && (
+                <div
+                  ref={loadMoreRef}
+                  className="flex justify-center py-8"
+                  aria-hidden
+                >
+                  {loadingMore && (
+                    <ArrowPathIcon className="h-8 w-8 animate-spin text-gray-400" />
+                  )}
+                </div>
+              )}
 
               {chats.length === 0 && (
                 <div className="mx-auto flex max-w-md flex-col items-center justify-center py-16 text-center">
