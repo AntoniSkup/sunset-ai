@@ -6,12 +6,7 @@ import Link from "next/link";
 import { nanoid } from "nanoid";
 import { usePendingMessageStore } from "@/lib/stores/usePendingMessageStore";
 import TextareaAutosize from "react-textarea-autosize";
-import {
-  ArrowUpIcon,
-  ArrowPathIcon,
-  ArrowLeftIcon,
-  PlusIcon,
-} from "@heroicons/react/24/outline";
+import { ArrowPathIcon, PlusIcon } from "@heroicons/react/24/outline";
 import { Button } from "@/components/ui/button";
 import { motion } from "motion/react";
 import sunsetLogoTree from "@/components/icons/sunset_logo_tree.png";
