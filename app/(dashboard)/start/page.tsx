@@ -17,6 +17,7 @@ import { motion } from "motion/react";
 import sunsetLogoTree from "@/components/icons/sunset_logo_tree.png";
 
 import { BorderBeam } from "@/components/ui/border-beam";
+import TypingText from "@/components/ui/typewriter";
 
 type Chat = {
   id: number;
@@ -51,6 +52,7 @@ const PROJECTS_PAGE_SIZE = 12;
 
 export default function StartPage() {
   const [input, setInput] = useState("");
+  const [isFocused, setIsFocused] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [chats, setChats] = useState<Chat[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null | undefined>(
@@ -58,6 +60,7 @@ export default function StartPage() {
   );
   const [loadingMore, setLoadingMore] = useState(false);
   const loadMoreRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const router = useRouter();
   const setPendingMessage = usePendingMessageStore((s) => s.setPendingMessage);
 
@@ -115,6 +118,22 @@ export default function StartPage() {
     observer.observe(el);
     return () => observer.disconnect();
   }, [nextCursor, loadPage, loadingMore]);
+
+  const showPlaceholder = !input.trim() && !isFocused;
+  useEffect(() => {
+    if (!showPlaceholder || isLoading) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as Node;
+      if (textareaRef.current?.contains(target)) return;
+      textareaRef.current?.focus();
+      if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        setInput(e.key);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [showPlaceholder, isLoading]);
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -184,23 +203,52 @@ export default function StartPage() {
 
             <form onSubmit={handleSubmit} className="mt-8 w-full">
               <div className="relative  rounded-xl border bg-[#ffffffe9] border-[#f2f2f2] px-8 py-6 overflow-hidden shadow">
-                <TextareaAutosize
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      if (!isLoading && input.trim()) {
-                        (e.target as HTMLTextAreaElement).form?.requestSubmit();
+                <div className="relative min-h-[4.5rem]">
+                  {!input.trim() && !isFocused && (
+                    <div
+                      className="pointer-events-none absolute inset-0 flex items-start pt-2 text-base leading-normal"
+                      aria-hidden
+                    >
+                      <span className="text-base text-gray-400 leading-normal">
+                        Make a website&nbsp;
+                        <TypingText
+                          text={[
+                            "for my business.",
+                            "for my freelance portfolio.",
+                            "for my coffee shop.",
+                          ]}
+                          pauseDuration={3000}
+                          typingSpeed={30}
+                        />
+                      </span>
+                    </div>
+                  )}
+                  <TextareaAutosize
+                    ref={textareaRef}
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onFocus={() => setIsFocused(true)}
+                    onBlur={() => setIsFocused(false)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        if (!isLoading && input.trim()) {
+                          (
+                            e.target as HTMLTextAreaElement
+                          ).form?.requestSubmit();
+                        }
                       }
+                    }}
+                    placeholder={
+                      isFocused ? "Make a website for my business" : ""
                     }
-                  }}
-                  placeholder="Enter your message here..."
-                  disabled={isLoading}
-                  minRows={4}
-                  maxRows={10}
-                  className="w-full resize-none overflow-auto bg-transparent text-base text-gray-900 placeholder:text-gray-400 focus:outline-none disabled:opacity-50 h-full"
-                />
+                    disabled={isLoading}
+                    minRows={4}
+                    maxRows={10}
+                    className="relative w-full resize-none overflow-auto bg-transparent pt-2 text-base leading-normal text-gray-900 placeholder:text-gray-400 focus:outline-none disabled:opacity-50 h-full"
+                  />
+                </div>
+
                 <div className="w-full flex justify-between ">
                   {/* <Button variant="ghost" size="icon"> */}
                   <div className="flex items-center gap-2">
