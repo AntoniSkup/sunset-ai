@@ -314,8 +314,28 @@ export default function StartPage() {
                       className="h-full w-full object-cover object-top"
                     />
                   ) : (
-                    <div className="flex h-full items-center justify-center text-4xl font-bold text-gray-400">
-                      {(chat.title || "U").charAt(0).toUpperCase()}
+                    <div className="flex h-full w-full flex-col bg-gray-50 p-1.5">
+                      <div className="mb-1.5 flex items-center gap-1 rounded border border-gray-200 bg-white px-1.5 py-1">
+                        <div className="flex gap-0.5">
+                          <div className="h-1.5 w-1.5 rounded-full bg-gray-200" />
+                          <div className="h-1.5 w-1.5 rounded-full bg-gray-200" />
+                          <div className="h-1.5 w-1.5 rounded-full bg-gray-200" />
+                        </div>
+                        <div className="ml-1 h-1.5 flex-1 max-w-[60%] rounded bg-gray-100" />
+                      </div>
+                      <div className="flex flex-1 flex-col gap-1 rounded border border-gray-200 bg-white p-2">
+                        <div className="h-2 w-3/4 rounded bg-gray-100" />
+                        <div className="mt-0.5 h-1.5 w-full rounded bg-gray-50" />
+                        <div className="h-1.5 w-5/6 rounded bg-gray-50" />
+                        <div className="mt-1.5 flex gap-1">
+                          <div className="h-2 w-12 rounded bg-gray-100" />
+                          <div className="h-2 w-14 rounded bg-gray-100" />
+                        </div>
+                        <div className="mt-1 grid flex-1 grid-cols-2 gap-1">
+                          <div className="rounded bg-gray-50" />
+                          <div className="rounded bg-gray-50" />
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
