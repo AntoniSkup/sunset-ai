@@ -6,13 +6,25 @@ import Link from "next/link";
 import { nanoid } from "nanoid";
 import { usePendingMessageStore } from "@/lib/stores/usePendingMessageStore";
 import TextareaAutosize from "react-textarea-autosize";
-import { ArrowPathIcon, PlusIcon } from "@heroicons/react/24/outline";
+import {
+  ArrowPathIcon,
+  Cog6ToothIcon,
+  CreditCardIcon,
+  HomeIcon,
+  PlusIcon,
+} from "@heroicons/react/24/outline";
 import { Button } from "@/components/ui/button";
 import { motion } from "motion/react";
 import sunsetLogoTree from "@/components/icons/sunset_logo_tree.png";
 
 import { BorderBeam } from "@/components/ui/border-beam";
 import TypingText from "@/components/ui/typewriter";
+import {
+  DropdownMenu,
+  DropdownMenuItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 type Chat = {
   id: number;
@@ -170,11 +182,42 @@ export default function StartPage() {
   return (
     <div className="min-h-full w-full bg-black p-2 sm:p-4">
       <div className="rounded-2xl border border-gray-200 bg-white px-4 py-6 sm:px-8 md:px-12">
-        <img
-          src="/sunset-logo.png"
-          alt="Sunset"
-          className="h-8 w-auto object-contain"
-        />
+        <DropdownMenu modal={false}>
+          <DropdownMenuTrigger asChild>
+            <img
+              src="/sunset-logo.png"
+              alt="Sunset"
+              className="h-8 w-auto object-contain shrink-0 hover:scale-95 click:scale-105 transition-all duration-200 cursor-pointer ease-in-out"
+            />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-48">
+            <DropdownMenuItem asChild>
+              <Link
+                href="/pricing"
+                className="flex items-center cursor-pointer"
+              >
+                <CreditCardIcon
+                  className="mr-2 h-4 w-4 font-bold text-black"
+                  strokeWidth={1.5}
+                />
+                Preview payment
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link
+                href="/dashboard/general"
+                className="flex items-center cursor-pointer"
+              >
+                <Cog6ToothIcon
+                  className="mr-2 h-4 w-4 font-bold text-black"
+                  strokeWidth={1.5}
+                />
+                Settings
+              </Link>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
         <section className="flex min-h-[70vh] items-center justify-center flex-row">
           <div className="mx-auto flex w-full max-w-3xl flex-col items-start text-start">
             <div className="flex flex-row items-center justify-start">
@@ -293,7 +336,7 @@ export default function StartPage() {
             </h2>
             <Link
               href="/start"
-              className="text-sm font-medium text-gray-500 transition-colors hover:text-gray-900"
+              className="text-sm font-medium text-[#ff6313] transition-colors hover:text-[#feb342]"
             >
               See more
             </Link>
@@ -304,9 +347,9 @@ export default function StartPage() {
               <Link
                 key={chat.publicId}
                 href={`/builder/${chat.publicId}`}
-                className="group flex flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm transition-all hover:border-gray-300 hover:shadow-md"
+                className="group flex flex-col overflow-hidden rounded-xl border border-gray-700 bg-white shadow-sm transition-all hover:border-gray-300 hover:shadow-md"
               >
-                <div className="aspect-video w-full overflow-hidden border-b border-gray-100 bg-gray-100">
+                <div className="aspect-video w-full overflow-hidden border-b  bg-gray-100">
                   {(chat.screenshotUrl ?? chat.screenshot_url) ? (
                     <img
                       src={chat.screenshotUrl ?? chat.screenshot_url ?? ""}
