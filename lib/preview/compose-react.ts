@@ -108,6 +108,14 @@ async function collectFileMap(params: {
 const TAILWIND_CDN =
   '<script src="https://cdn.tailwindcss.com"></script>';
 
+function getMockBrowserBaseUrl(): string {
+  const base =
+    process.env.SCREENSHOT_BROWSER_BASE_URL ??
+    process.env.BASE_URL ??
+    "http://localhost:3000";
+  return base.replace(/\/+$/, "");
+}
+
 function wrapInHtml(bodyHtml: string): string {
   return `<!DOCTYPE html>
 <html lang="en">
@@ -252,10 +260,44 @@ export async function getComposedReactHtml(params: {
     `landing-${chatId}-${revisionNumber}-${Date.now()}.cjs`
   );
 
+  const mockBaseUrl = getMockBrowserBaseUrl();
+  const mockWindow = {
+    location: {
+      hash: "#/",
+      href: `${mockBaseUrl}/#/`,
+      pathname: "/",
+      search: "",
+      origin: mockBaseUrl,
+    },
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    matchMedia: () => ({
+      matches: false,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+      media: "",
+      onchange: null,
+    }),
+  };
+  const mockDocument = {
+    documentElement: {},
+    body: {},
+    createElement: () => ({}),
+    querySelector: () => null,
+    getElementById: () => null,
+  };
+
   const previousWindow = (global as any).window;
+  const previousLocation = (global as any).location;
+  const previousDocument = (global as any).document;
   let loadedBundleOk = false;
   try {
-    (global as any).window = { location: { hash: "#/" } };
+    (global as any).window = mockWindow;
+    (global as any).location = mockWindow.location;
+    (global as any).document = mockDocument;
     fs.writeFileSync(tmpFile, bundle, "utf-8");
     const loadBundle = new Function("r", "p", "return r(p)");
     const mod = loadBundle(runtimeRequire, tmpFile);
@@ -269,6 +311,8 @@ export async function getComposedReactHtml(params: {
     return null;
   } finally {
     (global as any).window = previousWindow;
+    (global as any).location = previousLocation;
+    (global as any).document = previousDocument;
     try {
       if (fs.existsSync(tmpFile) && (loadedBundleOk || !KEEP_BUNDLE_ON_ERROR)) {
         fs.unlinkSync(tmpFile);
@@ -288,12 +332,19 @@ export async function getComposedReactHtml(params: {
 
   let bodyHtml: string;
   try {
+    (global as any).window = mockWindow;
+    (global as any).location = mockWindow.location;
+    (global as any).document = mockDocument;
     bodyHtml = ReactDOMServerDefault.renderToStaticMarkup(
       ReactDefault.createElement(RootComponent, {})
     );
   } catch (err) {
     console.error("[compose-react] render failed:", err);
     return null;
+  } finally {
+    (global as any).window = previousWindow;
+    (global as any).location = previousLocation;
+    (global as any).document = previousDocument;
   }
 
   return wrapInHtml(bodyHtml);
