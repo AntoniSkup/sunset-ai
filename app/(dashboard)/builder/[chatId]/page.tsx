@@ -6,13 +6,11 @@ import { Group, Panel, Separator } from "react-resizable-panels";
 import { Suspense, use, useState, useEffect } from "react";
 import { ChatHeader } from "@/components/chat/chat-header";
 import PreviewPanelHeader from "@/components/preview/preview-panel-header";
+import type { PreviewPanelTab } from "@/components/preview/preview-panel";
 
-function BuilderContent({
-  chatId,
-}: {
-  chatId: string;
-}) {
+function BuilderContent({ chatId }: { chatId: string }) {
   const [chatName, setChatName] = useState<string | null>(null);
+  const [previewTab, setPreviewTab] = useState<PreviewPanelTab>("preview");
 
   useEffect(() => {
     let cancelled = false;
@@ -45,7 +43,11 @@ function BuilderContent({
         <Panel defaultSize={30}>
           <div className="h-full w-full rounded-lg bg-background overflow-hidden flex flex-col">
             <div className="shrink-0">
-              <ChatHeader chatId={chatId} chatName={chatName} onRename={setChatName} />
+              <ChatHeader
+                chatId={chatId}
+                chatName={chatName}
+                onRename={setChatName}
+              />
             </div>
             <div className="flex-1 min-h-0">
               <Chat chatId={chatId} />
@@ -56,10 +58,14 @@ function BuilderContent({
         <Panel defaultSize={70}>
           <div className="h-full w-full rounded-lg bg-background overflow-hidden flex flex-col pr-1">
             <div className="shrink-0">
-              <PreviewPanelHeader chatId={chatId} />
+              <PreviewPanelHeader
+                chatId={chatId}
+                activeTab={previewTab}
+                onTabChange={setPreviewTab}
+              />
             </div>
             <div className="flex-1 min-h-0 rounded-lg pb-2">
-              <PreviewPanel chatId={chatId} />
+              <PreviewPanel chatId={chatId} activeTab={previewTab} />
             </div>
           </div>
         </Panel>
@@ -76,9 +82,14 @@ export default function BuilderChatPage({
   const { chatId } = use(params);
 
   return (
-    <Suspense fallback={<div className="h-full flex items-center justify-center">Loading...</div>}>
+    <Suspense
+      fallback={
+        <div className="h-full flex items-center justify-center">
+          Loading...
+        </div>
+      }
+    >
       <BuilderContent chatId={chatId} />
     </Suspense>
   );
 }
-

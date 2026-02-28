@@ -11,10 +11,14 @@ import type {
 import { PREVIEW_EVENT_TYPE } from "@/lib/preview/update-preview";
 import loader from "@/components/icons/loader.svg";
 import sunsetLogoLarge from "@/components/icons/sunset_logo_large.png";
+import { CodePanel } from "./code-panel";
+
+export type PreviewPanelTab = "preview" | "code";
 
 interface PreviewPanelProps {
   className?: string;
   chatId: string;
+  activeTab?: PreviewPanelTab;
 }
 
 function LoadingDots() {
@@ -101,11 +105,12 @@ function BuilderTipsFromButton({
   );
 }
 
-export function PreviewPanel({ className, chatId }: PreviewPanelProps) {
+export function PreviewPanel({ className, chatId, activeTab = "preview" }: PreviewPanelProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState<string>("");
   const [currentVersionId, setCurrentVersionId] = useState<number | null>(null);
+  const [revisionNumber, setRevisionNumber] = useState<number | null>(null);
   const loaderSrc = typeof loader === "string" ? loader : loader.src;
 
   useEffect(() => {
@@ -126,6 +131,7 @@ export function PreviewPanel({ className, chatId }: PreviewPanelProps) {
         setIsLoading(false);
         setLoadingMessage("");
         setCurrentVersionId(updatePayload.versionId);
+        setRevisionNumber(updatePayload.versionNumber);
 
         if (iframeRef.current) {
           const previewUrl =
@@ -183,8 +189,10 @@ export function PreviewPanel({ className, chatId }: PreviewPanelProps) {
         }
 
         const id = Number(data?.revisionId ?? data?.versionId ?? 0);
+        const revNum = data?.revisionNumber ?? data?.versionNumber ?? null;
         if (id && data?.previewUrl && iframeRef.current) {
           setCurrentVersionId(id);
+          setRevisionNumber(revNum ?? null);
           iframeRef.current.src = data.previewUrl;
         }
       } catch (e) {
@@ -201,6 +209,14 @@ export function PreviewPanel({ className, chatId }: PreviewPanelProps) {
 
   return (
     <div className={`relative h-full w-full ${className || ""} rounded-lg border shadow-xs overflow-hidden `}>
+      {activeTab === "code" ? (
+        <CodePanel
+          chatId={chatId}
+          revisionNumber={revisionNumber}
+          className="h-full"
+        />
+      ) : (
+        <>
       {isLoading && (
         <div className="absolute inset-0 flex items-center justify-center bg-background z-10">
           <div className="flex flex-col items-center gap-3">
@@ -238,6 +254,8 @@ export function PreviewPanel({ className, chatId }: PreviewPanelProps) {
             </div>
           </div>
         </div>
+      )}
+        </>
       )}
     </div>
   );

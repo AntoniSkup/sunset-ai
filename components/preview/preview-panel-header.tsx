@@ -1,17 +1,22 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { RocketLaunchIcon } from "@heroicons/react/24/outline";
+import { RocketLaunchIcon, CodeBracketIcon, EyeIcon } from "@heroicons/react/24/outline";
 import { Button } from "../ui/button";
 import { PublishModal } from "./publish-modal";
 import { PublishedSuccessModal } from "./published-success-modal";
+import type { PreviewPanelTab } from "./preview-panel";
 
 interface PreviewPanelHeaderProps {
   chatId: string;
+  activeTab: PreviewPanelTab;
+  onTabChange: (tab: PreviewPanelTab) => void;
 }
 
 export default function PreviewPanelHeader({
   chatId,
+  activeTab,
+  onTabChange,
 }: PreviewPanelHeaderProps) {
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
@@ -46,7 +51,33 @@ export default function PreviewPanelHeader({
   return (
     <>
       <header className="py-2">
-        <div className="h-full px-4 sm:px-6 lg:px-8 flex justify-end ">
+        <div className="h-full px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-4">
+          <div className="flex rounded-lg border bg-muted/30 p-0.5">
+            <button
+              type="button"
+              onClick={() => onTabChange("preview")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                activeTab === "preview"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <EyeIcon className="size-4" />
+              Preview
+            </button>
+            <button
+              type="button"
+              onClick={() => onTabChange("code")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                activeTab === "code"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <CodeBracketIcon className="size-4" />
+              Code
+            </button>
+          </div>
           {publishedUrl ? (
             <Button
               variant="outline"
