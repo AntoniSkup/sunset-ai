@@ -352,7 +352,7 @@ export default function StartPage() {
                 <motion.article
                   whileHover={{ y: -4, scale: 1.01 }}
                   whileTap={{ scale: 0.985 }}
-                  transition={{ type: "spring", stiffness: 520, damping: 28 }}
+                  transition={{ type: "spring", stiffness: 720, damping: 32 }}
                   className="flex h-full flex-col overflow-hidden rounded-xl border border-gray-700 bg-white shadow-sm transition-all hover:border-gray-800 hover:shadow-md"
                 >
                   <div className="aspect-video w-full overflow-hidden border-b bg-gray-100">
@@ -360,7 +360,7 @@ export default function StartPage() {
                       <motion.img
                         src={chat.screenshotUrl ?? chat.screenshot_url ?? ""}
                         alt={chat.title || "Landing page preview"}
-                        className="h-full w-full object-cover object-top transition-transform duration-200 group-hover:scale-[1.02]"
+                        className="h-full w-full object-cover object-top transition-transform duration-150 ease-out group-hover:scale-[1.02]"
                       />
                     ) : (
                       <div className="flex h-full w-full flex-col bg-gray-50 p-1.5">
