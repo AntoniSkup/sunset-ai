@@ -1,3 +1,5 @@
+import type { LanguageModel } from "ai";
+
 /**
  * Shared helper to construct the AI model instance.
  *
@@ -31,7 +33,7 @@ const DEFAULT_MODELS = {
 
 const GATEWAY_PROVIDERS = ["google", "openai", "anthropic"] as const;
 
-export async function getAIModel(useLighterModel: boolean = false) {
+export async function getAIModel(useLighterModel: boolean = false): Promise<LanguageModel> {
   const modelProvider = process.env.AI_MODEL_PROVIDER;
   const defaults = DEFAULT_MODELS[modelProvider as keyof typeof DEFAULT_MODELS] ?? DEFAULT_MODELS.openai;
   const modelName = process.env.AI_MODEL_NAME || defaults.main;
@@ -51,17 +53,17 @@ export async function getAIModel(useLighterModel: boolean = false) {
     }
     const { gateway } = await import("ai");
     const modelId = `${modelProvider}/${useLighterModel ? lighterModelName : modelName}`;
-    return gateway(modelId);
+    return gateway(modelId) as LanguageModel;
   }
 
   if (modelProvider === "google") {
     const { google } = await import("@ai-sdk/google");
-    return google(useLighterModel ? lighterModelName : modelName);
+    return google(useLighterModel ? lighterModelName : modelName) as LanguageModel;
   }
 
   if (modelProvider === "openai") {
     const { openai } = await import("@ai-sdk/openai");
-    return openai(useLighterModel ? lighterModelName : modelName);
+    return openai(useLighterModel ? lighterModelName : modelName) as LanguageModel;
   }
 
   throw new Error(`Unsupported AI model provider: ${modelProvider}`);

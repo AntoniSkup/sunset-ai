@@ -1,3 +1,5 @@
+import type { LanguageModel } from "ai";
+
 export async function shouldUseLighterModel(
   userQuestion: string,
   context?: { userId?: number; chatId?: string }
@@ -9,14 +11,14 @@ export async function shouldUseLighterModel(
   }
 
   try {
-    let routerModel;
+    let routerModel: LanguageModel;
     if (modelProvider === "google") {
       const { google } = await import("@ai-sdk/google");
       const lighterModel = process.env.AI_LIGHTER_MODEL_NAME || "gemini-3-flash-preview";
-      routerModel = google(lighterModel);
+      routerModel = google(lighterModel) as LanguageModel;
     } else if (modelProvider === "openai") {
       const { openai } = await import("@ai-sdk/openai");
-      routerModel = openai("gpt-4o-mini");
+      routerModel = openai("gpt-4o-mini") as LanguageModel;
     } else {
       return false;
     }

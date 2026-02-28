@@ -19,7 +19,7 @@ import { cookies } from "next/headers";
 import { verifyToken } from "@/lib/auth/session";
 import { generateText } from "ai";
 import { getAIModel } from "@/lib/ai/get-ai-model";
-
+import { buildChatNamePrompt } from "@/prompts/chat-name-prompt";
 export async function generateChatName(
   userQuery: string,
   context?: { userId?: number; chatId?: string }
@@ -27,7 +27,7 @@ export async function generateChatName(
   const model = await getAIModel(true);
   const { text } = await generateText({
     model,
-    prompt: `Generate a short, descriptive title (max 60 characters) for a website project based on this request: "${userQuery}"`,
+    prompt: buildChatNamePrompt(userQuery),
     experimental_telemetry: {
       isEnabled: true,
       functionId: "generate-chat-name",
