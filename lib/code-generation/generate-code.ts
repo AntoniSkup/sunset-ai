@@ -383,7 +383,7 @@ const createSiteToolExecute = async (
     destination: "landing/index.tsx",
     userRequest:
       userRequest +
-      "\n\nCreate the entry React component for the site (landing/index.tsx).\n\nHard requirements:\n- Export a single default React component that is the root layout.\n- Import and render the Home page (e.g. import Home from './pages/Home' and <Home />).\n- For multi-page sites: use hash-based routing (window.location.hash), import other pages (About, Contact, etc.), and render the matching page; include a nav with links like <a href=\"#/\">Home</a>, <a href=\"#/about\">About</a>.\n- Do NOT output <!DOCTYPE html>, <html>, <head>, or <body>; the app wraps your component.\n- Use Tailwind utility classes (className).",
+      "\n\nCreate the entry React component for the site (landing/index.tsx) as a WIREFRAME ONLY.\n\nHard requirements:\n- Export a single default React component that is the root layout.\n- Import and render ONLY these components: Navbar from './sections/Navbar', Footer from './sections/Footer', and page(s) from './pages/...' (e.g. Home from './pages/Home'). Do NOT put navbar, footer, or any section markup or content inside index.tsx.\n- Structure: render <Navbar />, then the page content (e.g. <Home /> or hash-routed page), then <Footer />. Use a wrapper like <div><Navbar /><main>...</main><Footer /></div>.\n- For multi-page sites: use hash-based routing (window.location.hash), import other pages (About, Contact, etc.), and render the matching page inside main. The Navbar and Footer must be separate components imported from './sections/Navbar' and './sections/Footer'.\n- Do NOT output <!DOCTYPE html>, <html>, <head>, or <body>; the app wraps your component.\n- Use Tailwind utility classes (className).",
     isModification: false,
   });
 
@@ -457,7 +457,7 @@ const createSectionToolExecute = async (
 export function createSiteTool(chatId: string) {
   return tool({
     description:
-      "Create the entry React component (landing/index.tsx) for a new site. Initializes the root layout that imports and renders the Home page and supports multi-page routing. Call once at the start of building a new website.",
+      "Create the entry React component (landing/index.tsx) for a new site as a WIREFRAME ONLY. The file must import Navbar from './sections/Navbar', Footer from './sections/Footer', and page(s) from './pages/...', and render only those components (no inline navbar/footer markup). Call once at the start of building a new website.",
     inputSchema: createSiteSchema,
     execute: async (input: z.infer<typeof createSiteSchema>) => {
       return createSiteToolExecute(input, chatId);

@@ -23,17 +23,17 @@ IMPORTANT: Tool model (multi-file, one tool call per file)
 - Never issue multiple tool calls at once. Call exactly ONE tool, wait for its result, then proceed to the next file in a later step.
 
 File generation order (when creating a website from scratch):
-1) Create a **Layout / Entry** first: the root React component that composes the site (landing/index.tsx). It should import and render the home page and, for multi-page sites, include simple routing (e.g. hash-based) and a nav linking to each page.
-2) Create **Page file(s)** next: one per page (e.g. landing/pages/Home.tsx, landing/pages/About.tsx, landing/pages/Contact.tsx). Each page is a single default-export React component that imports and renders its sections.
-3) Create each **Section file** referenced by the pages (e.g. landing/sections/Navbar.tsx, landing/sections/Hero.tsx, landing/sections/Footer.tsx). Sections are reusable across pages.
+1) Create a **Layout / Entry** first: the root React component (landing/index.tsx) as a WIREFRAME ONLY. It must import Navbar from './sections/Navbar', Footer from './sections/Footer', and page(s) from './pages/...', then render only those components (e.g. <Navbar /><main>{page}</main><Footer />). Do not put navbar, footer, or any section markup inside index.tsx. For multi-page sites use hash-based routing and render the matching page inside main.
+2) Create **Page file(s)** next: one per page (e.g. landing/pages/Home.tsx, landing/pages/About.tsx). Each page imports and renders its sections (e.g. Hero, Features).
+3) Create each **Section file** that the layout and pages need: landing/sections/Navbar.tsx, landing/sections/Footer.tsx, landing/sections/Hero.tsx, etc. The entry (index.tsx) and pages import these; they must not contain nav/footer/section markup inline.
 
 Composition convention (how layout and pages reference sections and pages):
-- Use React imports and JSX. In the entry file (landing/index.tsx), import the home page and any other pages, then render them (e.g. with hash-based routing so #/ shows Home, #/about shows About).
+- The entry file (landing/index.tsx) is a WIREFRAME: it must only import Navbar from './sections/Navbar', Footer from './sections/Footer', and page(s) from './pages/...', then render <Navbar />, the page (or hash-routed content), and <Footer />. No inline navbar/footer/section markup in index.tsx.
 - In a page file, import section components and render them, e.g.:
-  import Navbar from '../sections/Navbar';
   import Hero from '../sections/Hero';
-  export default function Home() { return (<><Navbar /><Hero />...</>); }
-- Use consistent paths: landing/pages/Home.tsx, landing/sections/Hero.tsx, etc. The app resolves these paths from the same site.
+  import Features from '../sections/Features';
+  export default function Home() { return (<><Hero /><Features />...</>); }
+- Use consistent paths: landing/pages/Home.tsx, landing/sections/Navbar.tsx, landing/sections/Footer.tsx, landing/sections/Hero.tsx. The app resolves these paths from the same site.
 
 IMPORTANT: Modification Detection and Session Management
 - When a user requests to CREATE a NEW website (first request in conversation or explicit "create/build a new site" language), set isModification: false
@@ -73,7 +73,7 @@ Notes:
 
 3) Continue building by calling create_section repeatedly (still isModification: false), once per file, in this order:
 - **Page file(s)**: Create landing/pages/Home.tsx first; then any other pages (e.g. landing/pages/About.tsx, landing/pages/Contact.tsx) if the site is multi-page.
-- **Each section** used by the pages (Navbar, Hero, Footer, etc.)
+- **Each section** used by the entry or pages: Navbar and Footer (used by index.tsx), then Hero, Features, and any other sections used by the pages.
 
 When calling create_section, always set the destination field to the output file path (e.g., destination: "landing/sections/Hero.tsx") and describe ONLY what belongs in that single file in userRequest.
 
