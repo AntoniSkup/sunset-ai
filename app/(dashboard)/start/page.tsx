@@ -347,49 +347,56 @@ export default function StartPage() {
               <Link
                 key={chat.publicId}
                 href={`/builder/${chat.publicId}`}
-                className="group flex flex-col overflow-hidden rounded-xl border border-gray-700 bg-white shadow-sm transition-all hover:border-gray-300 hover:shadow-md"
+                className="group rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300"
               >
-                <div className="aspect-video w-full overflow-hidden border-b  bg-gray-100">
-                  {(chat.screenshotUrl ?? chat.screenshot_url) ? (
-                    <img
-                      src={chat.screenshotUrl ?? chat.screenshot_url ?? ""}
-                      alt={chat.title || "Landing page preview"}
-                      className="h-full w-full object-cover object-top"
-                    />
-                  ) : (
-                    <div className="flex h-full w-full flex-col bg-gray-50 p-1.5">
-                      <div className="mb-1.5 flex items-center gap-1 rounded border border-gray-200 bg-white px-1.5 py-1">
-                        <div className="flex gap-0.5">
-                          <div className="h-1.5 w-1.5 rounded-full bg-gray-200" />
-                          <div className="h-1.5 w-1.5 rounded-full bg-gray-200" />
-                          <div className="h-1.5 w-1.5 rounded-full bg-gray-200" />
+                <motion.article
+                  whileHover={{ y: -4, scale: 1.01 }}
+                  whileTap={{ scale: 0.985 }}
+                  transition={{ type: "spring", stiffness: 520, damping: 28 }}
+                  className="flex h-full flex-col overflow-hidden rounded-xl border border-gray-700 bg-white shadow-sm transition-all hover:border-gray-800 hover:shadow-md"
+                >
+                  <div className="aspect-video w-full overflow-hidden border-b bg-gray-100">
+                    {(chat.screenshotUrl ?? chat.screenshot_url) ? (
+                      <motion.img
+                        src={chat.screenshotUrl ?? chat.screenshot_url ?? ""}
+                        alt={chat.title || "Landing page preview"}
+                        className="h-full w-full object-cover object-top transition-transform duration-200 group-hover:scale-[1.02]"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full flex-col bg-gray-50 p-1.5">
+                        <div className="mb-1.5 flex items-center gap-1 rounded border border-gray-200 bg-white px-1.5 py-1">
+                          <div className="flex gap-0.5">
+                            <div className="h-1.5 w-1.5 rounded-full bg-gray-200" />
+                            <div className="h-1.5 w-1.5 rounded-full bg-gray-200" />
+                            <div className="h-1.5 w-1.5 rounded-full bg-gray-200" />
+                          </div>
+                          <div className="ml-1 h-1.5 flex-1 max-w-[60%] rounded bg-gray-100" />
                         </div>
-                        <div className="ml-1 h-1.5 flex-1 max-w-[60%] rounded bg-gray-100" />
+                        <div className="flex flex-1 flex-col gap-1 rounded border border-gray-200 bg-white p-2">
+                          <div className="h-2 w-3/4 rounded bg-gray-100" />
+                          <div className="mt-0.5 h-1.5 w-full rounded bg-gray-50" />
+                          <div className="h-1.5 w-5/6 rounded bg-gray-50" />
+                          <div className="mt-1.5 flex gap-1">
+                            <div className="h-2 w-12 rounded bg-gray-100" />
+                            <div className="h-2 w-14 rounded bg-gray-100" />
+                          </div>
+                          <div className="mt-1 grid flex-1 grid-cols-2 gap-1">
+                            <div className="rounded bg-gray-50" />
+                            <div className="rounded bg-gray-50" />
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex flex-1 flex-col gap-1 rounded border border-gray-200 bg-white p-2">
-                        <div className="h-2 w-3/4 rounded bg-gray-100" />
-                        <div className="mt-0.5 h-1.5 w-full rounded bg-gray-50" />
-                        <div className="h-1.5 w-5/6 rounded bg-gray-50" />
-                        <div className="mt-1.5 flex gap-1">
-                          <div className="h-2 w-12 rounded bg-gray-100" />
-                          <div className="h-2 w-14 rounded bg-gray-100" />
-                        </div>
-                        <div className="mt-1 grid flex-1 grid-cols-2 gap-1">
-                          <div className="rounded bg-gray-50" />
-                          <div className="rounded bg-gray-50" />
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-                <div className="flex flex-col gap-1 p-4">
-                  <p className="truncate font-medium text-gray-900">
-                    {chat.title || "Untitled"}
-                  </p>
-                  <p className="text-sm text-gray-500">
-                    Edited {getRelativeTime(chat.updatedAt)}
-                  </p>
-                </div>
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-1 p-4">
+                    <p className="truncate font-medium text-gray-900">
+                      {chat.title || "Untitled"}
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      Edited {getRelativeTime(chat.updatedAt)}
+                    </p>
+                  </div>
+                </motion.article>
               </Link>
             ))}
           </div>
