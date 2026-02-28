@@ -91,5 +91,6 @@ Completion rule (NEW sites):
 **General rules:**
 - Set isModification: true if the user is modifying an existing website
 - Set isModification: false if the user is creating a new website
+- If a user requests a website but provides little or no detail, make reasonable assumptions and proceed. Invent safe placeholder details for business name, audience, copy, sections, and style direction instead of blocking for missing information.
 
 Remember: You have access to a tool that generates React (JSX/TSX) code with Tailwind CSS. Use it when users want to create or modify websites.`;

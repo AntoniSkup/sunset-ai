@@ -1,10 +1,9 @@
 import "server-only";
 import type { ComponentType } from "react";
+import { createRequire } from "node:module";
 import * as esbuild from "esbuild";
 import * as fs from "fs";
 import * as path from "path";
-import * as os from "os";
-import { pathToFileURL } from "node:url";
 import {
   getLandingSiteFileContentAtOrBeforeRevision,
   getAllLandingSiteFilesAtOrBeforeRevision,
@@ -14,11 +13,14 @@ const ENTRY_PATH = "landing/index.tsx";
 const MAX_FILES = 50;
 const MAX_DEPTH = 10;
 const COMPOSE_REACT_DEBUG = process.env.COMPOSE_REACT_DEBUG === "1";
+const KEEP_BUNDLE_ON_ERROR = process.env.COMPOSE_REACT_KEEP_BUNDLE_ON_ERROR === "1";
 
 function debugLog(...args: unknown[]) {
   if (!COMPOSE_REACT_DEBUG) return;
   console.log("[compose-react][debug]", ...args);
 }
+
+const runtimeRequire = createRequire(path.join(process.cwd(), "package.json"));
 
 function resolveImportPath(fromPath: string, importSpec: string): string | null {
   const spec = importSpec.trim();
@@ -170,10 +172,17 @@ export async function getComposedReactHtml(params: {
         resolveDir: process.cwd(),
       },
       bundle: true,
-      format: "esm",
+      format: "cjs",
       platform: "node",
       jsx: "automatic",
       write: false,
+      external: [
+        "react",
+        "react-dom",
+        "react-dom/server",
+        "react/jsx-runtime",
+        "react/jsx-dev-runtime",
+      ],
       plugins: [
         {
           name: "landing-resolve",
@@ -236,27 +245,34 @@ export async function getComposedReactHtml(params: {
   }
 
   let RootComponent: ComponentType | undefined;
-  const tmpDir = os.tmpdir();
+  const tmpDir = path.join(process.cwd(), ".next", "cache", "landing-preview");
+  fs.mkdirSync(tmpDir, { recursive: true });
   const tmpFile = path.join(
     tmpDir,
-    `landing-${chatId}-${revisionNumber}-${Date.now()}.mjs`
+    `landing-${chatId}-${revisionNumber}-${Date.now()}.cjs`
   );
 
   const previousWindow = (global as any).window;
+  let loadedBundleOk = false;
   try {
     (global as any).window = { location: { hash: "#/" } };
     fs.writeFileSync(tmpFile, bundle, "utf-8");
-    const url = pathToFileURL(tmpFile).href;
-    const loadBundle = new Function("u", "return import(u)");
-    const mod = await loadBundle(url);
+    const loadBundle = new Function("r", "p", "return r(p)");
+    const mod = loadBundle(runtimeRequire, tmpFile);
     RootComponent = mod.default ?? mod;
+    loadedBundleOk = true;
   } catch (err) {
     console.error("[compose-react] load bundle failed:", err);
+    if (KEEP_BUNDLE_ON_ERROR) {
+      console.warn("[compose-react] bundle preserved for debugging:", tmpFile);
+    }
     return null;
   } finally {
     (global as any).window = previousWindow;
     try {
-      if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile);
+      if (fs.existsSync(tmpFile) && (loadedBundleOk || !KEEP_BUNDLE_ON_ERROR)) {
+        fs.unlinkSync(tmpFile);
+      }
     } catch {
       // ignore
     }
@@ -267,12 +283,8 @@ export async function getComposedReactHtml(params: {
     return null;
   }
 
-  const [React, ReactDOMServer] = await Promise.all([
-    import("react"),
-    import("react-dom/server"),
-  ]);
-  const ReactDefault = (React as any).default ?? React;
-  const ReactDOMServerDefault = (ReactDOMServer as any).default ?? ReactDOMServer;
+  const ReactDefault = runtimeRequire("react");
+  const ReactDOMServerDefault = runtimeRequire("react-dom/server");
 
   let bodyHtml: string;
   try {
