@@ -2,11 +2,12 @@ import { generateText, tool } from "ai";
 import { z } from "zod";
 import { getAIModel } from "@/lib/ai/get-ai-model";
 import { getUser } from "@/lib/db/queries";
-import type { CodeGenerationResult } from "./types";
+import type { CodeGenerationResult, CodeValidationResult } from "./types";
 import { parse } from "node-html-parser";
 import {
   validateAndFixDocument,
   validateAndFixFragment,
+  stripMarkdownCodeFences,
 } from "@/lib/code-generation/fix-code-errors";
 import {
   createLandingSiteFileVersion,
@@ -33,13 +34,14 @@ function normalizeDestinationPath(input: string): string | null {
   if (p.startsWith("/")) return null;
   if (p.includes("\0")) return null;
   if (p.split("/").some((seg) => seg === ".." || seg === "")) return null;
-  if (!p.toLowerCase().endsWith(".html")) return null;
+  const lower = p.toLowerCase();
+  if (!lower.endsWith(".html") && !lower.endsWith(".tsx")) return null;
   return p;
 }
 
 function inferFileKind(destination: string): "layout" | "page" | "section" | "other" {
   const d = destination.toLowerCase();
-  if (d === "landing/index.html") return "layout";
+  if (d === "landing/index.html" || d === "landing/index.tsx") return "layout";
   if (d.startsWith("landing/pages/")) return "page";
   if (d.startsWith("landing/sections/")) return "section";
   return "other";
@@ -51,7 +53,8 @@ function isFragmentDestination(destination: string): boolean {
 }
 
 function isIndexDestination(destination: string): boolean {
-  return destination.toLowerCase() === "landing/index.html";
+  const d = destination.toLowerCase();
+  return d === "landing/index.html" || d === "landing/index.tsx";
 }
 
 function enforceIndexShell(html: string): string {
@@ -67,6 +70,25 @@ function enforceIndexShell(html: string): string {
   const close = match[3];
   const replacement = `${open}\n  ${includeLine}\n${close}`;
   return html.replace(bodyRe, replacement);
+}
+
+function validateReactCode(code: string): CodeValidationResult {
+  const { code: stripped, stripped: wasStripped } = stripMarkdownCodeFences(code);
+  const trimmed = stripped.trim();
+  if (!trimmed) {
+    return {
+      isValid: false,
+      fixedCode: code,
+      fixesApplied: [],
+      errors: ["Generated code is empty or only contained markdown fences"],
+    };
+  }
+  return {
+    isValid: true,
+    fixedCode: trimmed,
+    fixesApplied: wasStripped ? ["Stripped markdown code fences"] : [],
+    errors: [],
+  };
 }
 
 export function buildCodeGenerationPrompt(params: {
@@ -222,9 +244,12 @@ async function generateAndSaveSingleFile(params: {
       };
     }
 
-    const validationResult = treatAsFragment
-      ? await validateAndFixFragment(generatedCode)
-      : await validateAndFixDocument(generatedCode);
+    const isTsx = normalizedDestination.toLowerCase().endsWith(".tsx");
+    const validationResult = isTsx
+      ? validateReactCode(generatedCode)
+      : treatAsFragment
+        ? await validateAndFixFragment(generatedCode)
+        : await validateAndFixDocument(generatedCode);
 
     if (!validationResult.isValid && validationResult.errors.length > 0) {
       console.error(
@@ -238,13 +263,13 @@ async function generateAndSaveSingleFile(params: {
 
     let finalCode = validationResult.fixedCode;
 
-    if (isIndexDestination(normalizedDestination)) {
+    if (isIndexDestination(normalizedDestination) && !isTsx) {
       finalCode = enforceIndexShell(finalCode);
       const revalidated = await validateAndFixDocument(finalCode);
       if (revalidated.isValid) {
         finalCode = revalidated.fixedCode;
       }
-    } else if (!treatAsFragment) {
+    } else if (!treatAsFragment && !isTsx) {
       try {
         const root = parse(finalCode);
         const nestedHtml = root.querySelector("html html");
@@ -323,7 +348,9 @@ const createSectionSchema = z.object({
   destination: z
     .string()
     .min(1, "Destination is required")
-    .describe("Relative .html file path for this file (e.g. landing/sections/hero.html)"),
+    .describe(
+      "Relative .tsx file path for this file (e.g. landing/sections/Hero.tsx, landing/pages/Home.tsx)"
+    ),
   userRequest: z
     .string()
     .min(1, "User request cannot be empty")
@@ -353,10 +380,10 @@ const createSiteToolExecute = async (
   const result = await generateAndSaveSingleFile({
     chatId,
     userId: user.id,
-    destination: "landing/index.html",
+    destination: "landing/index.tsx",
     userRequest:
       userRequest +
-      "\n\nCreate the entry layout document for the site.\n\nHard requirements:\n- Output a complete HTML document with <!DOCTYPE html>, <html>, <head>, and <body>\n- Include Tailwind via CDN in <head>\n- In <body>, compose the site using exactly this include comment as the main content:\n  <!-- include: landing/pages/home.html -->\n- Do not reference any other includes in landing/index.html",
+      "\n\nCreate the entry React component for the site (landing/index.tsx).\n\nHard requirements:\n- Export a single default React component that is the root layout.\n- Import and render the Home page (e.g. import Home from './pages/Home' and <Home />).\n- For multi-page sites: use hash-based routing (window.location.hash), import other pages (About, Contact, etc.), and render the matching page; include a nav with links like <a href=\"#/\">Home</a>, <a href=\"#/about\">About</a>.\n- Do NOT output <!DOCTYPE html>, <html>, <head>, or <body>; the app wraps your component.\n- Use Tailwind utility classes (className).",
     isModification: false,
   });
 
@@ -430,7 +457,7 @@ const createSectionToolExecute = async (
 export function createSiteTool(chatId: string) {
   return tool({
     description:
-      "Create a new index.html using the provided brand, goal, and audience, and return a siteId plus any initialized defaults (e.g., theme tokens, pages scaffold) so other tools can add pages/sections to it.",
+      "Create the entry React component (landing/index.tsx) for a new site. Initializes the root layout that imports and renders the Home page and supports multi-page routing. Call once at the start of building a new website.",
     inputSchema: createSiteSchema,
     execute: async (input: z.infer<typeof createSiteSchema>) => {
       return createSiteToolExecute(input, chatId);
@@ -442,7 +469,7 @@ export function createSiteTool(chatId: string) {
 export function createSectionTool(chatId: string) {
   return tool({
     description:
-      "Create or modify exactly one HTML file (layout/page/section) for the landing site. One tool call writes exactly one file.",
+      "Create or modify exactly one React/TSX file (layout, page, or section) for the landing site. One tool call writes exactly one file. Use .tsx paths (e.g. landing/sections/Hero.tsx, landing/pages/Home.tsx).",
     inputSchema: createSectionSchema,
     execute: async (input: z.infer<typeof createSectionSchema>) => {
       return createSectionToolExecute(input, chatId);

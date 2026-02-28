@@ -1,5 +1,6 @@
 import { put } from "@vercel/blob";
 import { getComposedHtml } from "@/lib/preview/compose-html";
+import { getComposedReactHtml } from "@/lib/preview/compose-react";
 import { updateChatScreenshotUrl } from "@/lib/db/queries";
 
 const SCREENSHOTONE_API = "https://api.screenshotone.com/take";
@@ -23,7 +24,9 @@ export async function captureLandingPageScreenshot(params: {
   }
 
   try {
-    const html = await getComposedHtml({ chatId, revisionNumber });
+    const html =
+      (await getComposedReactHtml({ chatId, revisionNumber })) ??
+      (await getComposedHtml({ chatId, revisionNumber }));
     if (!html) {
       console.warn(`[Screenshot] No composed HTML for chat ${chatId} revision ${revisionNumber}`);
       return;

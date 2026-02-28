@@ -9,6 +9,7 @@ const nextConfig: NextConfig = {
     ppr: true,
     clientSegmentCache: true,
   },
+  serverExternalPackages: ["esbuild"],
 };
 
 export default nextConfig;

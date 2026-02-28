@@ -419,6 +419,39 @@ export async function getLandingSiteFileContentAtOrBeforeRevision(data: {
   return result.length > 0 ? result[0] : null;
 }
 
+export async function getAllLandingSiteFilesAtOrBeforeRevision(params: {
+  chatId: string;
+  revisionNumber: number;
+}): Promise<Array<{ path: string; content: string }>> {
+  const rows = await db
+    .select({
+      path: landingSiteFiles.path,
+      content: landingSiteFileVersions.content,
+      revisionNumber: landingSiteRevisions.revisionNumber,
+    })
+    .from(landingSiteFiles)
+    .innerJoin(landingSiteFileVersions, eq(landingSiteFileVersions.fileId, landingSiteFiles.id))
+    .innerJoin(
+      landingSiteRevisions,
+      eq(landingSiteRevisions.id, landingSiteFileVersions.revisionId)
+    )
+    .where(
+      and(
+        eq(landingSiteFiles.chatId, params.chatId),
+        lte(landingSiteRevisions.revisionNumber, params.revisionNumber)
+      )
+    )
+    .orderBy(asc(landingSiteFiles.path), desc(landingSiteRevisions.revisionNumber));
+
+  const byPath = new Map<string, string>();
+  for (const row of rows) {
+    if (!byPath.has(row.path)) {
+      byPath.set(row.path, row.content);
+    }
+  }
+  return Array.from(byPath.entries()).map(([path, content]) => ({ path, content }));
+}
+
 export async function createChat(data: {
   userId: number;
   title?: string;

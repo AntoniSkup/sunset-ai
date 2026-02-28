@@ -244,7 +244,7 @@ async function chatHandler(request: NextRequest) {
                 title:
                   destination ||
                   (toolName === "create_site"
-                    ? "landing/index.html"
+                    ? "landing/index.tsx"
                     : getToolTitle(toolName)),
                 toolName,
               });

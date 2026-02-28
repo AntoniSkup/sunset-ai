@@ -5,6 +5,7 @@ import {
   getUser,
 } from "@/lib/db/queries";
 import { getComposedHtml } from "@/lib/preview/compose-html";
+import { getComposedReactHtml } from "@/lib/preview/compose-react";
 
 export async function GET(
   request: NextRequest,
@@ -45,10 +46,16 @@ export async function GET(
       }
 
       const requestedRevision = versionNum > 0 ? versionNum : latestRevision.revisionNumber;
-      const composed = await getComposedHtml({
-        chatId,
-        revisionNumber: requestedRevision,
-      });
+
+      const composed =
+        (await getComposedReactHtml({
+          chatId,
+          revisionNumber: requestedRevision,
+        })) ??
+        (await getComposedHtml({
+          chatId,
+          revisionNumber: requestedRevision,
+        }));
 
       if (!composed) {
         return NextResponse.json(
