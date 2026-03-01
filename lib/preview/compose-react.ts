@@ -442,6 +442,15 @@ export async function getComposedReactHtml(params: {
   );
 
   const mockBaseUrl = getMockBrowserBaseUrl();
+  const mockHistoryState = { idx: 0 };
+  const mockDocument = {
+    documentElement: {},
+    body: {},
+    defaultView: null as unknown,
+    createElement: () => ({}),
+    querySelector: () => null,
+    getElementById: () => null,
+  };
   const mockWindow = {
     location: {
       hash: "#/",
@@ -450,6 +459,13 @@ export async function getComposedReactHtml(params: {
       search: "",
       origin: mockBaseUrl,
     },
+    history: {
+      state: mockHistoryState,
+      pushState: () => {},
+      replaceState: () => {},
+      go: () => {},
+    },
+    document: mockDocument,
     addEventListener: () => {},
     removeEventListener: () => {},
     matchMedia: () => ({
@@ -463,13 +479,7 @@ export async function getComposedReactHtml(params: {
       onchange: null,
     }),
   };
-  const mockDocument = {
-    documentElement: {},
-    body: {},
-    createElement: () => ({}),
-    querySelector: () => null,
-    getElementById: () => null,
-  };
+  (mockDocument as { defaultView: typeof mockWindow }).defaultView = mockWindow;
 
   const previousWindow = (global as any).window;
   const previousLocation = (global as any).location;
