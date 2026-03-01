@@ -349,18 +349,13 @@ export default function StartPage() {
                 href={`/builder/${chat.publicId}`}
                 className="group rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300"
               >
-                <motion.article
-                  whileHover={{ y: -4, scale: 1.01 }}
-                  whileTap={{ scale: 0.985 }}
-                  transition={{ type: "spring", stiffness: 720, damping: 32 }}
-                  className="flex h-full flex-col overflow-hidden rounded-xl border border-gray-700 bg-white shadow-sm transition-all hover:border-gray-800 hover:shadow-md"
-                >
+                <article className="flex h-full flex-col overflow-hidden rounded-xl border border-gray-700 bg-white shadow-sm hover:border-gray-800 hover:shadow-md">
                   <div className="aspect-video w-full overflow-hidden border-b bg-gray-100">
                     {(chat.screenshotUrl ?? chat.screenshot_url) ? (
-                      <motion.img
+                      <img
                         src={chat.screenshotUrl ?? chat.screenshot_url ?? ""}
                         alt={chat.title || "Landing page preview"}
-                        className="h-full w-full object-cover object-top transition-transform duration-150 ease-out group-hover:scale-[1.02]"
+                        className="h-full w-full object-cover object-top"
                       />
                     ) : (
                       <div className="flex h-full w-full flex-col bg-gray-50 p-1.5">
@@ -396,7 +391,7 @@ export default function StartPage() {
                       Edited {getRelativeTime(chat.updatedAt)}
                     </p>
                   </div>
-                </motion.article>
+                </article>
               </Link>
             ))}
           </div>

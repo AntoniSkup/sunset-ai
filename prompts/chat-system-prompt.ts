@@ -28,12 +28,10 @@ File generation order (when creating a website from scratch):
 3) Create each **Section file** that the layout and pages need: landing/sections/Navbar.tsx, landing/sections/Footer.tsx, landing/sections/Hero.tsx, etc. The entry (index.tsx) and pages import these; they must not contain nav/footer/section markup inline.
 
 Composition convention (how layout and pages reference sections and pages):
-- The entry file (landing/index.tsx) is a WIREFRAME: it must only import Navbar from './sections/Navbar', Footer from './sections/Footer', and page(s) from './pages/...', then render <Navbar />, the page (or hash-routed content), and <Footer />. No inline navbar/footer/section markup in index.tsx.
-- In a page file, import section components and render them, e.g.:
-  import Hero from '../sections/Hero';
-  import Features from '../sections/Features';
-  export default function Home() { return (<><Hero /><Features />...</>); }
-- Use consistent paths: landing/pages/Home.tsx, landing/sections/Navbar.tsx, landing/sections/Footer.tsx, landing/sections/Hero.tsx. The app resolves these paths from the same site.
+- The entry file (landing/index.tsx) is a WIREFRAME: use React Router—import { HashRouter, Routes, Route } from 'react-router-dom', wrap the app in <HashRouter>, and use <Routes> with <Route path=\"/\" element={<Home />} /> etc. inside <main>. Import Navbar and Footer and render <Navbar /><main><Routes>...</Routes></main><Footer />. No inline navbar/footer markup.
+- In Navbar (landing/sections/Navbar.tsx) use Link from 'react-router-dom': <Link to=\"/\">Home</Link>, <Link to=\"/about\">About</Link> so navigation works. Do not use <a href=\"#/...\">.
+- In a page file, import section components and render them (e.g. Hero, Features). Use consistent paths: landing/pages/Home.tsx, landing/sections/Navbar.tsx, etc.
+- **Single-page site**: Navbar uses href="#menu", href="#contact"; sections on the page need matching id. **Multi-page site**: Use HashRouter + Routes + Route in index; use Link in Navbar.
 
 IMPORTANT: Modification Detection and Session Management
 - When a user requests to CREATE a NEW website (first request in conversation or explicit "create/build a new site" language), set isModification: false

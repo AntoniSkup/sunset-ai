@@ -131,6 +131,187 @@ function wrapInHtml(bodyHtml: string): string {
 </html>`;
 }
 
+export function getPreviewHtml(params: {
+  chatId: string;
+  revisionNumber: number;
+  basePath: string;
+}): string {
+  const { basePath } = params;
+  const scriptSrc = `${basePath}/bundle`;
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Landing Page</title>
+  ${TAILWIND_CDN}
+</head>
+<body>
+  <div id="root"></div>
+  <script src="${scriptSrc}" type="module"></script>
+</body>
+</html>`;
+}
+
+const CLIENT_ENTRY = `
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import App from 'landing/index.tsx';
+const root = document.getElementById('root');
+if (root) createRoot(root).render(React.createElement(App));
+`.trim();
+
+export async function getPreviewBrowserBundle(params: {
+  chatId: string;
+  revisionNumber: number;
+}): Promise<string | null> {
+  const { chatId, revisionNumber } = params;
+  debugLog("browser bundle start", { chatId, revisionNumber });
+
+  const entry = await getLandingSiteFileContentAtOrBeforeRevision({
+    chatId,
+    path: ENTRY_PATH,
+    revisionNumber,
+  });
+  if (!entry?.content) return null;
+
+  const allFiles = await getAllLandingSiteFilesAtOrBeforeRevision({
+    chatId,
+    revisionNumber,
+  });
+  const fileMap = new Map<string, string>();
+  await collectFileMap({
+    chatId,
+    revisionNumber,
+    entryPath: ENTRY_PATH,
+    map: fileMap,
+    depth: 0,
+    allFiles,
+  });
+
+  try {
+    const result = await esbuild.build({
+      stdin: {
+        contents: CLIENT_ENTRY,
+        sourcefile: "client-entry.jsx",
+        loader: "jsx",
+        resolveDir: process.cwd(),
+      },
+      bundle: true,
+      format: "esm",
+      platform: "browser",
+      jsx: "automatic",
+      write: false,
+      plugins: [
+        {
+          name: "landing-browser",
+          setup(build) {
+            build.onResolve(
+              { filter: /^(react|react-dom|react-router-dom)(\/.*)?$/ },
+              (args) => {
+                try {
+                  const p = runtimeRequire.resolve(args.path, {
+                    paths: [process.cwd()],
+                  });
+                  return { path: p, namespace: "file" };
+                } catch {
+                  const pkgName = args.path.split("/")[0];
+                  const pkgDir = path.join(
+                    process.cwd(),
+                    "node_modules",
+                    pkgName
+                  );
+                  const pkgJsonPath = path.join(pkgDir, "package.json");
+                  if (fs.existsSync(pkgJsonPath)) {
+                    const pkgJson = JSON.parse(
+                      fs.readFileSync(pkgJsonPath, "utf-8")
+                    );
+                    const subpath = args.path.slice(pkgName.length);
+                    let entryPath: string;
+                    if (subpath) {
+                      const sub = subpath.startsWith("/") ? subpath.slice(1) : subpath;
+                      const exports = pkgJson.exports as Record<string, unknown> | undefined;
+                      const expKey = sub ? `./${sub}` : ".";
+                      const exp = exports?.[expKey];
+                      const resolved = typeof exp === "string" ? exp : (exp as { require?: string })?.require ?? (exp as { default?: string })?.default;
+                      if (resolved) {
+                        entryPath = path.join(pkgDir, resolved);
+                      } else {
+                        entryPath = path.join(pkgDir, sub + ".js");
+                      }
+                    } else {
+                      const main = pkgJson.main ?? pkgJson.module ?? "index.js";
+                      entryPath = path.join(pkgDir, typeof main === "string" ? main : (main as { default?: string })?.default ?? "index.js");
+                    }
+                    if (fs.existsSync(entryPath)) {
+                      return { path: path.resolve(entryPath), namespace: "file" };
+                    }
+                  }
+                  return null;
+                }
+              }
+            );
+            build.onResolve({ filter: /^\.\.?\// }, (args) => {
+              const importerPath =
+                args.importer && args.importer.startsWith("landing/")
+                  ? args.importer
+                  : ENTRY_PATH;
+              const fromDir = path.dirname(importerPath);
+              const joined = path.join(fromDir, args.path).replace(/\\/g, "/");
+              let resolved = joined.replace(/\/{2,}/g, "/");
+              if (!resolved.startsWith("landing/")) return null;
+              if (
+                !resolved.endsWith(".tsx") &&
+                !resolved.endsWith(".ts") &&
+                !resolved.endsWith(".jsx")
+              ) {
+                resolved = resolved + ".tsx";
+              }
+              if (fileMap.has(resolved)) {
+                return { path: resolved, namespace: "landing" };
+              }
+              return null;
+            });
+            build.onResolve({ filter: /^landing\// }, (args) => {
+              let resolved = args.path.replace(/\\/g, "/");
+              if (
+                !resolved.endsWith(".tsx") &&
+                !resolved.endsWith(".ts") &&
+                !resolved.endsWith(".jsx")
+              ) {
+                resolved = resolved + ".tsx";
+              }
+              if (fileMap.has(resolved)) {
+                return { path: resolved, namespace: "landing" };
+              }
+              return null;
+            });
+            build.onLoad({ filter: /.*/, namespace: "landing" }, (args) => {
+              const content = fileMap.get(args.path);
+              if (content == null) return null;
+              return {
+                contents: content,
+                loader: "tsx",
+                resolveDir: process.cwd(),
+              };
+            });
+          },
+        },
+      ],
+      outfile: "out.js",
+    });
+
+    if (result.outputFiles == null || result.outputFiles.length === 0) {
+      console.error("[compose-react] browser bundle produced no output");
+      return null;
+    }
+    return result.outputFiles[0].text;
+  } catch (err) {
+    console.error("[compose-react] browser bundle failed:", err);
+    return null;
+  }
+}
+
 export async function getComposedReactHtml(params: {
   chatId: string;
   revisionNumber: number;

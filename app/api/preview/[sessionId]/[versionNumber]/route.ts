@@ -5,7 +5,11 @@ import {
   getUser,
 } from "@/lib/db/queries";
 import { getComposedHtml } from "@/lib/preview/compose-html";
-import { getComposedReactHtml } from "@/lib/preview/compose-react";
+import {
+  getComposedReactHtml,
+  getPreviewHtml,
+  getPreviewBrowserBundle,
+} from "@/lib/preview/compose-react";
 
 export async function GET(
   request: NextRequest,
@@ -47,15 +51,30 @@ export async function GET(
 
       const requestedRevision = versionNum > 0 ? versionNum : latestRevision.revisionNumber;
 
-      const composed =
-        (await getComposedReactHtml({
-          chatId,
-          revisionNumber: requestedRevision,
-        })) ??
-        (await getComposedHtml({
-          chatId,
-          revisionNumber: requestedRevision,
-        }));
+      const basePath = `/api/preview/${chatId}/${requestedRevision}`;
+      const bundle = await getPreviewBrowserBundle({
+        chatId,
+        revisionNumber: requestedRevision,
+      });
+      let composed: string | null =
+        bundle
+          ? getPreviewHtml({
+              chatId,
+              revisionNumber: requestedRevision,
+              basePath,
+            })
+          : null;
+      if (!composed) {
+        composed =
+          (await getComposedReactHtml({
+            chatId,
+            revisionNumber: requestedRevision,
+          })) ??
+          (await getComposedHtml({
+            chatId,
+            revisionNumber: requestedRevision,
+          }));
+      }
 
       if (!composed) {
         return NextResponse.json(

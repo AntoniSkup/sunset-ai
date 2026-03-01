@@ -29,7 +29,8 @@ Generate exactly ONE React/TSX file for a landing site. Each tool call creates/u
 - Output RAW React/JSX/TSX ONLY (no markdown, no explanations, no code fences).
 - Use Tailwind CSS utility classes for ALL styling (no <style> tags, no external CSS). Use the className prop.
 - The code must be valid JSX/TSX and self-contained for this file.
-- If destination is exactly "landing/index.tsx", output a WIREFRAME ONLY: a default-export React component that imports Navbar from './sections/Navbar', Footer from './sections/Footer', and page component(s) from './pages/...' (e.g. Home from './pages/Home'). Render only those components in structure like <div><Navbar /><main>{page content}</main><Footer /></div>. Do NOT put any navbar markup, footer markup, or section content inline in this file. For multi-page sites use hash-based routing and render the matching page inside main; Navbar and Footer must remain imported components. Do NOT output <!DOCTYPE html>, <html>, <head>, or <body>; the app wraps your component.
+- **File structure (strict)**: Put ALL import statements at the very top of the file. Then output exactly ONE default-export component. Do NOT repeat the component, do NOT put imports after the component, and do NOT duplicate any part of the file. Correct order: first every import line, then the single export default function ... { ... }. Example for a page file: first line "import Hero from '../sections/Hero';", then blank line, then "export default function Home() { return (...); }" once only.
+- If destination is exactly "landing/index.tsx", output a WIREFRAME ONLY: import { HashRouter, Routes, Route } from 'react-router-dom', plus Navbar, Footer, and page components. Wrap everything in <HashRouter>. Use <Routes> and <Route path=\"/\" element={<Home />} /> (and path=\"/about\" element={<About />} etc.) inside <main>. Do NOT use window.location.hash or manual switch. Do NOT put navbar/footer markup inline. Do NOT output <!DOCTYPE html>, <html>, <head>, or <body>.
 - If destination is under "landing/pages/", output a single default-export React component (e.g. export default function Home() { ... }). Import section components from '../sections/...' and render them. Do NOT include document structure.
 - If destination is under "landing/sections/", output a single default-export React component (e.g. export default function Hero() { ... }). Do NOT include document structure or import other landing sections unless needed.
 - Do NOT include scripts or useEffect for non-routing logic unless explicitly requested.
@@ -44,7 +45,7 @@ Generate exactly ONE React/TSX file for a landing site. Each tool call creates/u
 **Composition**
 - Include only what belongs to this file (no unrelated sections).
 - Use consistent container and spacing patterns (e.g., max-w-6xl mx-auto px-4 py-12).
-- If the section needs a CTA button, use a clear label and a safe href (e.g., "#contact" or "#pricing" or "#/contact").
+- If the section needs a CTA button, use a clear label and a safe href (e.g. "#contact" for same-page section, or "#/contact" for a contact page in multi-page sites).
 
 **Design consistency (when existing sections are provided)**
 - Match the design of existing sections: same colors, typography, spacing, button styles, and container patterns.
@@ -52,9 +53,13 @@ Generate exactly ONE React/TSX file for a landing site. Each tool call creates/u
 - Keep the visual language consistent across the entire site.
 
 **Multi-page sites**
-- For the entry (landing/index.tsx), output only a wireframe: import Navbar from './sections/Navbar', Footer from './sections/Footer', and page components (Home, About, Contact). Use hash-based routing (window.location.hash) to render the correct page inside <main>. Do not put nav or footer JSX inline; they must be imported components.
+- For the entry (landing/index.tsx), use React Router: import { HashRouter, Routes, Route } from 'react-router-dom'. Wrap the app in <HashRouter>, put <Routes> and <Route path=\"/\" element={<Home />} /> etc. inside <main>. Do not use window.location.hash.
+- Create landing/sections/Navbar.tsx and Footer.tsx. In Navbar use React Router's Link: import { Link } from 'react-router-dom'; use <Link to=\"/\">Home</Link>, <Link to=\"/about\">About</Link> (path with leading slash, no #). This makes navigation work in the preview.
 - Create one file per page under landing/pages/ (e.g. Home.tsx, About.tsx, Contact.tsx).
-- Create landing/sections/Navbar.tsx and landing/sections/Footer.tsx so the entry can import them.
+
+**Nav links and routing (critical for Navbar/Footer)**
+- **Single-page site** (one page with sections): Use in-page anchor links. Navbar links must be href="#sectionId" (no slash after #), e.g. href="#menu", href="#contact". Each section on the Home page MUST have a matching id (e.g. <section id="menu">).
+- **Multi-page site** (separate pages): Use React Router. In landing/index.tsx use HashRouter, Routes, Route. In Navbar use Link from 'react-router-dom': <Link to=\"/\">Home</Link>, <Link to=\"/about\">About</Link>. Do NOT use <a href=\"#/about\">; use <Link to=\"/about\"> so routing works.
 
 Now generate the section requested by the userRequest for the given destination.
   `.trim();
