@@ -39,7 +39,14 @@ export function CodeViewer({ code, path, className = "" }: CodeViewerProps) {
         const { codeToHtml } = await import("shiki/bundle/web");
         const lang = langFromPath(path);
         const out = await codeToHtml(code, {
-          lang: lang as "tsx" | "typescript" | "jsx" | "javascript" | "html" | "css" | "json",
+          lang: lang as
+            | "tsx"
+            | "typescript"
+            | "jsx"
+            | "javascript"
+            | "html"
+            | "css"
+            | "json",
           theme: "github-dark",
         });
         if (!cancelled) setHtml(out);
@@ -59,15 +66,15 @@ export function CodeViewer({ code, path, className = "" }: CodeViewerProps) {
 
   if (error) {
     return (
-      <div className={`p-4 text-sm text-destructive ${className}`}>
-        {error}
-      </div>
+      <div className={`p-4 text-sm text-destructive ${className}`}>{error}</div>
     );
   }
 
   if (html === null) {
     return (
-      <div className={`flex items-center justify-center p-8 text-muted-foreground ${className}`}>
+      <div
+        className={`flex items-center justify-center p-8 text-muted-foreground ${className}`}
+      >
         <span className="animate-pulse">Highlighting…</span>
       </div>
     );
@@ -75,14 +82,11 @@ export function CodeViewer({ code, path, className = "" }: CodeViewerProps) {
 
   return (
     <div
-      className={`overflow-auto text-sm ${className}`}
+      className={`overflow-auto text-sm max-w-full ${className}`}
       style={{ fontFamily: "var(--font-mono), ui-monospace, monospace" }}
     >
-      <pre className="m-0 p-4 min-h-full">
-        <code
-          className="block"
-          dangerouslySetInnerHTML={{ __html: html }}
-        />
+      <pre className="m-0 p-4 min-h-full max-w-[75rem] overflow-x-auto">
+        <code className="block" dangerouslySetInnerHTML={{ __html: html }} />
       </pre>
     </div>
   );
