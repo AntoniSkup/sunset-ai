@@ -24,7 +24,16 @@ import {
   DropdownMenuItem,
   DropdownMenuContent,
   DropdownMenuTrigger,
+  DropdownMenuGroup,
+  DropdownMenuShortcut,
+  DropdownMenuSeparator,
+  DropdownMenuPortal,
+  DropdownMenuSubContent,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
+import { signOut } from "@/app/(login)/actions";
 
 type Chat = {
   id: number;
@@ -70,6 +79,11 @@ export default function StartPage() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const router = useRouter();
   const setPendingMessage = usePendingMessageStore((s) => s.setPendingMessage);
+
+  async function handleSignOut() {
+    await signOut();
+    router.push("/");
+  }
 
   const loadPage = useCallback(async (cursor: string | null | undefined) => {
     if (cursor === null) return;
@@ -190,31 +204,47 @@ export default function StartPage() {
               className="h-8 w-auto object-contain shrink-0 hover:scale-95 click:scale-105 transition-all duration-200 cursor-pointer ease-in-out"
             />
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-48">
-            <DropdownMenuItem asChild>
-              <Link
-                href="/pricing"
-                className="flex items-center cursor-pointer"
+          <DropdownMenuContent className="w-40" align="start">
+            <DropdownMenuGroup>
+              <DropdownMenuLabel
+                className="text-gray-500 text-xs font-medium"
+                onClick={() => router.push("/dashboard")}
               >
-                <CreditCardIcon
-                  className="mr-2 h-4 w-4 font-bold text-black"
-                  strokeWidth={1.5}
-                />
-                Preview payment
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link
-                href="/dashboard/general"
-                className="flex items-center cursor-pointer"
-              >
-                <Cog6ToothIcon
-                  className="mr-2 h-4 w-4 font-bold text-black"
-                  strokeWidth={1.5}
-                />
+                My Account
+              </DropdownMenuLabel>
+
+              <DropdownMenuItem onClick={() => router.push("/pricing")}>
+                Billing
+                <DropdownMenuShortcut>⌘B</DropdownMenuShortcut>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => router.push("/dashboard")}>
                 Settings
-              </Link>
-            </DropdownMenuItem>
+                <DropdownMenuShortcut>⌘S</DropdownMenuShortcut>
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+              <DropdownMenuItem>Team</DropdownMenuItem>
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>Invite users</DropdownMenuSubTrigger>
+                <DropdownMenuPortal>
+                  <DropdownMenuSubContent>
+                    <DropdownMenuItem>Email</DropdownMenuItem>
+                    <DropdownMenuItem>Message</DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem>More...</DropdownMenuItem>
+                  </DropdownMenuSubContent>
+                </DropdownMenuPortal>
+              </DropdownMenuSub>
+            </DropdownMenuGroup>
+
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+              <DropdownMenuItem onClick={handleSignOut}>
+                Log out
+                <DropdownMenuShortcut>⇧⌘Q</DropdownMenuShortcut>
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
 

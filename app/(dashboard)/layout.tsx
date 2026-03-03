@@ -61,20 +61,19 @@ function UserMenu() {
           </AvatarFallback>
         </Avatar>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="flex flex-col gap-1">
+      <DropdownMenuContent>
         <DropdownMenuItem className="cursor-pointer">
           <Link href="/dashboard" className="flex w-full items-center">
             <HomeIcon className="mr-2 h-4 w-4" />
             <span>Dashboard</span>
           </Link>
         </DropdownMenuItem>
+        x
         <form action={handleSignOut} className="w-full">
-          <button type="submit" className="flex w-full">
-            <DropdownMenuItem className="w-full flex-1 cursor-pointer">
-              <ArrowRightOnRectangleIcon className="mr-2 h-4 w-4" />
-              <span>Sign out</span>
-            </DropdownMenuItem>
-          </button>
+          <DropdownMenuItem className="w-full flex-1 cursor-pointer">
+            <ArrowRightOnRectangleIcon className="mr-2 h-4 w-4" />
+            <span>Sign out</span>
+          </DropdownMenuItem>
         </form>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -92,12 +91,10 @@ function Header() {
         </div>
 
         <div className="flex items-center space-x-4 ">
-          <Button variant={"default"} >
+          <Button variant={"default"}>
             <span className="text-white text-xs">Publish</span>
           </Button>
         </div>
-
-
       </div>
     </header>
   );

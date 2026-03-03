@@ -75,7 +75,7 @@ function AccountFormWithData({ state }: { state: ActionState }) {
 export default function GeneralPage() {
   const [state, formAction, isPending] = useActionState<ActionState, FormData>(
     updateAccount,
-    {},
+    {}
   );
 
   return (

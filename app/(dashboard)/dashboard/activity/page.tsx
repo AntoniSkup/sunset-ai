@@ -86,9 +86,10 @@ export default async function ActivityPage() {
           {logs.length > 0 ? (
             <ul className="space-y-4">
               {logs.map((log) => {
-                const Icon = iconMap[log.action as ActivityType] || Cog6ToothIcon;
+                const Icon =
+                  iconMap[log.action as ActivityType] || Cog6ToothIcon;
                 const formattedAction = formatAction(
-                  log.action as ActivityType,
+                  log.action as ActivityType
                 );
 
                 return (

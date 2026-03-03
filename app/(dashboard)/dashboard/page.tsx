@@ -18,10 +18,7 @@ import { Suspense } from "react";
 import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
-import {
-  ArrowPathIcon,
-  PlusCircleIcon,
-} from "@heroicons/react/24/outline";
+import { ArrowPathIcon, PlusCircleIcon } from "@heroicons/react/24/outline";
 
 type ActionState = {
   error?: string;

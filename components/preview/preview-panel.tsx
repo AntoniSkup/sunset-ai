@@ -105,7 +105,11 @@ function BuilderTipsFromButton({
   );
 }
 
-export function PreviewPanel({ className, chatId, activeTab = "preview" }: PreviewPanelProps) {
+export function PreviewPanel({
+  className,
+  chatId,
+  activeTab = "preview",
+}: PreviewPanelProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState<string>("");
@@ -121,7 +125,7 @@ export function PreviewPanel({ className, chatId, activeTab = "preview" }: Previ
         setIsLoading(true);
         setLoadingMessage(
           (payload as PreviewLoadingPayload).message ||
-          "Generating landing page..."
+            "Generating landing page..."
         );
       } else if (payload.type === "STOP_LOADING") {
         setIsLoading(false);
@@ -208,7 +212,9 @@ export function PreviewPanel({ className, chatId, activeTab = "preview" }: Previ
   }, [chatId]);
 
   return (
-    <div className={`relative h-full w-full ${className || ""} rounded-lg border shadow-xs overflow-hidden `}>
+    <div
+      className={`relative h-full w-full ${className || ""} rounded-lg border shadow-xs overflow-hidden `}
+    >
       {activeTab === "code" ? (
         <CodePanel
           chatId={chatId}
@@ -217,44 +223,43 @@ export function PreviewPanel({ className, chatId, activeTab = "preview" }: Previ
         />
       ) : (
         <>
-      {isLoading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-background z-10">
-          <div className="flex flex-col items-center gap-3">
-            <ArrowPathIcon className="h-8 w-8 animate-spin text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">
-              {loadingMessage || "Generating landing page..."}
-            </p>
-          </div>
-        </div>
-      )}
-      <iframe
-        ref={iframeRef}
-        data-preview="true"
-        id="preview-iframe"
-        className="h-full w-full  rounded-lg"
-        title="Website Preview"
-        sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
-      />
-      {!isLoading && !currentVersionId && (
-        <div className="absolute inset-0 bg-white rounded-lg ">
-
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-6 px-4">
-
-            <div className="text-center flex-col flex">
-              <img src={sunsetLogoLarge.src} alt="Sunset logo large"
-                className="mx-auto mb-12"
-              />
-              
-              <span className="text-2xl font-medium mb-2">
-                Bringing your idea to life
-              </span>
-
-              <BuilderTipsFromButton active  />
-
+          {isLoading && (
+            <div className="absolute inset-0 flex items-center justify-center bg-background z-10">
+              <div className="flex flex-col items-center gap-3">
+                <ArrowPathIcon className="h-8 w-8 animate-spin text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">
+                  {loadingMessage || "Generating landing page..."}
+                </p>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          )}
+          <iframe
+            ref={iframeRef}
+            data-preview="true"
+            id="preview-iframe"
+            className="h-full w-full  rounded-lg"
+            title="Website Preview"
+            sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
+          />
+          {!isLoading && !currentVersionId && (
+            <div className="absolute inset-0 bg-white rounded-lg ">
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-6 px-4">
+                <div className="text-center flex-col flex">
+                  <img
+                    src={sunsetLogoLarge.src}
+                    alt="Sunset logo large"
+                    className="mx-auto mb-12"
+                  />
+
+                  <span className="text-2xl font-medium mb-2">
+                    Bringing your idea to life
+                  </span>
+
+                  <BuilderTipsFromButton active />
+                </div>
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>
