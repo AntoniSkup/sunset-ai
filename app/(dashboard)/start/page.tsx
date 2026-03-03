@@ -270,7 +270,11 @@ export default function StartPage() {
             </div>
 
             <form onSubmit={handleSubmit} className="mt-8 w-full">
-              <div className="relative  rounded-xl border bg-[#ffffffe9] border-[#f2f2f2] px-8 py-6 overflow-hidden shadow">
+              <div
+                className="relative  rounded-xl border bg-[#ffffffe9] 
+              border-gray-500
+               px-8 py-6 overflow-hidden shadow"
+              >
                 <div className="relative min-h-[4.5rem]">
                   {!input.trim() && !isFocused && (
                     <div
@@ -366,7 +370,7 @@ export default function StartPage() {
             </h2>
             <Link
               href="/start"
-              className="text-sm font-medium text-[#ff6313] transition-colors hover:text-[#feb342]"
+              className="text-sm font-medium text-[#ff6313] transition-colors hover:text-[#ff4a13]"
             >
               See more
             </Link>

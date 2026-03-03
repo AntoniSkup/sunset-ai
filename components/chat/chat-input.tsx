@@ -1,10 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import {
-  ArrowUpIcon,
-  ArrowPathIcon,
-} from "@heroicons/react/24/outline";
+import { ArrowUpIcon, ArrowPathIcon } from "@heroicons/react/24/outline";
 import { FormEvent, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { ArrowUpCircleIcon } from "@heroicons/react/24/solid";
@@ -35,7 +32,7 @@ export function ChatInput({
 
   return (
     <form ref={formRef} onSubmit={handleSubmit} className="bg-transparent p-2 ">
-      <div className="relative bg-white rounded-lg border shadow-xs">
+      <div className="relative bg-white rounded-lg border border-gray-500  shadow-xs">
         <textarea
           value={input}
           onChange={handleInputChange}
