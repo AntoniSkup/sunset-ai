@@ -14,6 +14,9 @@ import {
   updateChatByPublicId,
   generateChatName,
 } from "@/lib/db/queries";
+import { getOrCreateAccountForUser } from "@/lib/billing/accounts";
+import { runWithCredits } from "@/lib/credits/run-with-credits";
+import { InsufficientCreditsError } from "@/lib/credits/debit";
 import { streamText, convertToModelMessages, stepCountIs } from "ai";
 import type { UIMessage } from "ai";
 import { createSectionTool, createSiteTool } from "@/lib/code-generation/generate-code";
@@ -118,6 +121,35 @@ async function chatHandler(request: NextRequest) {
         { error: "Chat not found", code: "CHAT_NOT_FOUND" },
         { status: 404 }
       );
+    }
+
+    const account = await getOrCreateAccountForUser(user.id);
+    const idempotencyKey = `chat-${chatId}-${user.id}-${messages.length}`;
+
+    try {
+      await runWithCredits(
+        {
+          accountId: account.id,
+          userId: user.id,
+          actionType: "chat_message",
+          idempotencyKey,
+        },
+        async () => {
+          return null;
+        }
+      );
+    } catch (err) {
+      if (err instanceof InsufficientCreditsError) {
+        return NextResponse.json(
+          {
+            error:
+              "Insufficient credits. Please upgrade your plan or buy more credits.",
+            code: "INSUFFICIENT_CREDITS",
+          },
+          { status: 402 }
+        );
+      }
+      throw err;
     }
 
     const modelMessages = await convertToModelMessages(

@@ -51,7 +51,7 @@ export async function createGrantForSubscriptionCycle(
     await tx
       .update(creditWallets)
       .set({
-        balanceCached: wallet.balanceCached + credits,
+        balanceCached: Number(wallet.balanceCached) + credits,
         updatedAt: new Date(),
       })
       .where(eq(creditWallets.id, wallet.id));
@@ -143,7 +143,7 @@ export async function createRolloverGrant(
     await tx
       .update(creditWallets)
       .set({
-        balanceCached: wallet.balanceCached + credits,
+        balanceCached: Number(wallet.balanceCached) + credits,
         updatedAt: new Date(),
       })
       .where(eq(creditWallets.id, wallet.id));

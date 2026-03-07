@@ -79,11 +79,26 @@ async function seedBillingPlans() {
   const existing = await db.select().from(creditActionPricing).limit(1);
   if (existing.length === 0) {
     await db.insert(creditActionPricing).values([
-      { actionType: "generate_page", creditsCost: 20, isActive: true },
-      { actionType: "regenerate_section", creditsCost: 5, isActive: true },
-      { actionType: "rewrite_copy", creditsCost: 2, isActive: true },
-      { actionType: "generate_image", creditsCost: 10, isActive: true },
+      { actionType: "generate_page", creditsCost: 2, isActive: true },
+      { actionType: "regenerate_section", creditsCost: 1, isActive: true },
+      { actionType: "rewrite_copy", creditsCost: 1, isActive: true },
+      { actionType: "generate_image", creditsCost: 5, isActive: true },
+      { actionType: "chat_message", creditsCost: 0.5, isActive: true },
     ]);
+  } else {
+    const chatMsg = await db
+      .select()
+      .from(creditActionPricing)
+      .where(eq(creditActionPricing.actionType, "chat_message"))
+      .limit(1);
+    if (chatMsg.length === 0) {
+      await db.insert(creditActionPricing).values({
+        actionType: "chat_message",
+        creditsCost: 0.5,
+        isActive: true,
+      });
+      console.log("Added chat_message pricing (0.5 credits).");
+    }
   }
 
   console.log("Billing plans and credit action pricing seeded.");

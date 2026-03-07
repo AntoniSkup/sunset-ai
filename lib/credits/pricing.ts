@@ -1,8 +1,13 @@
-import { and, eq, isNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, lte, or } from "drizzle-orm";
 import { db } from "@/lib/db/drizzle";
 import { creditActionPricing } from "@/lib/db/schema";
 
 const DEFAULT_CREDITS_COST = 10;
+
+/** Fallback when no DB row exists (e.g. chat_message not seeded yet). */
+const ACTION_FALLBACK: Record<string, number> = {
+  chat_message: 0.5,
+};
 
 /**
  * Get the credit cost for an action type from credit_action_pricing.
@@ -21,20 +26,20 @@ export async function getCreditsCostForAction(
       and(
         eq(creditActionPricing.actionType, actionType),
         eq(creditActionPricing.isActive, true),
-        sql`${creditActionPricing.effectiveFrom} <= ${now}`,
+        lte(creditActionPricing.effectiveFrom, now),
         or(
           isNull(creditActionPricing.effectiveTo),
-          sql`${creditActionPricing.effectiveTo} > ${now}`
+          gt(creditActionPricing.effectiveTo, now)
         ),
         planId != null
           ? eq(creditActionPricing.planId, planId)
           : isNull(creditActionPricing.planId)
       )
     )
-    .orderBy(sql`${creditActionPricing.effectiveFrom} DESC`)
+    .orderBy(desc(creditActionPricing.effectiveFrom))
     .limit(1);
 
-  if (rows[0]) return rows[0].creditsCost;
+  if (rows[0]) return Number(rows[0].creditsCost);
 
   if (planId != null) {
     const fallback = await db
@@ -47,10 +52,10 @@ export async function getCreditsCostForAction(
           isNull(creditActionPricing.planId)
         )
       )
-      .orderBy(sql`${creditActionPricing.effectiveFrom} DESC`)
+      .orderBy(desc(creditActionPricing.effectiveFrom))
       .limit(1);
-    if (fallback[0]) return fallback[0].creditsCost;
+    if (fallback[0]) return Number(fallback[0].creditsCost);
   }
 
-  return DEFAULT_CREDITS_COST;
+  return ACTION_FALLBACK[actionType] ?? DEFAULT_CREDITS_COST;
 }

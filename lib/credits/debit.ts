@@ -29,7 +29,8 @@ export class InsufficientCreditsError extends Error {
 }
 
 /**
- * Debit credits from the account's wallet using FEFO (first expiring, first out).
+ * Debit credits from the account's wallet.
+ * Uses daily credits first, then monthly/rollover (FEFO within each group).
  * Idempotent: if idempotencyKey was already used for this account, returns existing result.
  * @throws InsufficientCreditsError if balance is too low
  */
@@ -83,11 +84,12 @@ export async function debitCredits(
       throw new Error("Wallet not found");
     }
 
-    if (lockedWallet.balanceCached < amount) {
+    const balance = Number(lockedWallet.balanceCached);
+    if (balance < amount) {
       throw new InsufficientCreditsError(
         accountId,
         amount,
-        lockedWallet.balanceCached
+        balance
       );
     }
 
@@ -100,7 +102,10 @@ export async function debitCredits(
           gt(creditGrants.creditsRemaining, 0)
         )
       )
-      .orderBy(sql`${creditGrants.expiresAt} ASC NULLS LAST`)
+      .orderBy(
+        sql`CASE WHEN ${creditGrants.sourceType} = 'daily_bonus' THEN 0 ELSE 1 END ASC`,
+        sql`${creditGrants.expiresAt} ASC NULLS LAST`
+      )
       .for("update");
 
     let remaining = amount;
@@ -108,7 +113,7 @@ export async function debitCredits(
 
     for (const grant of grants) {
       if (remaining <= 0) break;
-      const use = Math.min(grant.creditsRemaining, remaining);
+      const use = Math.min(Number(grant.creditsRemaining), remaining);
       allocations.push({ grantId: grant.id, creditsUsed: use });
       remaining -= use;
     }
@@ -149,7 +154,7 @@ export async function debitCredits(
       await tx
         .update(creditGrants)
         .set({
-          creditsRemaining: grant.creditsRemaining - alloc.creditsUsed,
+          creditsRemaining: Number(grant.creditsRemaining) - alloc.creditsUsed,
         })
         .where(eq(creditGrants.id, alloc.grantId));
       if (
@@ -168,7 +173,7 @@ export async function debitCredits(
     await tx
       .update(creditWallets)
       .set({
-        balanceCached: lockedWallet.balanceCached - amount,
+        balanceCached: Number(lockedWallet.balanceCached) - amount,
         updatedAt: new Date(),
       })
       .where(eq(creditWallets.id, wallet.id));
@@ -243,7 +248,7 @@ export async function refundCreditsForUsageEvent(
         await tx
           .update(creditGrants)
           .set({
-            creditsRemaining: grant.creditsRemaining + alloc.creditsUsed,
+            creditsRemaining: Number(grant.creditsRemaining) + alloc.creditsUsed,
           })
           .where(eq(creditGrants.id, alloc.grantId));
         if (
@@ -279,7 +284,7 @@ export async function refundCreditsForUsageEvent(
       await tx
         .update(creditWallets)
         .set({
-          balanceCached: currentWallet.balanceCached + amount,
+          balanceCached: Number(currentWallet.balanceCached) + amount,
           updatedAt: new Date(),
         })
         .where(eq(creditWallets.id, wallet.id));

@@ -9,6 +9,7 @@ import {
   index,
   unique,
   jsonb,
+  numeric,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
@@ -423,6 +424,9 @@ export const accounts = pgTable(
   })
 );
 
+const creditsNumeric = (name: string) =>
+  numeric(name, { precision: 10, scale: 2 }).$type<number>();
+
 export const plans = pgTable("plans", {
   id: serial("id").primaryKey(),
   code: varchar("code", { length: 50 }).notNull().unique(),
@@ -430,11 +434,11 @@ export const plans = pgTable("plans", {
   priceMinor: integer("price_minor").notNull(),
   currency: varchar("currency", { length: 3 }).notNull().default("PLN"),
   billingInterval: varchar("billing_interval", { length: 20 }).notNull(), // month, year
-  includedCreditsPerCycle: integer("included_credits_per_cycle").notNull(),
-  rolloverCap: integer("rollover_cap").notNull().default(0),
+  includedCreditsPerCycle: creditsNumeric("included_credits_per_cycle").notNull(),
+  rolloverCap: creditsNumeric("rollover_cap").notNull().default(0),
   isActive: boolean("is_active").notNull().default(true),
-  dailyBonusCredits: integer("daily_bonus_credits"),
-  dailyBonusCapPerCycle: integer("daily_bonus_cap_per_cycle"),
+  dailyBonusCredits: creditsNumeric("daily_bonus_credits"),
+  dailyBonusCapPerCycle: creditsNumeric("daily_bonus_cap_per_cycle"),
   topupsEnabled: boolean("topups_enabled").notNull().default(true),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
@@ -484,10 +488,10 @@ export const subscriptionCycles = pgTable(
     periodStart: timestamp("period_start").notNull(),
     periodEnd: timestamp("period_end").notNull(),
     status: varchar("status", { length: 20 }).notNull(), // open, closed
-    includedCreditsGranted: integer("included_credits_granted").notNull(),
-    rolloverCreditsGranted: integer("rollover_credits_granted").notNull().default(0),
-    creditsConsumedInCycle: integer("credits_consumed_in_cycle").notNull().default(0),
-    creditsExpiredInCycle: integer("credits_expired_in_cycle").notNull().default(0),
+    includedCreditsGranted: creditsNumeric("included_credits_granted").notNull(),
+    rolloverCreditsGranted: creditsNumeric("rollover_credits_granted").notNull().default(0),
+    creditsConsumedInCycle: creditsNumeric("credits_consumed_in_cycle").notNull().default(0),
+    creditsExpiredInCycle: creditsNumeric("credits_expired_in_cycle").notNull().default(0),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     closedAt: timestamp("closed_at"),
   },
@@ -507,7 +511,7 @@ export const topupPackages = pgTable("topup_packages", {
   id: serial("id").primaryKey(),
   code: varchar("code", { length: 50 }).notNull().unique(),
   name: varchar("name", { length: 100 }).notNull(),
-  creditsAmount: integer("credits_amount").notNull(),
+  creditsAmount: creditsNumeric("credits_amount").notNull(),
   priceMinor: integer("price_minor").notNull(),
   currency: varchar("currency", { length: 3 }).notNull().default("PLN"),
   isActive: boolean("is_active").notNull().default(true),
@@ -548,7 +552,7 @@ export const creditWallets = pgTable(
     accountId: integer("account_id")
       .notNull()
       .references(() => accounts.id),
-    balanceCached: integer("balance_cached").notNull().default(0),
+    balanceCached: creditsNumeric("balance_cached").notNull().default(0),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
   (table) => ({
@@ -569,8 +573,8 @@ export const creditGrants = pgTable(
       .references(() => accounts.id),
     sourceType: varchar("source_type", { length: 30 }).notNull(), // subscription_cycle, rollover, topup, manual_adjustment, refund
     sourceId: integer("source_id"), // subscription_cycle_id or order_id etc.
-    creditsTotal: integer("credits_total").notNull(),
-    creditsRemaining: integer("credits_remaining").notNull(),
+    creditsTotal: creditsNumeric("credits_total").notNull(),
+    creditsRemaining: creditsNumeric("credits_remaining").notNull(),
     expiresAt: timestamp("expires_at"),
     priority: integer("priority").notNull().default(0),
     createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -595,8 +599,8 @@ export const aiUsageEvents = pgTable(
     projectId: integer("project_id"),
     actionType: varchar("action_type", { length: 50 }).notNull(), // generate_page, regenerate_section, rewrite_copy, generate_image
     status: varchar("status", { length: 20 }).notNull(), // pending, succeeded, failed, canceled
-    creditsCharged: integer("credits_charged").notNull().default(0),
-    creditsRefunded: integer("credits_refunded").notNull().default(0),
+    creditsCharged: creditsNumeric("credits_charged").notNull().default(0),
+    creditsRefunded: creditsNumeric("credits_refunded").notNull().default(0),
     provider: varchar("provider", { length: 50 }),
     model: varchar("model", { length: 100 }),
     promptTokens: integer("prompt_tokens"),
@@ -631,7 +635,7 @@ export const creditLedgerEntries = pgTable(
       .notNull()
       .references(() => accounts.id),
     entryType: varchar("entry_type", { length: 30 }).notNull(), // grant, debit, refund, expire, adjustment
-    creditsDelta: integer("credits_delta").notNull(),
+    creditsDelta: creditsNumeric("credits_delta").notNull(),
     grantId: integer("grant_id").references(() => creditGrants.id),
     usageEventId: integer("usage_event_id").references(() => aiUsageEvents.id),
     orderId: integer("order_id").references(() => orders.id),
@@ -662,7 +666,7 @@ export const creditDebitAllocations = pgTable(
     grantId: integer("grant_id")
       .notNull()
       .references(() => creditGrants.id),
-    creditsUsed: integer("credits_used").notNull(),
+    creditsUsed: creditsNumeric("credits_used").notNull(),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
   (table) => ({
@@ -678,7 +682,7 @@ export const creditActionPricing = pgTable(
   {
     id: serial("id").primaryKey(),
     actionType: varchar("action_type", { length: 50 }).notNull(),
-    creditsCost: integer("credits_cost").notNull(),
+    creditsCost: creditsNumeric("credits_cost").notNull(),
     effectiveFrom: timestamp("effective_from").notNull().defaultNow(),
     effectiveTo: timestamp("effective_to"),
     planId: integer("plan_id").references(() => plans.id),

@@ -25,12 +25,22 @@ export async function getAccountForUser(userId: number): Promise<Account | null>
 /**
  * Get or create account and credit wallet for the user.
  * On first account creation, creates credit_wallet in the same transaction.
+ * Ensures wallet exists even for accounts created before billing was added.
  */
 export async function getOrCreateAccountForUser(
   userId: number
 ): Promise<Account> {
   const existing = await getAccountForUser(userId);
-  if (existing) return existing;
+  if (existing) {
+    const wallet = await getWalletByAccountId(existing.id);
+    if (!wallet) {
+      await db
+        .insert(creditWallets)
+        .values({ accountId: existing.id, balanceCached: 0 })
+        .onConflictDoNothing({ target: creditWallets.accountId });
+    }
+    return existing;
+  }
 
   const [user] = await db
     .select({ name: users.name, email: users.email })

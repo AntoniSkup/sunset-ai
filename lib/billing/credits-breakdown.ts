@@ -16,14 +16,14 @@ export async function getCreditsBreakdown(
   subscription: Subscription | null
 ): Promise<CreditsBreakdown> {
   const wallet = await getWalletByAccountId(accountId);
-  const balance = wallet?.balanceCached ?? 0;
+  const balance = Number(wallet?.balanceCached ?? 0);
 
   const plan = subscription
     ? await getPlanById(subscription.planId)
     : null;
 
-  const dailyTotal = plan?.dailyBonusCredits ?? 5;
-  const monthlyTotal = plan?.includedCreditsPerCycle ?? 0;
+  const dailyTotal = Number(plan?.dailyBonusCredits ?? 5);
+  const monthlyTotal = Number(plan?.includedCreditsPerCycle ?? 0);
 
   if (!wallet) {
     return {
@@ -51,24 +51,19 @@ export async function getCreditsBreakdown(
 
   const dailyRemaining = grants
     .filter((g) => g.sourceType === "daily_bonus")
-    .reduce((sum, g) => sum + g.creditsRemaining, 0);
+    .reduce((sum, g) => sum + Number(g.creditsRemaining), 0);
 
   const monthlyRemaining = grants
     .filter((g) =>
       ["subscription_cycle", "rollover"].includes(g.sourceType)
     )
-    .reduce((sum, g) => sum + g.creditsRemaining, 0);
+    .reduce((sum, g) => sum + Number(g.creditsRemaining), 0);
 
   return {
     balance,
     daily: {
       total: dailyTotal,
-      remaining:
-        dailyTotal > 0
-          ? dailyRemaining > 0
-            ? dailyRemaining
-            : dailyTotal
-          : 0,
+      remaining: dailyRemaining,
     },
     monthly:
       monthlyTotal > 0

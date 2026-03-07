@@ -92,6 +92,13 @@
       "when": 1772901865519,
       "tag": "0012_furry_spot",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1772925495816,
+      "tag": "0013_sad_fat_cobra",
+      "breakpoints": true
     }
   ]
 }
