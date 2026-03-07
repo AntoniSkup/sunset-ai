@@ -3,12 +3,16 @@ import { getUser } from "@/lib/db/queries";
 import {
   getAccountForUser,
   getSubscriptionByAccountId,
-  getWalletByAccountId,
 } from "@/lib/billing/accounts";
 import { getPlanById } from "@/lib/billing/plans";
+import { getCreditsBreakdown } from "@/lib/billing/credits-breakdown";
 
 export type BillingApiResponse = {
   balance: number;
+  credits: {
+    daily: { total: number; remaining: number };
+    monthly: { total: number; remaining: number } | null;
+  };
   subscription: {
     status: string;
     planName: string;
@@ -25,18 +29,21 @@ export async function GET() {
   if (!account) {
     return NextResponse.json({
       balance: 0,
+      credits: {
+        daily: { total: 5, remaining: 0 },
+        monthly: null,
+      },
       subscription: null,
     } satisfies BillingApiResponse);
   }
 
-  const [wallet, subscription] = await Promise.all([
-    getWalletByAccountId(account.id),
-    getSubscriptionByAccountId(account.id),
-  ]);
+  const subscription = await getSubscriptionByAccountId(account.id);
+  const { balance, daily, monthly } = await getCreditsBreakdown(
+    account.id,
+    subscription
+  );
 
-  const balance = wallet?.balanceCached ?? 0;
   let subscriptionPayload: BillingApiResponse["subscription"] = null;
-
   if (subscription) {
     const plan = await getPlanById(subscription.planId);
     subscriptionPayload = {
@@ -47,6 +54,7 @@ export async function GET() {
 
   return NextResponse.json({
     balance,
+    credits: { daily, monthly },
     subscription: subscriptionPayload,
   } satisfies BillingApiResponse);
 }

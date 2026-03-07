@@ -2,21 +2,81 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import Link from "next/link";
-import { Home, CreditCard, Settings, Pencil } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import sunsetLogo from "@/components/icons/sunset_logo_tree.png";
 import {
-  HomeIcon,
   CreditCardIcon,
   Cog6ToothIcon,
   PencilSquareIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
 } from "@heroicons/react/24/outline";
+import useSWR from "swr";
+import type { BillingApiResponse } from "@/app/api/billing/route";
+
+const fetcher = (url: string) => fetch(url).then((res) => res.json());
+
+function CreditsSection() {
+  const { data: billing } = useSWR<BillingApiResponse>("/api/billing", fetcher);
+  if (!billing) return null;
+
+  const { balance, credits } = billing;
+  const { daily, monthly } = credits;
+
+  const totalCapacity = daily.total + (monthly?.total ?? 0);
+  const dailyPct =
+    totalCapacity > 0 ? (daily.remaining / totalCapacity) * 100 : 0;
+  const monthlyPct =
+    totalCapacity > 0 && monthly
+      ? (monthly.remaining / totalCapacity) * 100
+      : 0;
+
+  return (
+    <Link
+      href="/dashboard"
+      className="block px-4 py-3 hover:bg-gray-50 rounded-md transition-colors -mx-1 "
+    >
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-sm font-medium text-gray-900">Credits</span>
+        <span className="text-sm text-gray-600 flex items-center gap-0.5">
+          {monthly
+            ? `${monthly.remaining} + ${daily.remaining} left`
+            : `${daily.remaining} left`}
+          <ChevronRightIcon className="h-4 w-4 text-gray-400" />
+        </span>
+      </div>
+      {totalCapacity > 0 && (
+        <div className="space-y-1.5 mb-2 ">
+          <div className="h-3 w-full rounded-full bg-gray-200 overflow-hidden flex">
+            {monthlyPct > 0 && (
+              <div
+                className="h-full bg-orange-500 transition-all"
+                style={{ width: `${monthlyPct}%` }}
+              />
+            )}
+            {dailyPct > 0 && (
+              <div
+                className="h-full bg-blue-500 transition-all"
+                style={{ width: `${dailyPct}%` }}
+              />
+            )}
+          </div>
+        </div>
+      )}
+      <p className="flex items-center gap-1.5 text-xs text-gray-500 mt-2">
+        <span className="size-1.5 rounded-full bg-gray-400" />
+        Daily credits reset at midnight UTC
+      </p>
+    </Link>
+  );
+}
 
 interface ChatHeaderProps {
   chatId: string;
@@ -91,39 +151,43 @@ export function ChatHeader({ chatId, chatName, onRename }: ChatHeaderProps) {
     <header className="h-12 ">
       <div className="h-full px-4 sm:px-6 lg:px-8 flex justify-between items-center">
         <div className="flex items-center space-x-3 flex-1 min-w-0">
-          <DropdownMenu>
+          <DropdownMenu modal={false}>
             <DropdownMenuTrigger asChild>
               <img
                 src={sunsetLogo.src}
                 alt="Sunset logo "
-                className="w-7 h-7 shrink-0 hover:scale-95 click:scale-105 transition-all duration-200 cursor-pointer ease-in-out"
+                className="w-7 h-7 shrink-0 hover:opacity-70 click:opacity-100 transition-all duration-200 cursor-pointer ease-in-out"
                 aria-label="Open menu"
                 title="Sunset logo"
               />
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-48">
+            <DropdownMenuContent align="start" className="w-64">
               <DropdownMenuItem asChild>
                 <Link
                   href="/start"
                   className="flex items-center cursor-pointer"
                 >
-                  <HomeIcon
-                    className="mr-2 h-4 w-4 font-bold text-black"
-                    strokeWidth={1.5}
-                  />
-                  Home
+                  <ChevronLeftIcon className="h-3 w-3 font-bold text-black" />
+                  Go to Dashboard
                 </Link>
               </DropdownMenuItem>
+              <DropdownMenuSeparator />
+
+              <CreditsSection />
+              {/* <DropdownMenuSeparator /> TODO ADD HERE A GET FREE CREDITS BUTTON */}
+
+              <DropdownMenuSeparator />
+
               <DropdownMenuItem asChild>
                 <Link
                   href="/pricing"
                   className="flex items-center cursor-pointer"
                 >
                   <CreditCardIcon
-                    className="mr-2 h-4 w-4 font-bold text-black"
+                    className="h-3 w-3 font-bold text-black"
                     strokeWidth={1.5}
                   />
-                  Preview payment
+                  Payment
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
@@ -132,7 +196,7 @@ export function ChatHeader({ chatId, chatName, onRename }: ChatHeaderProps) {
                   className="flex items-center cursor-pointer"
                 >
                   <Cog6ToothIcon
-                    className="mr-2 h-4 w-4 font-bold text-black"
+                    className="h-3 w-3 font-bold text-black"
                     strokeWidth={1.5}
                   />
                   Settings
