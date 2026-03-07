@@ -5,6 +5,7 @@ import {
   text,
   timestamp,
   integer,
+  boolean,
   index,
   unique,
   jsonb,
@@ -81,6 +82,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   teamMembers: many(teamMembers),
   invitationsSent: many(invitations),
   chats: many(chats),
+  accounts: many(accounts),
 }));
 
 export const invitationsRelations = relations(invitations, ({ one }) => ({
@@ -399,6 +401,468 @@ export const publishedSitesRelations = relations(publishedSites, ({ one }) => ({
 
 export type PublishedSite = typeof publishedSites.$inferSelect;
 export type NewPublishedSite = typeof publishedSites.$inferInsert;
+
+// ─── Billing & credits (ledger-based) ─────────────────────────────────────────
+
+export const accounts = pgTable(
+  "accounts",
+  {
+    id: serial("id").primaryKey(),
+    ownerUserId: integer("owner_user_id")
+      .notNull()
+      .references(() => users.id),
+    name: varchar("name", { length: 255 }).notNull(),
+    countryCode: varchar("country_code", { length: 2 }),
+    currency: varchar("currency", { length: 3 }).notNull().default("PLN"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    ownerUserIdUnique: unique("accounts_owner_user_id_unique").on(
+      table.ownerUserId
+    ),
+  })
+);
+
+export const plans = pgTable("plans", {
+  id: serial("id").primaryKey(),
+  code: varchar("code", { length: 50 }).notNull().unique(),
+  name: varchar("name", { length: 100 }).notNull(),
+  priceMinor: integer("price_minor").notNull(),
+  currency: varchar("currency", { length: 3 }).notNull().default("PLN"),
+  billingInterval: varchar("billing_interval", { length: 20 }).notNull(), // month, year
+  includedCreditsPerCycle: integer("included_credits_per_cycle").notNull(),
+  rolloverCap: integer("rollover_cap").notNull().default(0),
+  isActive: boolean("is_active").notNull().default(true),
+  dailyBonusCredits: integer("daily_bonus_credits"),
+  dailyBonusCapPerCycle: integer("daily_bonus_cap_per_cycle"),
+  topupsEnabled: boolean("topups_enabled").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const subscriptions = pgTable(
+  "subscriptions",
+  {
+    id: serial("id").primaryKey(),
+    accountId: integer("account_id")
+      .notNull()
+      .references(() => accounts.id),
+    planId: integer("plan_id")
+      .notNull()
+      .references(() => plans.id),
+    status: varchar("status", { length: 30 }).notNull(), // trialing, active, past_due, canceled, incomplete
+    provider: varchar("provider", { length: 30 }).notNull().default("stripe"),
+    providerCustomerId: text("provider_customer_id"),
+    providerSubscriptionId: text("provider_subscription_id"),
+    currentPeriodStart: timestamp("current_period_start"),
+    currentPeriodEnd: timestamp("current_period_end"),
+    cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
+    canceledAt: timestamp("canceled_at"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    accountIdIdx: index("subscriptions_account_id_idx").on(table.accountId),
+    providerSubIdIdx: index("subscriptions_provider_subscription_id_idx").on(
+      table.providerSubscriptionId
+    ),
+    providerCustomerIdIdx: index("subscriptions_provider_customer_id_idx").on(
+      table.providerCustomerId
+    ),
+  })
+);
+
+export const subscriptionCycles = pgTable(
+  "subscription_cycles",
+  {
+    id: serial("id").primaryKey(),
+    subscriptionId: integer("subscription_id")
+      .notNull()
+      .references(() => subscriptions.id),
+    accountId: integer("account_id")
+      .notNull()
+      .references(() => accounts.id),
+    periodStart: timestamp("period_start").notNull(),
+    periodEnd: timestamp("period_end").notNull(),
+    status: varchar("status", { length: 20 }).notNull(), // open, closed
+    includedCreditsGranted: integer("included_credits_granted").notNull(),
+    rolloverCreditsGranted: integer("rollover_credits_granted").notNull().default(0),
+    creditsConsumedInCycle: integer("credits_consumed_in_cycle").notNull().default(0),
+    creditsExpiredInCycle: integer("credits_expired_in_cycle").notNull().default(0),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    closedAt: timestamp("closed_at"),
+  },
+  (table) => ({
+    subscriptionIdIdx: index("subscription_cycles_subscription_id_idx").on(
+      table.subscriptionId
+    ),
+    accountIdIdx: index("subscription_cycles_account_id_idx").on(table.accountId),
+    periodIdx: index("subscription_cycles_period_idx").on(
+      table.periodStart,
+      table.periodEnd
+    ),
+  })
+);
+
+export const topupPackages = pgTable("topup_packages", {
+  id: serial("id").primaryKey(),
+  code: varchar("code", { length: 50 }).notNull().unique(),
+  name: varchar("name", { length: 100 }).notNull(),
+  creditsAmount: integer("credits_amount").notNull(),
+  priceMinor: integer("price_minor").notNull(),
+  currency: varchar("currency", { length: 3 }).notNull().default("PLN"),
+  isActive: boolean("is_active").notNull().default(true),
+  sortOrder: integer("sort_order").notNull().default(0),
+});
+
+export const orders = pgTable(
+  "orders",
+  {
+    id: serial("id").primaryKey(),
+    accountId: integer("account_id")
+      .notNull()
+      .references(() => accounts.id),
+    type: varchar("type", { length: 20 }).notNull(), // subscription, topup
+    status: varchar("status", { length: 20 }).notNull(), // pending, paid, failed, refunded
+    provider: varchar("provider", { length: 30 }).notNull().default("stripe"),
+    providerPaymentIntentId: text("provider_payment_intent_id"),
+    providerInvoiceId: text("provider_invoice_id"),
+    topupPackageId: integer("topup_package_id").references(() => topupPackages.id),
+    amountMinor: integer("amount_minor").notNull(),
+    currency: varchar("currency", { length: 3 }).notNull().default("PLN"),
+    paymentMethodType: varchar("payment_method_type", { length: 30 }),
+    paidAt: timestamp("paid_at"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    accountIdIdx: index("orders_account_id_idx").on(table.accountId),
+    providerPaymentIntentIdx: index("orders_provider_payment_intent_id_idx").on(
+      table.providerPaymentIntentId
+    ),
+  })
+);
+
+export const creditWallets = pgTable(
+  "credit_wallets",
+  {
+    id: serial("id").primaryKey(),
+    accountId: integer("account_id")
+      .notNull()
+      .references(() => accounts.id),
+    balanceCached: integer("balance_cached").notNull().default(0),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    accountIdUnique: unique("credit_wallets_account_id_unique").on(table.accountId),
+    accountIdIdx: index("credit_wallets_account_id_idx").on(table.accountId),
+  })
+);
+
+export const creditGrants = pgTable(
+  "credit_grants",
+  {
+    id: serial("id").primaryKey(),
+    walletId: integer("wallet_id")
+      .notNull()
+      .references(() => creditWallets.id),
+    accountId: integer("account_id")
+      .notNull()
+      .references(() => accounts.id),
+    sourceType: varchar("source_type", { length: 30 }).notNull(), // subscription_cycle, rollover, topup, manual_adjustment, refund
+    sourceId: integer("source_id"), // subscription_cycle_id or order_id etc.
+    creditsTotal: integer("credits_total").notNull(),
+    creditsRemaining: integer("credits_remaining").notNull(),
+    expiresAt: timestamp("expires_at"),
+    priority: integer("priority").notNull().default(0),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    walletIdIdx: index("credit_grants_wallet_id_idx").on(table.walletId),
+    accountIdIdx: index("credit_grants_account_id_idx").on(table.accountId),
+    expiresAtIdx: index("credit_grants_expires_at_idx").on(table.expiresAt),
+  })
+);
+
+export const aiUsageEvents = pgTable(
+  "ai_usage_events",
+  {
+    id: serial("id").primaryKey(),
+    accountId: integer("account_id")
+      .notNull()
+      .references(() => accounts.id),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id),
+    projectId: integer("project_id"),
+    actionType: varchar("action_type", { length: 50 }).notNull(), // generate_page, regenerate_section, rewrite_copy, generate_image
+    status: varchar("status", { length: 20 }).notNull(), // pending, succeeded, failed, canceled
+    creditsCharged: integer("credits_charged").notNull().default(0),
+    creditsRefunded: integer("credits_refunded").notNull().default(0),
+    provider: varchar("provider", { length: 50 }),
+    model: varchar("model", { length: 100 }),
+    promptTokens: integer("prompt_tokens"),
+    completionTokens: integer("completion_tokens"),
+    totalTokens: integer("total_tokens"),
+    providerCostMinor: integer("provider_cost_minor"),
+    requestId: varchar("request_id", { length: 255 }),
+    traceId: varchar("trace_id", { length: 255 }),
+    idempotencyKey: varchar("idempotency_key", { length: 255 }),
+    errorCode: varchar("error_code", { length: 50 }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    completedAt: timestamp("completed_at"),
+  },
+  (table) => ({
+    accountIdIdx: index("ai_usage_events_account_id_idx").on(table.accountId),
+    userIdIdx: index("ai_usage_events_user_id_idx").on(table.userId),
+    idempotencyKeyIdx: index("ai_usage_events_idempotency_key_idx").on(
+      table.idempotencyKey
+    ),
+    createdAtIdx: index("ai_usage_events_created_at_idx").on(table.createdAt),
+  })
+);
+
+export const creditLedgerEntries = pgTable(
+  "credit_ledger_entries",
+  {
+    id: serial("id").primaryKey(),
+    walletId: integer("wallet_id")
+      .notNull()
+      .references(() => creditWallets.id),
+    accountId: integer("account_id")
+      .notNull()
+      .references(() => accounts.id),
+    entryType: varchar("entry_type", { length: 30 }).notNull(), // grant, debit, refund, expire, adjustment
+    creditsDelta: integer("credits_delta").notNull(),
+    grantId: integer("grant_id").references(() => creditGrants.id),
+    usageEventId: integer("usage_event_id").references(() => aiUsageEvents.id),
+    orderId: integer("order_id").references(() => orders.id),
+    subscriptionCycleId: integer("subscription_cycle_id").references(
+      () => subscriptionCycles.id
+    ),
+    idempotencyKey: varchar("idempotency_key", { length: 255 }),
+    metadata: jsonb("metadata"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    walletIdIdx: index("credit_ledger_entries_wallet_id_idx").on(table.walletId),
+    accountIdIdx: index("credit_ledger_entries_account_id_idx").on(table.accountId),
+    idempotencyKeyIdx: index("credit_ledger_entries_idempotency_key_idx").on(
+      table.idempotencyKey
+    ),
+    createdAtIdx: index("credit_ledger_entries_created_at_idx").on(table.createdAt),
+  })
+);
+
+export const creditDebitAllocations = pgTable(
+  "credit_debit_allocations",
+  {
+    id: serial("id").primaryKey(),
+    ledgerDebitEntryId: integer("ledger_debit_entry_id")
+      .notNull()
+      .references(() => creditLedgerEntries.id),
+    grantId: integer("grant_id")
+      .notNull()
+      .references(() => creditGrants.id),
+    creditsUsed: integer("credits_used").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    ledgerDebitEntryIdIdx: index(
+      "credit_debit_allocations_ledger_debit_entry_id_idx"
+    ).on(table.ledgerDebitEntryId),
+    grantIdIdx: index("credit_debit_allocations_grant_id_idx").on(table.grantId),
+  })
+);
+
+export const creditActionPricing = pgTable(
+  "credit_action_pricing",
+  {
+    id: serial("id").primaryKey(),
+    actionType: varchar("action_type", { length: 50 }).notNull(),
+    creditsCost: integer("credits_cost").notNull(),
+    effectiveFrom: timestamp("effective_from").notNull().defaultNow(),
+    effectiveTo: timestamp("effective_to"),
+    planId: integer("plan_id").references(() => plans.id),
+    isActive: boolean("is_active").notNull().default(true),
+  },
+  (table) => ({
+    actionTypeIdx: index("credit_action_pricing_action_type_idx").on(
+      table.actionType
+    ),
+    planIdIdx: index("credit_action_pricing_plan_id_idx").on(table.planId),
+  })
+);
+
+// Relations for billing & credits
+export const accountsRelations = relations(accounts, ({ one, many }) => ({
+  owner: one(users, {
+    fields: [accounts.ownerUserId],
+    references: [users.id],
+  }),
+  subscriptions: many(subscriptions),
+  orders: many(orders),
+  creditWallets: many(creditWallets),
+  subscriptionCycles: many(subscriptionCycles),
+  aiUsageEvents: many(aiUsageEvents),
+}));
+
+export const plansRelations = relations(plans, ({ many }) => ({
+  subscriptions: many(subscriptions),
+  creditActionPricing: many(creditActionPricing),
+}));
+
+export const subscriptionsRelations = relations(subscriptions, ({ one, many }) => ({
+  account: one(accounts, {
+    fields: [subscriptions.accountId],
+    references: [accounts.id],
+  }),
+  plan: one(plans, {
+    fields: [subscriptions.planId],
+    references: [plans.id],
+  }),
+  cycles: many(subscriptionCycles),
+}));
+
+export const subscriptionCyclesRelations = relations(
+  subscriptionCycles,
+  ({ one }) => ({
+    subscription: one(subscriptions, {
+      fields: [subscriptionCycles.subscriptionId],
+      references: [subscriptions.id],
+    }),
+    account: one(accounts, {
+      fields: [subscriptionCycles.accountId],
+      references: [accounts.id],
+    }),
+  })
+);
+
+export const topupPackagesRelations = relations(topupPackages, ({ many }) => ({
+  orders: many(orders),
+}));
+
+export const ordersRelations = relations(orders, ({ one }) => ({
+  account: one(accounts, {
+    fields: [orders.accountId],
+    references: [accounts.id],
+  }),
+  topupPackage: one(topupPackages, {
+    fields: [orders.topupPackageId],
+    references: [topupPackages.id],
+  }),
+}));
+
+export const creditWalletsRelations = relations(creditWallets, ({ one, many }) => ({
+  account: one(accounts, {
+    fields: [creditWallets.accountId],
+    references: [accounts.id],
+  }),
+  grants: many(creditGrants),
+  ledgerEntries: many(creditLedgerEntries),
+}));
+
+export const creditGrantsRelations = relations(creditGrants, ({ one, many }) => ({
+  wallet: one(creditWallets, {
+    fields: [creditGrants.walletId],
+    references: [creditWallets.id],
+  }),
+  account: one(accounts, {
+    fields: [creditGrants.accountId],
+    references: [accounts.id],
+  }),
+  debitAllocations: many(creditDebitAllocations),
+}));
+
+export const aiUsageEventsRelations = relations(aiUsageEvents, ({ one }) => ({
+  account: one(accounts, {
+    fields: [aiUsageEvents.accountId],
+    references: [accounts.id],
+  }),
+  user: one(users, {
+    fields: [aiUsageEvents.userId],
+    references: [users.id],
+  }),
+}));
+
+export const creditLedgerEntriesRelations = relations(
+  creditLedgerEntries,
+  ({ one, many }) => ({
+    wallet: one(creditWallets, {
+      fields: [creditLedgerEntries.walletId],
+      references: [creditWallets.id],
+    }),
+    account: one(accounts, {
+      fields: [creditLedgerEntries.accountId],
+      references: [accounts.id],
+    }),
+    grant: one(creditGrants, {
+      fields: [creditLedgerEntries.grantId],
+      references: [creditGrants.id],
+    }),
+    usageEvent: one(aiUsageEvents, {
+      fields: [creditLedgerEntries.usageEventId],
+      references: [aiUsageEvents.id],
+    }),
+    order: one(orders, {
+      fields: [creditLedgerEntries.orderId],
+      references: [orders.id],
+    }),
+    subscriptionCycle: one(subscriptionCycles, {
+      fields: [creditLedgerEntries.subscriptionCycleId],
+      references: [subscriptionCycles.id],
+    }),
+    debitAllocations: many(creditDebitAllocations),
+  })
+);
+
+export const creditDebitAllocationsRelations = relations(
+  creditDebitAllocations,
+  ({ one }) => ({
+    ledgerDebitEntry: one(creditLedgerEntries, {
+      fields: [creditDebitAllocations.ledgerDebitEntryId],
+      references: [creditLedgerEntries.id],
+    }),
+    grant: one(creditGrants, {
+      fields: [creditDebitAllocations.grantId],
+      references: [creditGrants.id],
+    }),
+  })
+);
+
+export const creditActionPricingRelations = relations(
+  creditActionPricing,
+  ({ one }) => ({
+    plan: one(plans, {
+      fields: [creditActionPricing.planId],
+      references: [plans.id],
+    }),
+  })
+);
+
+// Type exports for billing & credits
+export type Account = typeof accounts.$inferSelect;
+export type NewAccount = typeof accounts.$inferInsert;
+export type Plan = typeof plans.$inferSelect;
+export type NewPlan = typeof plans.$inferInsert;
+export type Subscription = typeof subscriptions.$inferSelect;
+export type NewSubscription = typeof subscriptions.$inferInsert;
+export type SubscriptionCycle = typeof subscriptionCycles.$inferSelect;
+export type NewSubscriptionCycle = typeof subscriptionCycles.$inferInsert;
+export type TopupPackage = typeof topupPackages.$inferSelect;
+export type NewTopupPackage = typeof topupPackages.$inferInsert;
+export type Order = typeof orders.$inferSelect;
+export type NewOrder = typeof orders.$inferInsert;
+export type CreditWallet = typeof creditWallets.$inferSelect;
+export type NewCreditWallet = typeof creditWallets.$inferInsert;
+export type CreditGrant = typeof creditGrants.$inferSelect;
+export type NewCreditGrant = typeof creditGrants.$inferInsert;
+export type AiUsageEvent = typeof aiUsageEvents.$inferSelect;
+export type NewAiUsageEvent = typeof aiUsageEvents.$inferInsert;
+export type CreditLedgerEntry = typeof creditLedgerEntries.$inferSelect;
+export type NewCreditLedgerEntry = typeof creditLedgerEntries.$inferInsert;
+export type CreditDebitAllocation = typeof creditDebitAllocations.$inferSelect;
+export type NewCreditDebitAllocation = typeof creditDebitAllocations.$inferInsert;
+export type CreditActionPricing = typeof creditActionPricing.$inferSelect;
+export type NewCreditActionPricing = typeof creditActionPricing.$inferInsert;
 
 export enum ActivityType {
   SIGN_UP = "SIGN_UP",

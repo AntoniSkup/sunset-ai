@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { TeamDataWithMembers, User } from "@/lib/db/schema";
+import type { Account } from "@/lib/db/schema";
 import { getTeamForUser, getUser } from "@/lib/db/queries";
+import { getOrCreateAccountForUser } from "@/lib/billing/accounts";
 import { redirect } from "next/navigation";
 
 export type ActionState = {
@@ -71,5 +73,22 @@ export function withTeam<T>(action: ActionWithTeamFunction<T>) {
     }
 
     return action(formData, team);
+  };
+}
+
+type ActionWithAccountFunction<T> = (
+  formData: FormData,
+  account: Account
+) => Promise<T>;
+
+export function withAccount<T>(action: ActionWithAccountFunction<T>) {
+  return async (formData: FormData): Promise<T> => {
+    const user = await getUser();
+    if (!user) {
+      redirect("/sign-in");
+    }
+
+    const account = await getOrCreateAccountForUser(user.id);
+    return action(formData, account);
   };
 }

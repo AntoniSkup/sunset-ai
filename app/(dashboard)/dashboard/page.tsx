@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -18,7 +19,12 @@ import { Suspense } from "react";
 import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
-import { ArrowPathIcon, PlusCircleIcon } from "@heroicons/react/24/outline";
+import type { BillingApiResponse } from "@/app/api/billing/route";
+import {
+  ArrowPathIcon,
+  BanknotesIcon,
+  PlusCircleIcon,
+} from "@heroicons/react/24/outline";
 
 type ActionState = {
   error?: string;
@@ -31,40 +37,69 @@ function SubscriptionSkeleton() {
   return (
     <Card className="mb-8 h-[140px]">
       <CardHeader>
-        <CardTitle>Team Subscription</CardTitle>
+        <CardTitle>Billing & credits</CardTitle>
       </CardHeader>
     </Card>
   );
 }
 
 function ManageSubscription() {
-  const { data: teamData } = useSWR<TeamDataWithMembers>("/api/team", fetcher);
+  const { data: billing } = useSWR<BillingApiResponse>("/api/billing", fetcher);
+
+  if (!billing) {
+    return <SubscriptionSkeleton />;
+  }
+
+  const { balance, subscription } = billing;
+  const hasActiveSubscription =
+    subscription &&
+    (subscription.status === "active" || subscription.status === "trialing");
 
   return (
     <Card className="mb-8">
       <CardHeader>
-        <CardTitle>Team Subscription</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          <BanknotesIcon className="h-5 w-5" />
+          Billing & credits
+        </CardTitle>
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
-            <div className="mb-4 sm:mb-0">
+          <p className="text-xl font-semibold text-gray-900">
+            You have {balance} credits
+          </p>
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div>
               <p className="font-medium">
-                Current Plan: {teamData?.planName || "Free"}
+                Plan: {subscription?.planName ?? "Free"}
               </p>
               <p className="text-sm text-muted-foreground">
-                {teamData?.subscriptionStatus === "active"
-                  ? "Billed monthly"
-                  : teamData?.subscriptionStatus === "trialing"
+                {hasActiveSubscription
+                  ? subscription!.status === "trialing"
                     ? "Trial period"
-                    : "No active subscription"}
+                    : "Billed monthly"
+                  : "No active subscription"}
               </p>
             </div>
-            <form action={customerPortalAction}>
-              <Button type="submit" variant="outline">
-                Manage Subscription
+            <div className="flex flex-wrap gap-2">
+              {hasActiveSubscription ? (
+                <form action={customerPortalAction}>
+                  <Button type="submit" variant="outline">
+                    Manage subscription
+                  </Button>
+                </form>
+              ) : (
+                <Button asChild variant="outline">
+                  <Link href="/pricing">Subscribe</Link>
+                </Button>
+              )}
+              <Button
+                asChild
+                className="bg-orange-500 hover:bg-orange-600 text-white"
+              >
+                <Link href="/dashboard/payments">Payments</Link>
               </Button>
-            </form>
+            </div>
           </div>
         </div>
       </CardContent>

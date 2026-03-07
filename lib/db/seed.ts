@@ -1,7 +1,16 @@
+import { eq } from "drizzle-orm";
 import { stripe } from "../payments/stripe";
 import { db } from "./drizzle";
-import { users, teams, teamMembers } from "./schema";
+import {
+  users,
+  teams,
+  teamMembers,
+  plans,
+  creditActionPricing,
+} from "./schema";
 import { hashPassword } from "@/lib/auth/session";
+
+const TEST_USER_EMAIL = "test@test.com";
 
 async function createStripeProducts() {
   console.log("Creating Stripe products and prices...");
@@ -39,38 +48,89 @@ async function createStripeProducts() {
   console.log("Stripe products and prices created successfully.");
 }
 
-async function seed() {
-  const email = "test@test.com";
-  const password = "admin123";
-  const passwordHash = await hashPassword(password);
+async function seedBillingPlans() {
+  const starterPlan = {
+    code: "starter",
+    name: "Starter",
+    priceMinor: 5900, // 59 PLN
+    currency: "PLN",
+    billingInterval: "month",
+    includedCreditsPerCycle: 100,
+    rolloverCap: 50,
+    dailyBonusCredits: 5,
+    dailyBonusCapPerCycle: 150,
+    isActive: true,
+    topupsEnabled: true,
+  };
 
-  const [user] = await db
-    .insert(users)
-    .values([
-      {
-        email: email,
-        passwordHash: passwordHash,
-        role: "owner",
+  await db
+    .insert(plans)
+    .values(starterPlan)
+    .onConflictDoUpdate({
+      target: plans.code,
+      set: {
+        includedCreditsPerCycle: starterPlan.includedCreditsPerCycle,
+        rolloverCap: starterPlan.rolloverCap,
+        dailyBonusCredits: starterPlan.dailyBonusCredits,
+        dailyBonusCapPerCycle: starterPlan.dailyBonusCapPerCycle,
       },
-    ])
-    .returning();
+    });
 
-  console.log("Initial user created.");
+  const existing = await db.select().from(creditActionPricing).limit(1);
+  if (existing.length === 0) {
+    await db.insert(creditActionPricing).values([
+      { actionType: "generate_page", creditsCost: 20, isActive: true },
+      { actionType: "regenerate_section", creditsCost: 5, isActive: true },
+      { actionType: "rewrite_copy", creditsCost: 2, isActive: true },
+      { actionType: "generate_image", creditsCost: 10, isActive: true },
+    ]);
+  }
 
-  const [team] = await db
-    .insert(teams)
-    .values({
-      name: "Test Team",
-    })
-    .returning();
+  console.log("Billing plans and credit action pricing seeded.");
+}
 
-  await db.insert(teamMembers).values({
-    teamId: team.id,
-    userId: user.id,
-    role: "owner",
-  });
+async function seed() {
+  const existingUser = await db
+    .select()
+    .from(users)
+    .where(eq(users.email, TEST_USER_EMAIL))
+    .limit(1);
+
+  if (existingUser.length === 0) {
+    const password = "admin123";
+    const passwordHash = await hashPassword(password);
+
+    const [user] = await db
+      .insert(users)
+      .values([
+        {
+          email: TEST_USER_EMAIL,
+          passwordHash: passwordHash,
+          role: "owner",
+        },
+      ])
+      .returning();
+
+    const [team] = await db
+      .insert(teams)
+      .values({
+        name: "Test Team",
+      })
+      .returning();
+
+    await db.insert(teamMembers).values({
+      teamId: team.id,
+      userId: user.id,
+      role: "owner",
+    });
+
+    console.log("Initial user created.");
+  } else {
+    console.log("Test user already exists, skipping user/team creation.");
+  }
 
   await createStripeProducts();
+  await seedBillingPlans();
 }
 
 seed()

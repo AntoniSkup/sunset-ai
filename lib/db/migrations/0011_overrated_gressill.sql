@@ -1,0 +1,2 @@
+CREATE INDEX "subscriptions_provider_customer_id_idx" ON "subscriptions" USING btree ("provider_customer_id");--> statement-breakpoint
+ALTER TABLE "accounts" ADD CONSTRAINT "accounts_owner_user_id_unique" UNIQUE("owner_user_id");

@@ -40,6 +40,7 @@ export default function DashboardLayout({
 
   const navItems = [
     { href: "/dashboard", icon: UsersIcon, label: "Team" },
+    { href: "/dashboard/payments", icon: CreditCardIcon, label: "Payments" },
     { href: "/dashboard/general", icon: Cog6ToothIcon, label: "General" },
     { href: "/dashboard/activity", icon: ChartBarIcon, label: "Activity" },
     { href: "/dashboard/security", icon: ShieldCheckIcon, label: "Security" },

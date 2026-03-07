@@ -1,0 +1,1 @@
+ALTER TABLE "plans" ADD COLUMN "daily_bonus_cap_per_cycle" integer;

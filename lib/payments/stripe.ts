@@ -1,13 +1,168 @@
 import Stripe from "stripe";
 import { redirect } from "next/navigation";
-import { Team } from "@/lib/db/schema";
+import type { Account, Team } from "@/lib/db/schema";
 import {
-  getTeamByStripeCustomerId,
   getUser,
+  getTeamByStripeCustomerId,
   updateTeamSubscription,
 } from "@/lib/db/queries";
+import {
+  getOrCreateAccountForUser,
+  getSubscriptionByAccountId,
+  getSubscriptionByProviderSubscriptionId,
+} from "@/lib/billing/accounts";
+import { getPlanById } from "@/lib/billing/plans";
+import { createSubscriptionCycleAndGrant } from "@/lib/billing/grants";
+import { db } from "@/lib/db/drizzle";
+import { subscriptions, subscriptionCycles } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 
 export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+
+const STARTER_PRICE_ID = process.env.STRIPE_STARTER_PRICE_ID;
+
+/**
+ * Create Stripe Checkout session for Starter subscription (account-based).
+ * Uses STRIPE_STARTER_PRICE_ID. Redirects to sign-up if not authenticated.
+ */
+export async function createCheckoutSessionForStarter() {
+  const user = await getUser();
+  if (!user) {
+    redirect(`/sign-in?redirect=/pricing`);
+  }
+
+  if (!STARTER_PRICE_ID) {
+    throw new Error("STRIPE_STARTER_PRICE_ID is not set");
+  }
+
+  const account = await getOrCreateAccountForUser(user.id);
+  const existingSubscription = await getSubscriptionByAccountId(account.id);
+  const customerId = existingSubscription?.providerCustomerId ?? undefined;
+
+  const session = await stripe.checkout.sessions.create({
+    payment_method_types: ["card"],
+    line_items: [
+      {
+        price: STARTER_PRICE_ID,
+        quantity: 1,
+      },
+    ],
+    mode: "subscription",
+    success_url: `${process.env.BASE_URL}/api/stripe/checkout?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${process.env.BASE_URL}/pricing`,
+    customer: customerId,
+    client_reference_id: user.id.toString(),
+    allow_promotion_codes: true,
+  });
+
+  redirect(session.url!);
+}
+
+/**
+ * Create Stripe Customer Portal session for an account (manage subscription).
+ */
+export async function createCustomerPortalSession(account: Account) {
+  const subscription = await getSubscriptionByAccountId(account.id);
+  if (!subscription?.providerCustomerId) {
+    redirect("/pricing");
+  }
+
+  const portalSession = await stripe.billingPortal.sessions.create({
+    customer: subscription.providerCustomerId,
+    return_url: `${process.env.BASE_URL}/dashboard`,
+  });
+
+  redirect(portalSession.url);
+}
+
+/**
+ * Handle subscription.updated / subscription.deleted from Stripe webhook.
+ * Updates our subscriptions row; on renewal creates new cycle + credit grant.
+ */
+function getSubscriptionPeriodDates(sub: Stripe.Subscription): {
+  start: Date | null;
+  end: Date | null;
+} {
+  let periodStart = (sub as { current_period_start?: number }).current_period_start ?? null;
+  let periodEnd = (sub as { current_period_end?: number }).current_period_end ?? null;
+  if ((periodStart == null || periodEnd == null) && sub.items?.data?.[0]) {
+    const item = sub.items.data[0] as { current_period_start?: number; current_period_end?: number };
+    periodStart = periodStart ?? item.current_period_start ?? null;
+    periodEnd = periodEnd ?? item.current_period_end ?? null;
+  }
+  if ((periodStart == null || periodEnd == null) && sub.status === "trialing") {
+    periodStart = periodStart ?? sub.trial_start ?? null;
+    periodEnd = periodEnd ?? sub.trial_end ?? null;
+  }
+  return {
+    start: periodStart != null ? new Date(periodStart * 1000) : null,
+    end: periodEnd != null ? new Date(periodEnd * 1000) : null,
+  };
+}
+
+export async function handleSubscriptionChange(
+  stripeSubscription: Stripe.Subscription
+) {
+  const subscriptionId = stripeSubscription.id;
+  const customerId =
+    typeof stripeSubscription.customer === "string"
+      ? stripeSubscription.customer
+      : stripeSubscription.customer.id;
+  const status = stripeSubscription.status;
+  const { start: currentPeriodStart, end: currentPeriodEnd } =
+    getSubscriptionPeriodDates(stripeSubscription);
+  const cancelAtPeriodEnd = stripeSubscription.cancel_at_period_end ?? false;
+  const canceledAt =
+    stripeSubscription.canceled_at != null
+      ? new Date(stripeSubscription.canceled_at * 1000)
+      : null;
+
+  const ourSub =
+    await getSubscriptionByProviderSubscriptionId(subscriptionId);
+  if (!ourSub) {
+    return;
+  }
+
+  await db
+    .update(subscriptions)
+    .set({
+      status,
+      providerCustomerId: customerId,
+      currentPeriodStart,
+      currentPeriodEnd,
+      cancelAtPeriodEnd,
+      canceledAt,
+      updatedAt: new Date(),
+    })
+    .where(eq(subscriptions.id, ourSub.id));
+
+  if (
+    (status === "active" || status === "trialing") &&
+    currentPeriodStart &&
+    currentPeriodEnd
+  ) {
+    const plan = await getPlanById(ourSub.planId);
+    if (plan) {
+      const cycles = await db
+        .select()
+        .from(subscriptionCycles)
+        .where(eq(subscriptionCycles.subscriptionId, ourSub.id));
+      const hasCycleForPeriod = cycles.some(
+        (c) => c.periodStart.getTime() === currentPeriodStart.getTime()
+      );
+      if (!hasCycleForPeriod) {
+        await createSubscriptionCycleAndGrant(
+          ourSub.accountId,
+          ourSub.id,
+          currentPeriodStart,
+          currentPeriodEnd,
+          plan.includedCreditsPerCycle
+        );
+      }
+    }
+  }
+}
+
 
 export async function createCheckoutSession({
   team,
@@ -36,15 +191,12 @@ export async function createCheckoutSession({
     customer: team.stripeCustomerId || undefined,
     client_reference_id: user.id.toString(),
     allow_promotion_codes: true,
-    subscription_data: {
-      trial_period_days: 14,
-    },
   });
 
   redirect(session.url!);
 }
 
-export async function createCustomerPortalSession(team: Team) {
+export async function createCustomerPortalSessionLegacy(team: Team) {
   if (!team.stripeCustomerId || !team.stripeProductId) {
     redirect("/pricing");
   }
@@ -112,7 +264,7 @@ export async function createCustomerPortalSession(team: Team) {
   });
 }
 
-export async function handleSubscriptionChange(
+export async function handleTeamSubscriptionChange(
   subscription: Stripe.Subscription,
 ) {
   const customerId = subscription.customer as string;

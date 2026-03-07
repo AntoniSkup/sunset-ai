@@ -2,6 +2,9 @@ import { generateText, tool } from "ai";
 import { z } from "zod";
 import { getAIModel } from "@/lib/ai/get-ai-model";
 import { getUser } from "@/lib/db/queries";
+import { getOrCreateAccountForUser } from "@/lib/billing/accounts";
+import { runWithCredits } from "@/lib/credits/run-with-credits";
+import { InsufficientCreditsError } from "@/lib/credits/debit";
 import type { CodeGenerationResult, CodeValidationResult } from "./types";
 import { parse } from "node-html-parser";
 import {
@@ -189,6 +192,11 @@ async function generateAndSaveSingleFile(params: {
 
     const inferredKind = inferFileKind(normalizedDestination);
     const treatAsFragment = isFragmentDestination(normalizedDestination);
+    const actionType =
+      inferredKind === "section" ? "regenerate_section" : "generate_page";
+
+    const account = await getOrCreateAccountForUser(params.userId);
+    const idempotencyKey = `codegen-${params.chatId}-${normalizedDestination}-${Date.now()}`;
 
     let previousCode: string | undefined;
     const shouldModify = params.isModification ?? false;
@@ -208,119 +216,141 @@ async function generateAndSaveSingleFile(params: {
       );
     }
 
-    const prompt = buildCodeGenerationPrompt({
-      destination: normalizedDestination,
-      userRequest: params.userRequest,
-      previousCodeVersion: previousCode,
-      isModification: shouldModify,
-      existingSections: existingSections.length > 0 ? existingSections : undefined,
-    });
-
-    const model = await getAIModel();
-
-    const result = await generateText({
-      model,
-      prompt,
-      experimental_telemetry: {
-        isEnabled: true,
-        functionId: "code-generation",
-        metadata: {
-          chatId: params.chatId,
+    try {
+      return await runWithCredits(
+        {
+          accountId: account.id,
           userId: params.userId,
-          destination: normalizedDestination,
+          actionType,
+          idempotencyKey,
         },
-      },
-    });
+        async () => {
+          const prompt = buildCodeGenerationPrompt({
+            destination: normalizedDestination,
+            userRequest: params.userRequest,
+            previousCodeVersion: previousCode,
+            isModification: shouldModify,
+            existingSections:
+              existingSections.length > 0 ? existingSections : undefined,
+          });
 
-    const generatedCode = result.text;
+          const model = await getAIModel();
 
-    if (!generatedCode || generatedCode.trim().length === 0) {
-      console.error(
-        `[Code Generation] Empty result for user ${params.userId}, chat ${params.chatId}`
-      );
-      return {
-        success: false,
-        error: "Code generation returned empty result",
-      };
-    }
+          const genResult = await generateText({
+            model,
+            prompt,
+            experimental_telemetry: {
+              isEnabled: true,
+              functionId: "code-generation",
+              metadata: {
+                chatId: params.chatId,
+                userId: params.userId,
+                destination: normalizedDestination,
+              },
+            },
+          });
 
-    const isTsx = normalizedDestination.toLowerCase().endsWith(".tsx");
-    const validationResult = isTsx
-      ? validateReactCode(generatedCode)
-      : treatAsFragment
-        ? await validateAndFixFragment(generatedCode)
-        : await validateAndFixDocument(generatedCode);
+          const generatedCode = genResult.text;
 
-    if (!validationResult.isValid && validationResult.errors.length > 0) {
-      console.error(
-        `[Code Generation] Validation failed for user ${params.userId}, chat ${params.chatId}, dest ${normalizedDestination}: ${validationResult.errors.join(", ")}`
-      );
-      return {
-        success: false,
-        error: `Code validation failed: ${validationResult.errors.join(", ")}`,
-      };
-    }
+          if (!generatedCode || generatedCode.trim().length === 0) {
+            console.error(
+              `[Code Generation] Empty result for user ${params.userId}, chat ${params.chatId}`
+            );
+            return {
+              success: false,
+              error: "Code generation returned empty result",
+            };
+          }
 
-    let finalCode = validationResult.fixedCode;
+          const isTsx = normalizedDestination.toLowerCase().endsWith(".tsx");
+          const validationResult = isTsx
+            ? validateReactCode(generatedCode)
+            : treatAsFragment
+              ? await validateAndFixFragment(generatedCode)
+              : await validateAndFixDocument(generatedCode);
 
-    if (isIndexDestination(normalizedDestination) && !isTsx) {
-      finalCode = enforceIndexShell(finalCode);
-      const revalidated = await validateAndFixDocument(finalCode);
-      if (revalidated.isValid) {
-        finalCode = revalidated.fixedCode;
-      }
-    } else if (!treatAsFragment && !isTsx) {
-      try {
-        const root = parse(finalCode);
-        const nestedHtml = root.querySelector("html html");
-        if (nestedHtml) {
+          if (!validationResult.isValid && validationResult.errors.length > 0) {
+            console.error(
+              `[Code Generation] Validation failed for user ${params.userId}, chat ${params.chatId}, dest ${normalizedDestination}: ${validationResult.errors.join(", ")}`
+            );
+            return {
+              success: false,
+              error: `Code validation failed: ${validationResult.errors.join(", ")}`,
+            };
+          }
+
+          let finalCode = validationResult.fixedCode;
+
+          if (isIndexDestination(normalizedDestination) && !isTsx) {
+            finalCode = enforceIndexShell(finalCode);
+            const revalidated = await validateAndFixDocument(finalCode);
+            if (revalidated.isValid) {
+              finalCode = revalidated.fixedCode;
+            }
+          } else if (!treatAsFragment && !isTsx) {
+            try {
+              const root = parse(finalCode);
+              const nestedHtml = root.querySelector("html html");
+              if (nestedHtml) {
+                return {
+                  success: false,
+                  error:
+                    "Generated nested <html> tag. Page/section files should be fragments (no <html>/<head>/<body>).",
+                };
+              }
+            } catch {
+              // ignore
+            }
+          }
+
+          const revision = await createLandingSiteRevision({
+            chatId: params.chatId,
+            userId: params.userId,
+          });
+
+          if (!revision?.id || !revision?.revisionNumber) {
+            return {
+              success: false,
+              error: "Failed to create site revision",
+            };
+          }
+
+          const file = await upsertLandingSiteFile({
+            chatId: params.chatId,
+            path: normalizedDestination,
+            kind: inferredKind,
+          });
+
+          if (!file?.id) {
+            return { success: false, error: "Failed to upsert site file" };
+          }
+
+          await createLandingSiteFileVersion({
+            fileId: file.id,
+            revisionId: revision.id,
+            content: finalCode,
+          });
+
           return {
-            success: false,
-            error:
-              "Generated nested <html> tag. Page/section files should be fragments (no <html>/<head>/<body>).",
+            success: true,
+            revisionId: revision.id,
+            revisionNumber: revision.revisionNumber,
+            codeContent: finalCode,
+            fixesApplied: validationResult.fixesApplied,
+            destination: normalizedDestination,
           };
         }
-      } catch {
-        // ignore
+      );
+    } catch (err) {
+      if (err instanceof InsufficientCreditsError) {
+        return {
+          success: false,
+          error:
+            "Insufficient credits. Please upgrade your plan or buy more credits.",
+        };
       }
+      throw err;
     }
-
-    const revision = await createLandingSiteRevision({
-      chatId: params.chatId,
-      userId: params.userId,
-    });
-
-    if (!revision?.id || !revision?.revisionNumber) {
-      return {
-        success: false,
-        error: "Failed to create site revision",
-      };
-    }
-
-    const file = await upsertLandingSiteFile({
-      chatId: params.chatId,
-      path: normalizedDestination,
-      kind: inferredKind,
-    });
-
-    if (!file?.id) {
-      return { success: false, error: "Failed to upsert site file" };
-    }
-
-    await createLandingSiteFileVersion({
-      fileId: file.id,
-      revisionId: revision.id,
-      content: finalCode,
-    });
-
-    return {
-      success: true,
-      revisionId: revision.id,
-      revisionNumber: revision.revisionNumber,
-      codeContent: finalCode,
-      fixesApplied: validationResult.fixesApplied,
-      destination: normalizedDestination,
-    };
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error occurred";

@@ -194,269 +194,245 @@ export default function StartPage() {
   };
 
   return (
-    <div className="min-h-full w-full bg-black p-2 sm:p-4">
-      <div className="rounded-2xl border border-gray-200 bg-white px-4 py-6 sm:px-8 md:px-12">
-        <DropdownMenu modal={false}>
-          <DropdownMenuTrigger asChild>
-            <img
-              src="/sunset-logo.png"
+    <div className="rounded-2xl border border-gray-200 bg-white px-4 py-6 sm:px-8 md:px-12">
+      <DropdownMenu modal={false}>
+        <DropdownMenuTrigger asChild>
+          <img
+            src="/sunset-logo.png"
+            alt="Sunset"
+            className="h-8 w-auto object-contain shrink-0 hover:scale-95 click:scale-105 transition-all duration-200 cursor-pointer ease-in-out"
+          />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent className="w-40" align="start">
+          <DropdownMenuGroup>
+            <DropdownMenuLabel
+              className="text-gray-500 text-xs font-medium"
+              onClick={() => router.push("/dashboard")}
+            >
+              My Account
+            </DropdownMenuLabel>
+
+            <DropdownMenuItem onClick={() => router.push("/pricing")}>
+              Billing
+              <DropdownMenuShortcut>⌘B</DropdownMenuShortcut>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => router.push("/dashboard")}>
+              Settings
+              <DropdownMenuShortcut>⌘S</DropdownMenuShortcut>
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
+          <DropdownMenuSeparator />
+          <DropdownMenuGroup>
+            <DropdownMenuItem>Team</DropdownMenuItem>
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>Invite users</DropdownMenuSubTrigger>
+              <DropdownMenuPortal>
+                <DropdownMenuSubContent>
+                  <DropdownMenuItem>Email</DropdownMenuItem>
+                  <DropdownMenuItem>Message</DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem>More...</DropdownMenuItem>
+                </DropdownMenuSubContent>
+              </DropdownMenuPortal>
+            </DropdownMenuSub>
+          </DropdownMenuGroup>
+
+          <DropdownMenuSeparator />
+          <DropdownMenuGroup>
+            <DropdownMenuItem onClick={handleSignOut}>
+              Log out
+              <DropdownMenuShortcut>⇧⌘Q</DropdownMenuShortcut>
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <section className="flex min-h-[70vh] items-center justify-center flex-row">
+        <div className="mx-auto flex w-full max-w-3xl flex-col items-start text-start">
+          <div className="flex flex-row items-center justify-start">
+            <motion.img
+              initial={{ opacity: 0, y: 24 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, ease: "easeOut" }}
+              src={sunsetLogoTree.src}
               alt="Sunset"
-              className="h-8 w-auto object-contain shrink-0 hover:scale-95 click:scale-105 transition-all duration-200 cursor-pointer ease-in-out"
+              className="w-10 h-10 mr-2"
             />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent className="w-40" align="start">
-            <DropdownMenuGroup>
-              <DropdownMenuLabel
-                className="text-gray-500 text-xs font-medium"
-                onClick={() => router.push("/dashboard")}
-              >
-                My Account
-              </DropdownMenuLabel>
+            <motion.h1
+              initial={{ opacity: 0, y: 24 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, ease: "easeOut" }}
+              className="text-3xl font-bold tracking-tight text-gray-900 sm:text-3xl"
+            >
+              What are we creating today?
+            </motion.h1>
+          </div>
 
-              <DropdownMenuItem onClick={() => router.push("/pricing")}>
-                Billing
-                <DropdownMenuShortcut>⌘B</DropdownMenuShortcut>
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => router.push("/dashboard")}>
-                Settings
-                <DropdownMenuShortcut>⌘S</DropdownMenuShortcut>
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-            <DropdownMenuSeparator />
-            <DropdownMenuGroup>
-              <DropdownMenuItem>Team</DropdownMenuItem>
-              <DropdownMenuSub>
-                <DropdownMenuSubTrigger>Invite users</DropdownMenuSubTrigger>
-                <DropdownMenuPortal>
-                  <DropdownMenuSubContent>
-                    <DropdownMenuItem>Email</DropdownMenuItem>
-                    <DropdownMenuItem>Message</DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem>More...</DropdownMenuItem>
-                  </DropdownMenuSubContent>
-                </DropdownMenuPortal>
-              </DropdownMenuSub>
-            </DropdownMenuGroup>
-
-            <DropdownMenuSeparator />
-            <DropdownMenuGroup>
-              <DropdownMenuItem onClick={handleSignOut}>
-                Log out
-                <DropdownMenuShortcut>⇧⌘Q</DropdownMenuShortcut>
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        <section className="flex min-h-[70vh] items-center justify-center flex-row">
-          <div className="mx-auto flex w-full max-w-3xl flex-col items-start text-start">
-            <div className="flex flex-row items-center justify-start">
-              <motion.img
-                initial={{ opacity: 0, y: 24 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, ease: "easeOut" }}
-                src={sunsetLogoTree.src}
-                alt="Sunset"
-                className="w-10 h-10 mr-2"
-              />
-              <motion.h1
-                initial={{ opacity: 0, y: 24 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, ease: "easeOut" }}
-                className="text-3xl font-bold tracking-tight text-gray-900 sm:text-3xl"
-              >
-                What are we creating today?
-              </motion.h1>
-            </div>
-
-            <form onSubmit={handleSubmit} className="mt-8 w-full">
-              <div
-                className="relative  rounded-xl border bg-[#ffffffe9] 
+          <form onSubmit={handleSubmit} className="mt-8 w-full">
+            <div
+              className="relative  rounded-xl border bg-[#ffffffe9] 
               border-gray-500
                px-8 py-6 overflow-hidden shadow"
-              >
-                <div className="relative min-h-[4.5rem]">
-                  {!input.trim() && !isFocused && (
-                    <div
-                      className="pointer-events-none absolute inset-0 flex items-start pt-2 text-base leading-normal"
-                      aria-hidden
-                    >
-                      <span className="text-base text-gray-400 leading-normal">
-                        Make a website&nbsp;
-                        <TypingText
-                          text={[
-                            "for my business.",
-                            "for my freelance portfolio.",
-                            "for my coffee shop.",
-                          ]}
-                          pauseDuration={3000}
-                          typingSpeed={30}
-                        />
-                      </span>
-                    </div>
-                  )}
-                  <TextareaAutosize
-                    ref={textareaRef}
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    onFocus={() => setIsFocused(true)}
-                    onBlur={() => setIsFocused(false)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) {
-                        e.preventDefault();
-                        if (!isLoading && input.trim()) {
-                          (
-                            e.target as HTMLTextAreaElement
-                          ).form?.requestSubmit();
-                        }
-                      }
-                    }}
-                    placeholder={
-                      isFocused ? "Make a website for my business" : ""
-                    }
-                    disabled={isLoading}
-                    minRows={4}
-                    maxRows={10}
-                    className="relative w-full resize-none overflow-auto bg-transparent pt-2 text-base leading-normal text-gray-900 placeholder:text-gray-400 focus:outline-none disabled:opacity-50 h-full"
-                  />
-                </div>
-
-                <div className="w-full flex justify-between ">
-                  {/* <Button variant="ghost" size="icon"> */}
-                  <div className="flex items-center gap-2">
-                    <PlusIcon className="h-4 w-4 color-black" />
-                    <span className="text-sm text-black font-medium">
-                      ATTACH FILES
+            >
+              <div className="relative min-h-[4.5rem]">
+                {!input.trim() && !isFocused && (
+                  <div
+                    className="pointer-events-none absolute inset-0 flex items-start pt-2 text-base leading-normal"
+                    aria-hidden
+                  >
+                    <span className="text-base text-gray-400 leading-normal">
+                      Make a website&nbsp;
+                      <TypingText
+                        text={[
+                          "for my business.",
+                          "for my freelance portfolio.",
+                          "for my coffee shop.",
+                        ]}
+                        pauseDuration={3000}
+                        typingSpeed={30}
+                      />
                     </span>
                   </div>
-                  {/* </Button> */}
-                  <Button
-                    type="submit"
-                    disabled={isLoading || !input.trim()}
-                    size="icon"
-                    className="h-8 w-16 rounded-md
- bg-gray-900 text-white   hover:bg-gray-800 disabled:bg-gray-200 disabled:text-gray-500 "
-                    aria-label="Submit"
-                  >
-                    {isLoading ? (
-                      <ArrowPathIcon className="h-4 w-4 animate-spin" />
-                    ) : (
-                      // <ArrowUpIcon className="h-4 w-4" />
-                      <span className="text-sm">SEND</span>
-                    )}
-                  </Button>
+                )}
+                <TextareaAutosize
+                  ref={textareaRef}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onFocus={() => setIsFocused(true)}
+                  onBlur={() => setIsFocused(false)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      if (!isLoading && input.trim()) {
+                        (e.target as HTMLTextAreaElement).form?.requestSubmit();
+                      }
+                    }
+                  }}
+                  placeholder={
+                    isFocused ? "Make a website for my business" : ""
+                  }
+                  disabled={isLoading}
+                  minRows={4}
+                  maxRows={10}
+                  className="relative w-full resize-none overflow-auto bg-transparent pt-2 text-base leading-normal text-gray-900 placeholder:text-gray-400 focus:outline-none disabled:opacity-50 h-full"
+                />
+              </div>
+
+              <div className="w-full flex justify-between ">
+                {/* <Button variant="ghost" size="icon"> */}
+                <div className="flex items-center gap-2">
+                  <PlusIcon className="h-4 w-4 color-black" />
+                  <span className="text-sm text-black font-medium">
+                    ATTACH FILES
+                  </span>
                 </div>
-
-                <BorderBeam
-                  duration={18}
-                  size={200}
-                  className="from-transparent via-gray-900 to-transparent"
-                />
-                <BorderBeam
-                  duration={18}
-                  delay={9}
-                  size={200}
-                  className="from-transparent via-gray-900 to-transparent"
-                />
+                {/* </Button> */}
+                <Button
+                  type="submit"
+                  disabled={isLoading || !input.trim()}
+                  size="icon"
+                  className="h-8 w-16 rounded-md
+ bg-gray-900 text-white   hover:bg-gray-800 disabled:bg-gray-200 disabled:text-gray-500 "
+                  aria-label="Submit"
+                >
+                  {isLoading ? (
+                    <ArrowPathIcon className="h-4 w-4 animate-spin" />
+                  ) : (
+                    // <ArrowUpIcon className="h-4 w-4" />
+                    <span className="text-sm">SEND</span>
+                  )}
+                </Button>
               </div>
-            </form>
-          </div>
-        </section>
 
-        <section className="mx-auto w-full max-w-5xl pb-6">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-base font-semibold text-gray-900">
-              Your projects
-            </h2>
+              <BorderBeam
+                duration={18}
+                size={200}
+                className="from-transparent via-gray-900 to-transparent"
+              />
+              <BorderBeam
+                duration={18}
+                delay={9}
+                size={200}
+                className="from-transparent via-gray-900 to-transparent"
+              />
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <section className="mx-auto w-full max-w-5xl pb-6">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-base font-semibold text-gray-900">
+            Your projects
+          </h2>
+          <Link
+            href="/start"
+            className="text-sm font-medium text-[#ff6313] transition-colors hover:text-[#ff4a13]"
+          >
+            See more
+          </Link>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {chats.map((chat) => (
             <Link
-              href="/start"
-              className="text-sm font-medium text-[#ff6313] transition-colors hover:text-[#ff4a13]"
+              key={chat.publicId}
+              href={`/builder/${chat.publicId}`}
+              className="group rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300"
             >
-              See more
+              <article className="flex h-full flex-col overflow-hidden rounded-xl border border-gray-700 bg-white shadow-sm hover:border-gray-800 hover:shadow-md">
+                <div className="aspect-video w-full overflow-hidden border-b bg-gray-100">
+                  {(chat.screenshotUrl ?? chat.screenshot_url) ? (
+                    <img
+                      src={chat.screenshotUrl ?? chat.screenshot_url ?? ""}
+                      alt={chat.title || "Landing page preview"}
+                      className="h-full w-full object-cover object-top"
+                    />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center bg-gray-100">
+                      <div className="h-12 w-16 animate-pulse rounded bg-gray-200" />
+                    </div>
+                  )}
+                </div>
+                <div className="flex flex-col gap-1 p-4">
+                  <p className="truncate font-medium text-gray-900">
+                    {chat.title || "Untitled"}
+                  </p>
+                  <p className="text-sm text-gray-500">
+                    Edited {getRelativeTime(chat.updatedAt)}
+                  </p>
+                </div>
+              </article>
             </Link>
+          ))}
+        </div>
+
+        {(nextCursor != null || loadingMore) && (
+          <div
+            ref={loadMoreRef}
+            className="flex justify-center py-8"
+            aria-hidden
+          >
+            {loadingMore && (
+              <ArrowPathIcon className="h-8 w-8 animate-spin text-gray-400" />
+            )}
           </div>
+        )}
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {chats.map((chat) => (
-              <Link
-                key={chat.publicId}
-                href={`/builder/${chat.publicId}`}
-                className="group rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300"
-              >
-                <article className="flex h-full flex-col overflow-hidden rounded-xl border border-gray-700 bg-white shadow-sm hover:border-gray-800 hover:shadow-md">
-                  <div className="aspect-video w-full overflow-hidden border-b bg-gray-100">
-                    {(chat.screenshotUrl ?? chat.screenshot_url) ? (
-                      <img
-                        src={chat.screenshotUrl ?? chat.screenshot_url ?? ""}
-                        alt={chat.title || "Landing page preview"}
-                        className="h-full w-full object-cover object-top"
-                      />
-                    ) : (
-                      <div className="flex h-full w-full flex-col bg-gray-50 p-1.5">
-                        <div className="mb-1.5 flex items-center gap-1 rounded border border-gray-200 bg-white px-1.5 py-1">
-                          <div className="flex gap-0.5">
-                            <div className="h-1.5 w-1.5 rounded-full bg-gray-200" />
-                            <div className="h-1.5 w-1.5 rounded-full bg-gray-200" />
-                            <div className="h-1.5 w-1.5 rounded-full bg-gray-200" />
-                          </div>
-                          <div className="ml-1 h-1.5 flex-1 max-w-[60%] rounded bg-gray-100" />
-                        </div>
-                        <div className="flex flex-1 flex-col gap-1 rounded border border-gray-200 bg-white p-2">
-                          <div className="h-2 w-3/4 rounded bg-gray-100" />
-                          <div className="mt-0.5 h-1.5 w-full rounded bg-gray-50" />
-                          <div className="h-1.5 w-5/6 rounded bg-gray-50" />
-                          <div className="mt-1.5 flex gap-1">
-                            <div className="h-2 w-12 rounded bg-gray-100" />
-                            <div className="h-2 w-14 rounded bg-gray-100" />
-                          </div>
-                          <div className="mt-1 grid flex-1 grid-cols-2 gap-1">
-                            <div className="rounded bg-gray-50" />
-                            <div className="rounded bg-gray-50" />
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex flex-col gap-1 p-4">
-                    <p className="truncate font-medium text-gray-900">
-                      {chat.title || "Untitled"}
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      Edited {getRelativeTime(chat.updatedAt)}
-                    </p>
-                  </div>
-                </article>
-              </Link>
-            ))}
+        {chats.length === 0 && (
+          <div className="mx-auto flex max-w-md flex-col items-center justify-center py-16 text-center">
+            <div className="mb-4 flex h-24 w-24 items-center justify-center rounded-xl border border-gray-200 bg-gray-100">
+              <span className="text-3xl font-bold text-gray-400">?</span>
+            </div>
+            <p className="text-base font-medium text-gray-500">
+              No projects yet
+            </p>
+            <p className="mt-1 text-sm text-gray-400">
+              Create something above to see it here
+            </p>
           </div>
-
-          {(nextCursor != null || loadingMore) && (
-            <div
-              ref={loadMoreRef}
-              className="flex justify-center py-8"
-              aria-hidden
-            >
-              {loadingMore && (
-                <ArrowPathIcon className="h-8 w-8 animate-spin text-gray-400" />
-              )}
-            </div>
-          )}
-
-          {chats.length === 0 && (
-            <div className="mx-auto flex max-w-md flex-col items-center justify-center py-16 text-center">
-              <div className="mb-4 flex h-24 w-24 items-center justify-center rounded-xl border border-gray-200 bg-gray-100">
-                <span className="text-3xl font-bold text-gray-400">?</span>
-              </div>
-              <p className="text-base font-medium text-gray-500">
-                No projects yet
-              </p>
-              <p className="mt-1 text-sm text-gray-400">
-                Create something above to see it here
-              </p>
-            </div>
-          )}
-        </section>
-      </div>
+        )}
+      </section>
     </div>
   );
 }
