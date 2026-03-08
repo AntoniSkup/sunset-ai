@@ -39,14 +39,18 @@ function ChatWithHistory({ chatId }: { chatId: string }) {
 
     (async () => {
       try {
-        const res = await fetch(`/api/chats/${encodeURIComponent(chatId)}/messages`);
+        const res = await fetch(
+          `/api/chats/${encodeURIComponent(chatId)}/messages`
+        );
         if (!res.ok) {
           const data = await res.json().catch(() => null);
           throw new Error(data?.error || "Failed to load chat messages");
         }
         const data = await res.json();
         if (!cancelled) {
-          setInitialMessages(Array.isArray(data?.messages) ? data.messages : []);
+          setInitialMessages(
+            Array.isArray(data?.messages) ? data.messages : []
+          );
         }
       } catch (e) {
         if (!cancelled) {
@@ -185,7 +189,14 @@ function ChatInner({
         parts: [{ type: "text", text: pendingMessage.message }],
       });
     }
-  }, [chatId, pendingMessage, messages.length, status, sendMessage, setPendingMessage]);
+  }, [
+    chatId,
+    pendingMessage,
+    messages.length,
+    status,
+    sendMessage,
+    setPendingMessage,
+  ]);
 
   const isLoading = status === "streaming" || status === "submitted";
 
@@ -236,11 +247,15 @@ function ChatInner({
   };
 
   useEffect(() => {
-    let newestSuccessful:
-      | { versionId: number; versionNumber: number; chatId: string }
-      | null = null;
+    let newestSuccessful: {
+      versionId: number;
+      versionNumber: number;
+      chatId: string;
+    } | null = null;
     let newestFailure: { error: string; toolCallId?: string } | null = null;
-    const lastUserMessageId = [...messages].reverse().find((m) => m.role === "user")?.id;
+    const lastUserMessageId = [...messages]
+      .reverse()
+      .find((m) => m.role === "user")?.id;
 
     const builderToolNames = new Set([
       "create_site",
@@ -266,7 +281,9 @@ function ChatInner({
         const partType = String(part?.type || "");
 
         if (partType === "tool-call" && isBuilderTool(part?.toolName)) {
-          const toolCallId = String(part?.toolCallId || part?.toolName || "tool");
+          const toolCallId = String(
+            part?.toolCallId || part?.toolName || "tool"
+          );
           if (!previewLoaderShownForToolCallIdsRef.current.has(toolCallId)) {
             previewLoaderShownForToolCallIdsRef.current.add(toolCallId);
             showPreviewLoader("Generating website...");
@@ -279,7 +296,9 @@ function ChatInner({
             const hasResult = "result" in part || "output" in part;
             if (!hasResult) {
               const toolCallId = String(part?.toolCallId || toolName || "tool");
-              if (!previewLoaderShownForToolCallIdsRef.current.has(toolCallId)) {
+              if (
+                !previewLoaderShownForToolCallIdsRef.current.has(toolCallId)
+              ) {
                 previewLoaderShownForToolCallIdsRef.current.add(toolCallId);
                 showPreviewLoader("Generating website...");
               }
@@ -296,11 +315,18 @@ function ChatInner({
               versionNumber: extracted.versionNumber,
               chatId: String(chatId || ""),
             };
-            if (!newestSuccessful || candidate.versionNumber > newestSuccessful.versionNumber) {
+            if (
+              !newestSuccessful ||
+              candidate.versionNumber > newestSuccessful.versionNumber
+            ) {
               newestSuccessful = candidate;
             }
           }
-          if (result?.success === false && typeof result?.error === "string" && result.error) {
+          if (
+            result?.success === false &&
+            typeof result?.error === "string" &&
+            result.error
+          ) {
             newestFailure = {
               error: result.error,
               toolCallId: String(part?.toolCallId || ""),
@@ -319,11 +345,18 @@ function ChatInner({
               versionNumber: extracted.versionNumber,
               chatId: String(chatId || ""),
             };
-            if (!newestSuccessful || candidate.versionNumber > newestSuccessful.versionNumber) {
+            if (
+              !newestSuccessful ||
+              candidate.versionNumber > newestSuccessful.versionNumber
+            ) {
               newestSuccessful = candidate;
             }
           }
-          if (result?.success === false && typeof result?.error === "string" && result.error) {
+          if (
+            result?.success === false &&
+            typeof result?.error === "string" &&
+            result.error
+          ) {
             newestFailure = {
               error: result.error,
               toolCallId: String(part?.toolCallId || ""),
