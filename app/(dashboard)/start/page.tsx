@@ -70,6 +70,7 @@ export default function StartPage() {
   const [input, setInput] = useState("");
   const [isFocused, setIsFocused] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isProjectsLoading, setIsProjectsLoading] = useState(true);
   const [chats, setChats] = useState<Chat[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null | undefined>(
     undefined
@@ -98,6 +99,8 @@ export default function StartPage() {
         }
       } catch (error) {
         console.error("Error fetching chats:", error);
+      } finally {
+        setIsProjectsLoading(false);
       }
       return;
     }
@@ -374,43 +377,65 @@ export default function StartPage() {
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {chats.map((chat) => (
-            <Link
-              key={chat.publicId}
-              href={`/builder/${chat.publicId}`}
-              className="group rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300"
-            >
-              <article className="flex h-full flex-col overflow-hidden rounded-xl border border-gray-700 bg-white shadow-sm hover:border-gray-800 hover:shadow-md">
-                <div className="aspect-video w-full overflow-hidden border-b bg-gray-100">
-                  {(chat.screenshotUrl ?? chat.screenshot_url) ? (
-                    <img
-                      src={chat.screenshotUrl ?? chat.screenshot_url ?? ""}
-                      alt={chat.title || "Landing page preview"}
-                      className="h-full w-full object-cover object-top"
-                    />
-                  ) : (
-                    <div className="flex h-full w-full animate-pulse flex-col bg-white">
-                      <div className="h-8 border-b border-gray-200 bg-gray-50" />
-                      <div className="flex flex-1 flex-col gap-3 p-4">
-                        <div className="h-20 rounded-md bg-gray-100" />
-                        <div className="h-3 w-2/3 rounded-full bg-gray-100" />
-                        <div className="h-3 w-5/6 rounded-full bg-gray-100" />
-                        <div className="h-3 w-1/2 rounded-full bg-gray-100" />
-                      </div>
+          {isProjectsLoading
+            ? Array.from({ length: 6 }).map((_, index) => (
+                <div
+                  key={`project-skeleton-${index}`}
+                  className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm"
+                  aria-hidden
+                >
+                  <div className="flex aspect-video w-full animate-pulse flex-col bg-white">
+                    <div className="h-8 border-b border-gray-200 bg-gray-50" />
+                    <div className="flex flex-1 flex-col gap-3 p-4">
+                      <div className="h-20 rounded-md bg-gray-100" />
+                      <div className="h-3 w-2/3 rounded-full bg-gray-100" />
+                      <div className="h-3 w-5/6 rounded-full bg-gray-100" />
+                      <div className="h-3 w-1/2 rounded-full bg-gray-100" />
                     </div>
-                  )}
+                  </div>
+                  <div className="flex animate-pulse flex-col gap-2 p-4">
+                    <div className="h-4 w-3/4 rounded-full bg-gray-100" />
+                    <div className="h-3 w-1/2 rounded-full bg-gray-100" />
+                  </div>
                 </div>
-                <div className="flex flex-col gap-1 p-4">
-                  <p className="truncate font-medium text-gray-900">
-                    {chat.title || "Untitled"}
-                  </p>
-                  <p className="text-sm text-gray-500">
-                    Edited {getRelativeTime(chat.updatedAt)}
-                  </p>
-                </div>
-              </article>
-            </Link>
-          ))}
+              ))
+            : chats.map((chat) => (
+                <Link
+                  key={chat.publicId}
+                  href={`/builder/${chat.publicId}`}
+                  className="group rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300"
+                >
+                  <article className="flex h-full flex-col overflow-hidden rounded-xl border border-gray-700 bg-white shadow-sm hover:border-gray-800 hover:shadow-md">
+                    <div className="aspect-video w-full overflow-hidden border-b bg-gray-100">
+                      {(chat.screenshotUrl ?? chat.screenshot_url) ? (
+                        <img
+                          src={chat.screenshotUrl ?? chat.screenshot_url ?? ""}
+                          alt={chat.title || "Landing page preview"}
+                          className="h-full w-full object-cover object-top"
+                        />
+                      ) : (
+                        <div className="flex h-full w-full animate-pulse flex-col bg-white">
+                          <div className="h-8 border-b border-gray-200 bg-gray-50" />
+                          <div className="flex flex-1 flex-col gap-3 p-4">
+                            <div className="h-20 rounded-md bg-gray-100" />
+                            <div className="h-3 w-2/3 rounded-full bg-gray-100" />
+                            <div className="h-3 w-5/6 rounded-full bg-gray-100" />
+                            <div className="h-3 w-1/2 rounded-full bg-gray-100" />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex flex-col gap-1 p-4">
+                      <p className="truncate font-medium text-gray-900">
+                        {chat.title || "Untitled"}
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        Edited {getRelativeTime(chat.updatedAt)}
+                      </p>
+                    </div>
+                  </article>
+                </Link>
+              ))}
         </div>
 
         {(nextCursor != null || loadingMore) && (
@@ -425,7 +450,7 @@ export default function StartPage() {
           </div>
         )}
 
-        {chats.length === 0 && (
+        {!isProjectsLoading && chats.length === 0 && (
           <div className="mx-auto flex max-w-md flex-col items-center justify-center py-16 text-center">
             <div className="mb-4 flex h-24 w-24 items-center justify-center rounded-xl border border-gray-200 bg-gray-100">
               <span className="text-3xl font-bold text-gray-400">?</span>
