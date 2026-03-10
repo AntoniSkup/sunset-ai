@@ -50,10 +50,11 @@ function ManageSubscription() {
     return <SubscriptionSkeleton />;
   }
 
-  const { balance, subscription } = billing;
+  const { balance, credits, subscription } = billing;
   const hasActiveSubscription =
     subscription &&
     (subscription.status === "active" || subscription.status === "trialing");
+  const topupRemaining = credits?.topup?.remaining ?? 0;
 
   return (
     <Card className="mb-8">
@@ -68,6 +69,11 @@ function ManageSubscription() {
           <p className="text-xl font-semibold text-gray-900">
             You have {balance} credits
           </p>
+          {topupRemaining > 0 && (
+            <p className="text-sm text-muted-foreground">
+              Including {topupRemaining} from top-ups
+            </p>
+          )}
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
               <p className="font-medium">

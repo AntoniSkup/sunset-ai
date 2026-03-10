@@ -1,6 +1,7 @@
 import Stripe from "stripe";
 import { redirect } from "next/navigation";
 import type { Account, Team } from "@/lib/db/schema";
+import type { TopupPackage } from "@/lib/db/schema";
 import {
   getUser,
   getTeamByStripeCustomerId,
@@ -12,14 +13,16 @@ import {
   getSubscriptionByProviderSubscriptionId,
 } from "@/lib/billing/accounts";
 import { getPlanById } from "@/lib/billing/plans";
-import { createSubscriptionCycleAndGrant } from "@/lib/billing/grants";
+import { createSubscriptionCycleAndGrant, createGrantForTopup } from "@/lib/billing/grants";
+import { getTopupPackageById } from "@/lib/billing/topup-packages";
 import { db } from "@/lib/db/drizzle";
-import { subscriptions, subscriptionCycles } from "@/lib/db/schema";
+import { subscriptions, subscriptionCycles, orders } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 
 export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
 const STARTER_PRICE_ID = process.env.STRIPE_STARTER_PRICE_ID;
+const TOPUP_100_PRICE_ID = process.env.STRIPE_TOPUP_100_PRICE_ID;
 
 /**
  * Create Stripe Checkout session for Starter subscription (account-based).
@@ -73,6 +76,103 @@ export async function createCustomerPortalSession(account: Account) {
   });
 
   redirect(portalSession.url);
+}
+
+/**
+ * Create Stripe Checkout session for a one-time credit top-up (account-based).
+ * Uses STRIPE_TOPUP_100_PRICE_ID for the 100 credits / 69 PLN product.
+ */
+export async function createCheckoutSessionForTopup(
+  account: Account,
+  topupPackage: TopupPackage
+) {
+  const user = await getUser();
+  if (!user) {
+    redirect(`/sign-in?redirect=/pricing`);
+  }
+
+  const priceId =
+    topupPackage.code === "topup_100"
+      ? TOPUP_100_PRICE_ID
+      : process.env[`STRIPE_TOPUP_${topupPackage.code.toUpperCase().replace(/-/g, "_")}_PRICE_ID`];
+  if (!priceId) {
+    throw new Error(`Stripe price not configured for top-up: ${topupPackage.code}`);
+  }
+
+  const session = await stripe.checkout.sessions.create({
+    payment_method_types: ["card"],
+    line_items: [
+      {
+        price: priceId,
+        quantity: 1,
+      },
+    ],
+    mode: "payment",
+    success_url: `${process.env.BASE_URL}/api/stripe/checkout?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${process.env.BASE_URL}/pricing`,
+    client_reference_id: user.id.toString(),
+    metadata: {
+      accountId: account.id.toString(),
+      topupPackageId: topupPackage.id.toString(),
+    },
+  });
+
+  redirect(session.url!);
+}
+
+/**
+ * Handle checkout.session.completed for one-time payment (credit top-up).
+ * Creates order and credit grant. Idempotent on payment_intent id.
+ */
+export async function handleCheckoutSessionCompletedPayment(
+  session: Stripe.Checkout.Session
+) {
+  if (session.mode !== "payment" || session.payment_status !== "paid") return;
+
+  const paymentIntentId =
+    typeof session.payment_intent === "string"
+      ? session.payment_intent
+      : session.payment_intent?.id;
+  if (!paymentIntentId) return;
+
+  const accountIdRaw = session.metadata?.accountId;
+  const topupPackageIdRaw = session.metadata?.topupPackageId;
+  if (!accountIdRaw || !topupPackageIdRaw) return;
+
+  const accountId = Number(accountIdRaw);
+  const topupPackageId = Number(topupPackageIdRaw);
+  const pkg = await getTopupPackageById(topupPackageId);
+  if (!pkg || !pkg.isActive) return;
+
+  const existingOrder = await db
+    .select({ id: orders.id })
+    .from(orders)
+    .where(eq(orders.providerPaymentIntentId, paymentIntentId))
+    .limit(1);
+  if (existingOrder[0]) return;
+
+  const credits = Number(pkg.creditsAmount);
+  const amountMinor = pkg.priceMinor;
+  const now = new Date();
+
+  const [order] = await db
+    .insert(orders)
+    .values({
+      accountId,
+      type: "topup",
+      status: "paid",
+      provider: "stripe",
+      providerPaymentIntentId: paymentIntentId,
+      topupPackageId: pkg.id,
+      amountMinor,
+      currency: pkg.currency,
+      paidAt: now,
+    })
+    .returning({ id: orders.id });
+
+  if (!order) return;
+
+  await createGrantForTopup(accountId, order.id, credits, null);
 }
 
 /**

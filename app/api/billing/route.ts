@@ -12,6 +12,7 @@ export type BillingApiResponse = {
   credits: {
     daily: { total: number; remaining: number };
     monthly: { total: number; remaining: number } | null;
+    topup: { remaining: number };
   };
   subscription: {
     status: string;
@@ -32,13 +33,14 @@ export async function GET() {
       credits: {
         daily: { total: 5, remaining: 0 },
         monthly: null,
+        topup: { remaining: 0 },
       },
       subscription: null,
     } satisfies BillingApiResponse);
   }
 
   const subscription = await getSubscriptionByAccountId(account.id);
-  const { balance, daily, monthly } = await getCreditsBreakdown(
+  const { balance, daily, monthly, topup } = await getCreditsBreakdown(
     account.id,
     subscription
   );
@@ -54,7 +56,7 @@ export async function GET() {
 
   return NextResponse.json({
     balance,
-    credits: { daily, monthly },
+    credits: { daily, monthly, topup },
     subscription: subscriptionPayload,
   } satisfies BillingApiResponse);
 }

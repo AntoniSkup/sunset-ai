@@ -34,6 +34,7 @@ export async function createGrantForSubscriptionCycle(
         creditsTotal: credits,
         creditsRemaining: credits,
         expiresAt,
+        priority: 1,
       })
       .returning();
 
@@ -51,7 +52,7 @@ export async function createGrantForSubscriptionCycle(
     await tx
       .update(creditWallets)
       .set({
-        balanceCached: Number(wallet.balanceCached) + credits,
+        balanceCached: Number(wallet.balanceCached) + Number(credits),
         updatedAt: new Date(),
       })
       .where(eq(creditWallets.id, wallet.id));
@@ -68,6 +69,7 @@ export async function createSubscriptionCycleAndGrant(
   periodEnd: Date,
   includedCredits: number
 ): Promise<number> {
+  const credits = Number(includedCredits);
   const periodEndDate = periodEnd instanceof Date ? periodEnd : new Date(periodEnd);
 
   const [cycle] = await db
@@ -78,7 +80,7 @@ export async function createSubscriptionCycleAndGrant(
       periodStart,
       periodEnd: periodEndDate,
       status: "open",
-      includedCreditsGranted: includedCredits,
+      includedCreditsGranted: credits,
       rolloverCreditsGranted: 0,
       creditsConsumedInCycle: 0,
       creditsExpiredInCycle: 0,
@@ -90,7 +92,7 @@ export async function createSubscriptionCycleAndGrant(
   await createGrantForSubscriptionCycle(
     accountId,
     cycle.id,
-    includedCredits,
+    credits,
     periodEndDate
   );
 
@@ -125,6 +127,7 @@ export async function createRolloverGrant(
         creditsTotal: credits,
         creditsRemaining: credits,
         expiresAt,
+        priority: 1,
       })
       .returning();
 
@@ -143,7 +146,112 @@ export async function createRolloverGrant(
     await tx
       .update(creditWallets)
       .set({
-        balanceCached: Number(wallet.balanceCached) + credits,
+        balanceCached: Number(wallet.balanceCached) + Number(credits),
+        updatedAt: new Date(),
+      })
+      .where(eq(creditWallets.id, wallet.id));
+  });
+}
+
+/**
+ * Create a top-up credit grant (one-time purchase). priority: 1 (after daily).
+ * No expiry by default (expiresAt null).
+ */
+export async function createGrantForTopup(
+  accountId: number,
+  orderId: number,
+  credits: number,
+  expiresAt: Date | null = null
+): Promise<void> {
+  if (credits <= 0) return;
+
+  const wallet = await getWalletByAccountId(accountId);
+  if (!wallet) {
+    throw new Error("Credit wallet not found for account");
+  }
+
+  await db.transaction(async (tx) => {
+    const [grant] = await tx
+      .insert(creditGrants)
+      .values({
+        walletId: wallet.id,
+        accountId,
+        sourceType: "topup",
+        sourceId: orderId,
+        creditsTotal: credits,
+        creditsRemaining: credits,
+        expiresAt,
+        priority: 1,
+      })
+      .returning();
+
+    if (!grant) throw new Error("Failed to create topup grant");
+
+    await tx.insert(creditLedgerEntries).values({
+      walletId: wallet.id,
+      accountId,
+      entryType: "grant",
+      creditsDelta: credits,
+      grantId: grant.id,
+      orderId,
+    });
+
+    await tx
+      .update(creditWallets)
+      .set({
+        balanceCached: Number(wallet.balanceCached) + Number(credits),
+        updatedAt: new Date(),
+      })
+      .where(eq(creditWallets.id, wallet.id));
+  });
+}
+
+/**
+ * Create a daily bonus credit grant (used by daily credits cron).
+ * priority: 0 so it is consumed before subscription/rollover grants.
+ */
+export async function createGrantForDailyBonus(
+  accountId: number,
+  credits: number,
+  expiresAt: Date
+): Promise<void> {
+  if (credits <= 0) return;
+
+  const wallet = await getWalletByAccountId(accountId);
+  if (!wallet) {
+    throw new Error("Credit wallet not found for account");
+  }
+
+  await db.transaction(async (tx) => {
+    const [grant] = await tx
+      .insert(creditGrants)
+      .values({
+        walletId: wallet.id,
+        accountId,
+        sourceType: "daily_bonus",
+        sourceId: null,
+        creditsTotal: credits,
+        creditsRemaining: credits,
+        expiresAt,
+        priority: 0,
+      })
+      .returning();
+
+    if (!grant) throw new Error("Failed to create daily bonus grant");
+
+    await tx.insert(creditLedgerEntries).values({
+      walletId: wallet.id,
+      accountId,
+      entryType: "grant",
+      creditsDelta: credits,
+      grantId: grant.id,
+      metadata: { dailyBonus: true },
+    });
+
+    await tx
+      .update(creditWallets)
+      .set({
+        balanceCached: Number(wallet.balanceCached) + Number(credits),
         updatedAt: new Date(),
       })
       .where(eq(creditWallets.id, wallet.id));

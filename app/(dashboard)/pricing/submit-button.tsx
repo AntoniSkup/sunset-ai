@@ -7,7 +7,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { useFormStatus } from "react-dom";
 
-export function SubmitButton() {
+export function SubmitButton({ label }: { label?: string }) {
   const { pending } = useFormStatus();
 
   return (
@@ -24,7 +24,7 @@ export function SubmitButton() {
         </>
       ) : (
         <>
-          Get Started
+          {label ?? "Get Started"}
           <ArrowRightIcon className="ml-2 h-4 w-4" />
         </>
       )}

@@ -389,8 +389,14 @@ export default function StartPage() {
                       className="h-full w-full object-cover object-top"
                     />
                   ) : (
-                    <div className="flex h-full w-full items-center justify-center bg-gray-100">
-                      <div className="h-12 w-16 animate-pulse rounded bg-gray-200" />
+                    <div className="flex h-full w-full animate-pulse flex-col bg-white">
+                      <div className="h-8 border-b border-gray-200 bg-gray-50" />
+                      <div className="flex flex-1 flex-col gap-3 p-4">
+                        <div className="h-20 rounded-md bg-gray-100" />
+                        <div className="h-3 w-2/3 rounded-full bg-gray-100" />
+                        <div className="h-3 w-5/6 rounded-full bg-gray-100" />
+                        <div className="h-3 w-1/2 rounded-full bg-gray-100" />
+                      </div>
                     </div>
                   )}
                 </div>

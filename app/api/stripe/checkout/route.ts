@@ -12,6 +12,7 @@ import {
 } from "@/lib/billing/accounts";
 import { getPlanByCode } from "@/lib/billing/plans";
 import { createSubscriptionCycleAndGrant } from "@/lib/billing/grants";
+import { handleCheckoutSessionCompletedPayment } from "@/lib/payments/stripe";
 
 export async function GET(request: NextRequest) {
   const sessionId = request.nextUrl.searchParams.get("session_id");
@@ -24,6 +25,28 @@ export async function GET(request: NextRequest) {
     const session = await stripe.checkout.sessions.retrieve(sessionId, {
       expand: ["customer", "subscription"],
     });
+
+    const userIdRaw = session.client_reference_id;
+    if (!userIdRaw) {
+      throw new Error("No user ID in session client_reference_id.");
+    }
+    const userId = Number(userIdRaw);
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+    if (!user) {
+      throw new Error("User not found.");
+    }
+
+    if (session.mode === "payment") {
+      await handleCheckoutSessionCompletedPayment(session);
+      await setSession(user);
+      return NextResponse.redirect(
+        new URL("/dashboard/payments?topup=1", request.url)
+      );
+    }
 
     if (!session.customer || typeof session.customer === "string") {
       throw new Error("Invalid customer data from Stripe.");
@@ -43,22 +66,6 @@ export async function GET(request: NextRequest) {
       subscriptionId,
       { expand: ["items.data.price.product"] }
     );
-
-    const userIdRaw = session.client_reference_id;
-    if (!userIdRaw) {
-      throw new Error("No user ID in session client_reference_id.");
-    }
-
-    const userId = Number(userIdRaw);
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
-
-    if (!user) {
-      throw new Error("User not found.");
-    }
 
     const account = await getOrCreateAccountForUser(user.id);
     const wallet = await getWalletByAccountId(account.id);

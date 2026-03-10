@@ -9,6 +9,7 @@ export type CreditsBreakdown = {
   balance: number;
   daily: { total: number; remaining: number };
   monthly: { total: number; remaining: number } | null;
+  topup: { remaining: number };
 };
 
 export async function getCreditsBreakdown(
@@ -33,6 +34,7 @@ export async function getCreditsBreakdown(
         monthlyTotal > 0
           ? { total: monthlyTotal, remaining: Math.min(balance, monthlyTotal) }
           : null,
+      topup: { remaining: 0 },
     };
   }
 
@@ -59,6 +61,10 @@ export async function getCreditsBreakdown(
     )
     .reduce((sum, g) => sum + Number(g.creditsRemaining), 0);
 
+  const topupRemaining = grants
+    .filter((g) => g.sourceType === "topup")
+    .reduce((sum, g) => sum + Number(g.creditsRemaining), 0);
+
   return {
     balance,
     daily: {
@@ -72,5 +78,6 @@ export async function getCreditsBreakdown(
             remaining: monthlyRemaining,
           }
         : null,
+    topup: { remaining: topupRemaining },
   };
 }

@@ -103,7 +103,7 @@ export async function debitCredits(
         )
       )
       .orderBy(
-        sql`CASE WHEN ${creditGrants.sourceType} = 'daily_bonus' THEN 0 ELSE 1 END ASC`,
+        creditGrants.priority,
         sql`${creditGrants.expiresAt} ASC NULLS LAST`
       )
       .for("update");

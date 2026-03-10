@@ -7,6 +7,7 @@ import {
   teamMembers,
   plans,
   creditActionPricing,
+  topupPackages,
 } from "./schema";
 import { hashPassword } from "@/lib/auth/session";
 
@@ -49,6 +50,33 @@ async function createStripeProducts() {
 }
 
 async function seedBillingPlans() {
+  const freePlan = {
+    code: "free",
+    name: "Free",
+    priceMinor: 0,
+    currency: "PLN",
+    billingInterval: "month",
+    includedCreditsPerCycle: 0,
+    rolloverCap: 0,
+    dailyBonusCredits: 5,
+    dailyBonusCapPerCycle: 5,
+    isActive: true,
+    topupsEnabled: false,
+  };
+
+  await db
+    .insert(plans)
+    .values(freePlan)
+    .onConflictDoUpdate({
+      target: plans.code,
+      set: {
+        includedCreditsPerCycle: freePlan.includedCreditsPerCycle,
+        rolloverCap: freePlan.rolloverCap,
+        dailyBonusCredits: freePlan.dailyBonusCredits,
+        dailyBonusCapPerCycle: freePlan.dailyBonusCapPerCycle,
+      },
+    });
+
   const starterPlan = {
     code: "starter",
     name: "Starter",
@@ -104,6 +132,31 @@ async function seedBillingPlans() {
   console.log("Billing plans and credit action pricing seeded.");
 }
 
+async function seedTopupPackages() {
+  const topup100 = {
+    code: "topup_100",
+    name: "100 credits",
+    creditsAmount: 100,
+    priceMinor: 6900, // 69 PLN
+    currency: "PLN",
+    isActive: true,
+    sortOrder: 0,
+  };
+
+  await db
+    .insert(topupPackages)
+    .values(topup100)
+    .onConflictDoUpdate({
+      target: topupPackages.code,
+      set: {
+        creditsAmount: topup100.creditsAmount,
+        priceMinor: topup100.priceMinor,
+      },
+    });
+
+  console.log("Top-up packages seeded.");
+}
+
 async function seed() {
   const existingUser = await db
     .select()
@@ -146,6 +199,7 @@ async function seed() {
 
   await createStripeProducts();
   await seedBillingPlans();
+  await seedTopupPackages();
 }
 
 seed()

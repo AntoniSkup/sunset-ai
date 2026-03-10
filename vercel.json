@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/rollover",
       "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/cron/daily-credits",
+      "schedule": "0 0 * * *"
     }
   ]
 }
