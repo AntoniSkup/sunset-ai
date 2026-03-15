@@ -21,6 +21,8 @@ import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { createCheckoutSession } from "@/lib/payments/stripe";
 import { getUser, getUserWithTeam } from "@/lib/db/queries";
+import { getOrCreateAccountForUser } from "@/lib/billing/accounts";
+import { ensureDailyCreditsForAccount } from "@/lib/billing/daily-credits";
 import {
   validatedAction,
   validatedActionWithUser,
@@ -244,6 +246,8 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
       logActivity(teamId, createdUser.id, ActivityType.SIGN_UP),
       setSession(createdUser),
     ]);
+    const account = await getOrCreateAccountForUser(createdUser.id);
+    await ensureDailyCreditsForAccount(account.id);
   } catch (error) {
     console.error("Error creating team member or setting session:", error);
     return {

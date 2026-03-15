@@ -1,21 +1,32 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import {
-  ArrowRightIcon,
-  ArrowPathIcon,
-} from "@heroicons/react/24/outline";
+import { cn } from "@/lib/utils";
+import { ArrowRightIcon, ArrowPathIcon } from "@heroicons/react/24/outline";
+import type { VariantProps } from "class-variance-authority";
 import { useFormStatus } from "react-dom";
+import { buttonVariants } from "@/components/ui/button";
 
-export function SubmitButton({ label }: { label?: string }) {
+type SubmitButtonProps = {
+  label?: string;
+  className?: string;
+} & VariantProps<typeof buttonVariants>;
+
+export function SubmitButton({
+  label,
+  className,
+  variant = "outline",
+  size = "default",
+}: SubmitButtonProps) {
   const { pending } = useFormStatus();
 
   return (
     <Button
       type="submit"
       disabled={pending}
-      variant="outline"
-      className="w-full rounded-full"
+      variant={variant}
+      size={size}
+      className={cn("w-full rounded-full", className)}
     >
       {pending ? (
         <>

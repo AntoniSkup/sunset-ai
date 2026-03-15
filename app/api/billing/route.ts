@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { getUser } from "@/lib/db/queries";
 import {
-  getAccountForUser,
+  getOrCreateAccountForUser,
   getSubscriptionByAccountId,
 } from "@/lib/billing/accounts";
 import { getPlanById } from "@/lib/billing/plans";
 import { getCreditsBreakdown } from "@/lib/billing/credits-breakdown";
+import { ensureDailyCreditsForAccount } from "@/lib/billing/daily-credits";
 
 export type BillingApiResponse = {
   balance: number;
@@ -26,18 +27,8 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const account = await getAccountForUser(user.id);
-  if (!account) {
-    return NextResponse.json({
-      balance: 0,
-      credits: {
-        daily: { total: 5, remaining: 0 },
-        monthly: null,
-        topup: { remaining: 0 },
-      },
-      subscription: null,
-    } satisfies BillingApiResponse);
-  }
+  const account = await getOrCreateAccountForUser(user.id);
+  await ensureDailyCreditsForAccount(account.id);
 
   const subscription = await getSubscriptionByAccountId(account.id);
   const { balance, daily, monthly, topup } = await getCreditsBreakdown(

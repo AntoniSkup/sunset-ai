@@ -15,6 +15,7 @@ import {
   generateChatName,
 } from "@/lib/db/queries";
 import { getOrCreateAccountForUser } from "@/lib/billing/accounts";
+import { ensureDailyCreditsForAccount } from "@/lib/billing/daily-credits";
 import { runWithCredits } from "@/lib/credits/run-with-credits";
 import { InsufficientCreditsError } from "@/lib/credits/debit";
 import { streamText, convertToModelMessages, stepCountIs } from "ai";
@@ -124,6 +125,7 @@ async function chatHandler(request: NextRequest) {
     }
 
     const account = await getOrCreateAccountForUser(user.id);
+    await ensureDailyCreditsForAccount(account.id);
     const idempotencyKey = `chat-${chatId}-${user.id}-${messages.length}`;
 
     try {

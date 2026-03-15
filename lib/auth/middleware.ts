@@ -3,6 +3,7 @@ import { TeamDataWithMembers, User } from "@/lib/db/schema";
 import type { Account } from "@/lib/db/schema";
 import { getTeamForUser, getUser } from "@/lib/db/queries";
 import { getOrCreateAccountForUser } from "@/lib/billing/accounts";
+import { ensureDailyCreditsForAccount } from "@/lib/billing/daily-credits";
 import { redirect } from "next/navigation";
 
 export type ActionState = {
@@ -89,6 +90,7 @@ export function withAccount<T>(action: ActionWithAccountFunction<T>) {
     }
 
     const account = await getOrCreateAccountForUser(user.id);
+    await ensureDailyCreditsForAccount(account.id);
     return action(formData, account);
   };
 }
