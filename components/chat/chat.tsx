@@ -4,15 +4,21 @@ import { useState, useMemo, useRef, useEffect } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import type { UIMessage } from "ai";
+import useSWR from "swr";
 import { WelcomeMessage } from "./welcome-message";
 import { MessageList } from "./message-list";
 import { ChatInput } from "./chat-input";
+import { CreditsLimitModal } from "./credits-limit-modal";
 import {
   showPreviewLoader,
   hidePreviewLoader,
   updatePreviewPanel,
 } from "@/lib/preview/update-preview";
 import { usePendingMessageStore } from "@/lib/stores/usePendingMessageStore";
+import type { BillingApiResponse } from "@/app/api/billing/route";
+
+const billingFetcher = (url: string) => fetch(url).then((res) => res.json());
+const MIN_CREDITS_TO_SEND = 0.5;
 
 interface ChatProps {
   chatId?: string;
@@ -90,12 +96,20 @@ function ChatInner({
   const [input, setInput] = useState("");
   const [chatId, setChatId] = useState<string | null>(providedChatId || null);
   const [isCreatingChat, setIsCreatingChat] = useState(false);
+  const [showCreditsLimitModal, setShowCreditsLimitModal] = useState(false);
   const lastUserMessageRef = useRef<string>("");
   const lastPreviewVersionIdRef = useRef<number | null>(null);
   const previewLoaderShownForToolCallIdsRef = useRef<Set<string>>(new Set());
   const pendingMessage = usePendingMessageStore((s) => s.pendingMessage);
   const setPendingMessage = usePendingMessageStore((s) => s.setPendingMessage);
   const consumedPendingIdsRef = useRef<Set<string>>(new Set());
+  const { data: billing, mutate: mutateBilling } = useSWR<BillingApiResponse>(
+    "/api/billing",
+    billingFetcher
+  );
+  const hasCredits =
+    billing === undefined ||
+    Number(billing.balance) >= MIN_CREDITS_TO_SEND;
 
   useEffect(() => {
     const createNewChat = async () => {
@@ -170,7 +184,6 @@ function ChatInner({
 
   const statusRef = useRef(status);
   useEffect(() => {
-    //consider removing the useefefct
     if (
       chatId &&
       pendingMessage &&
@@ -180,8 +193,15 @@ function ChatInner({
       status !== "submitted"
     ) {
       if (consumedPendingIdsRef.current.has(pendingMessage.id)) return;
-      consumedPendingIdsRef.current.add(pendingMessage.id);
 
+      if (!hasCredits) {
+        consumedPendingIdsRef.current.add(pendingMessage.id);
+        setPendingMessage(null);
+        setShowCreditsLimitModal(true);
+        return;
+      }
+
+      consumedPendingIdsRef.current.add(pendingMessage.id);
       setPendingMessage(null);
 
       sendMessage({
@@ -196,6 +216,7 @@ function ChatInner({
     status,
     sendMessage,
     setPendingMessage,
+    billing,
   ]);
 
   const isLoading = status === "streaming" || status === "submitted";
@@ -203,6 +224,11 @@ function ChatInner({
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!input.trim() || isLoading || !chatId) return;
+
+    if (!hasCredits) {
+      setShowCreditsLimitModal(true);
+      return;
+    }
 
     const message = input.trim();
     lastUserMessageRef.current = message;
@@ -451,6 +477,13 @@ function ChatInner({
         handleSubmit={handleSubmit}
         handleInputChange={handleInputChange}
         isLoading={isLoading}
+      />
+      <CreditsLimitModal
+        open={showCreditsLimitModal}
+        onOpenChange={(open) => {
+          setShowCreditsLimitModal(open);
+          if (!open) mutateBilling();
+        }}
       />
     </div>
   );

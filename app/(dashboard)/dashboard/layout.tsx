@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
+  ArrowLeftIcon,
   UsersIcon,
   Cog6ToothIcon,
   ShieldCheckIcon,
@@ -137,7 +138,21 @@ export default function DashboardLayout({
                 </Link>
               ))}
             </div>
-            <div className="mt-auto pt-4 border-t border-gray-200">
+            <div className="mt-auto pt-4 border-t border-gray-200 space-y-2">
+              <Button
+                asChild
+                type="button"
+                variant="ghost"
+                className="w-full justify-start text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+              >
+                <Link
+                  href="/start"
+                  onClick={() => setIsSidebarOpen(false)}
+                >
+                  <ArrowLeftIcon className="h-4 w-4 mr-2" />
+                  Back to account
+                </Link>
+              </Button>
               <Button
                 type="button"
                 variant="ghost"

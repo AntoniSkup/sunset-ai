@@ -280,7 +280,7 @@ export default function StartPage() {
               <div className="relative min-h-[4.5rem]">
                 {!input.trim() && !isFocused && (
                   <div
-                    className="pointer-events-none absolute inset-0 flex items-start pt-2 text-base leading-normal"
+                    className="pointer-events-none absolute inset-0 flex items-start pt-2 top-[-3px] text-base leading-normal"
                     aria-hidden
                   >
                     <span className="text-base text-gray-400 leading-normal">
@@ -363,7 +363,7 @@ export default function StartPage() {
         </div>
       </section>
 
-      <section className="mx-auto w-full max-w-5xl pb-6">
+      <section className="mx-auto w-full max-w-7xl pb-6">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-base font-semibold text-gray-900">
             Your projects
@@ -376,7 +376,7 @@ export default function StartPage() {
           </Link>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {isProjectsLoading
             ? Array.from({ length: 6 }).map((_, index) => (
                 <div

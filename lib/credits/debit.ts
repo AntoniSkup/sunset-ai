@@ -199,7 +199,7 @@ export async function refundCreditsForUsageEvent(
   if (!wallet) return null;
 
   return await db.transaction(async (tx) => {
-    const [debitEntry] = await tx
+    const debitEntries = await tx
       .select()
       .from(creditLedgerEntries)
       .where(
@@ -209,11 +209,14 @@ export async function refundCreditsForUsageEvent(
           eq(creditLedgerEntries.entryType, "debit")
         )
       )
-      .limit(1);
+      .orderBy(creditLedgerEntries.id);
 
-    if (!debitEntry || debitEntry.creditsDelta >= 0) return null;
+    if (debitEntries.length === 0) return null;
 
-    const amount = Math.abs(debitEntry.creditsDelta);
+    const amount = debitEntries.reduce((sum, entry) => {
+      return entry.creditsDelta < 0 ? sum + Math.abs(entry.creditsDelta) : sum;
+    }, 0);
+    if (amount <= 0) return null;
 
     const existingRefund = await tx
       .select()
@@ -228,10 +231,14 @@ export async function refundCreditsForUsageEvent(
       .limit(1);
     if (existingRefund[0]) return { refunded: amount };
 
-    const allocations = await tx
-      .select()
-      .from(creditDebitAllocations)
-      .where(eq(creditDebitAllocations.ledgerDebitEntryId, debitEntry.id));
+    const debitEntryIds = debitEntries.map((entry) => entry.id);
+    const allocations =
+      debitEntryIds.length > 0
+        ? await tx
+            .select()
+            .from(creditDebitAllocations)
+            .where(inArray(creditDebitAllocations.ledgerDebitEntryId, debitEntryIds))
+        : [];
 
     const grantIds = allocations.map((a) => a.grantId);
     const grants =

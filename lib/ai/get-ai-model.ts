@@ -68,3 +68,26 @@ export async function getAIModel(useLighterModel: boolean = false): Promise<Lang
 
   throw new Error(`Unsupported AI model provider: ${modelProvider}`);
 }
+
+/**
+ * Returns the model identifier string (e.g. "gpt-5.2" or "openai/gpt-5.2" when using gateway).
+ * Use for logging, tracing, or billing.
+ */
+export async function getAIModelId(useLighterModel: boolean = false): Promise<string> {
+  const modelProvider = process.env.AI_MODEL_PROVIDER;
+  const defaults = DEFAULT_MODELS[modelProvider as keyof typeof DEFAULT_MODELS] ?? DEFAULT_MODELS.openai;
+  const modelName = process.env.AI_MODEL_NAME || defaults.main;
+  const lighterModelName = process.env.AI_LIGHTER_MODEL_NAME || defaults.lighter;
+
+  if (!modelProvider) {
+    throw new Error("AI_MODEL_PROVIDER environment variable is not set");
+  }
+
+  const name = useLighterModel ? lighterModelName : modelName;
+  const useGateway = process.env.AI_USE_GATEWAY === "true";
+
+  if (useGateway && GATEWAY_PROVIDERS.includes(modelProvider as (typeof GATEWAY_PROVIDERS)[number])) {
+    return `${modelProvider}/${name}`;
+  }
+  return name;
+}

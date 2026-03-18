@@ -16,12 +16,12 @@ import {
 } from "@/lib/db/queries";
 import { getOrCreateAccountForUser } from "@/lib/billing/accounts";
 import { ensureDailyCreditsForAccount } from "@/lib/billing/daily-credits";
-import { runWithCredits } from "@/lib/credits/run-with-credits";
 import { InsufficientCreditsError } from "@/lib/credits/debit";
+import { createMessageBillingSession } from "@/lib/credits/message-billing";
 import { streamText, convertToModelMessages, stepCountIs } from "ai";
 import type { UIMessage } from "ai";
 import { createSectionTool, createSiteTool } from "@/lib/code-generation/generate-code";
-import { getAIModel } from "@/lib/ai/get-ai-model";
+import { getAIModel, getAIModelId } from "@/lib/ai/get-ai-model";
 import { shouldUseLighterModel } from "@/lib/ai/should-use-lighter-model";
 import { chatSystemPrompt } from "@/prompts/chat-system-prompt";
 import { captureLandingPageScreenshot } from "@/lib/screenshots/capture";
@@ -127,19 +127,14 @@ async function chatHandler(request: NextRequest) {
     const account = await getOrCreateAccountForUser(user.id);
     await ensureDailyCreditsForAccount(account.id);
     const idempotencyKey = `chat-${chatId}-${user.id}-${messages.length}`;
+    const billingSession = createMessageBillingSession({
+      accountId: account.id,
+      userId: user.id,
+      idempotencyKey,
+    });
 
     try {
-      await runWithCredits(
-        {
-          accountId: account.id,
-          userId: user.id,
-          actionType: "chat_message",
-          idempotencyKey,
-        },
-        async () => {
-          return null;
-        }
-      );
+      await billingSession.ensureChargedForAction("chat_message");
     } catch (err) {
       if (err instanceof InsufficientCreditsError) {
         return NextResponse.json(
@@ -163,10 +158,19 @@ async function chatHandler(request: NextRequest) {
       chatId,
     });
 
-    const model = await getAIModel(useLighterModel);
+    const [model, modelId] = await Promise.all([
+      getAIModel(useLighterModel),
+      getAIModelId(useLighterModel),
+    ]);
 
-    const createSiteToolCall = createSiteTool(chatId);
-    const createSectionToolCall = createSectionTool(chatId);
+    const createSiteToolCall = createSiteTool(
+      chatId,
+      billingSession.ensureChargedForAction
+    );
+    const createSectionToolCall = createSectionTool(
+      chatId,
+      billingSession.ensureChargedForAction
+    );
 
     const tools = {
       create_site: createSiteToolCall,
@@ -216,12 +220,13 @@ async function chatHandler(request: NextRequest) {
           : "") || "";
           
     // Langfuse
-    updateActiveObservation({ input: lastUserText.trim() || undefined });
+    updateActiveObservation({ input: lastUserText.trim() || undefined, metadata: { model: modelId } });
     updateActiveTrace({
       name: "chat-message",
       sessionId: chatId,
       userId: String(user.id),
       input: lastUserText.trim() || undefined,
+      metadata: { model: modelId },
     });
 
     const result = streamText({
@@ -325,6 +330,7 @@ async function chatHandler(request: NextRequest) {
             console.error("Failed to persist assistant message:", e);
           }
         }
+        await billingSession.markSucceeded();
         updateActiveObservation({ output: finalText || undefined });
         updateActiveTrace({ output: finalText || undefined });
         trace.getActiveSpan()?.end();
@@ -339,6 +345,7 @@ async function chatHandler(request: NextRequest) {
       },
       onError: async (error) => {
         const errMsg = error instanceof Error ? error.message : String(error);
+        await billingSession.markFailed(errMsg);
         updateActiveObservation({ output: errMsg, level: "ERROR" });
         updateActiveTrace({ output: errMsg });
         trace.getActiveSpan()?.end();

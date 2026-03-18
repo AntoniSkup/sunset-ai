@@ -1,8 +1,14 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
 import { checkoutAction, checkoutTopupAction } from "@/lib/payments/actions";
-import { CheckIcon } from "@heroicons/react/24/outline";
-import { getPlanByCode } from "@/lib/billing/plans";
+import { CheckCircleIcon } from "@heroicons/react/24/solid";
+import { getPlanByCode, getPlanById } from "@/lib/billing/plans";
 import { getActiveTopupPackages } from "@/lib/billing/topup-packages";
+import {
+  getAccountForUser,
+  getSubscriptionByAccountId,
+} from "@/lib/billing/accounts";
+import { getUser } from "@/lib/db/queries";
 import { SubmitButton } from "./submit-button";
 import { PricingNavMenu } from "./pricing-nav-menu";
 import {
@@ -13,14 +19,33 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 
 export const revalidate = 3600;
 
 export default async function PricingPage() {
-  const [plan, topupPackages] = await Promise.all([
+  const user = await getUser();
+  const [plan, topupPackages, subscriptionPayload] = await Promise.all([
     getPlanByCode("starter"),
     getActiveTopupPackages(),
+    (async () => {
+      if (!user) return null;
+      const account = await getAccountForUser(user.id);
+      if (!account) return null;
+      const subscription = await getSubscriptionByAccountId(account.id);
+      if (
+        !subscription ||
+        (subscription.status !== "active" && subscription.status !== "trialing")
+      )
+        return null;
+      const planRow = await getPlanById(subscription.planId);
+      return {
+        planName: planRow?.name ?? "Starter",
+        status: subscription.status,
+      };
+    })(),
   ]);
+
   const topupPackage =
     topupPackages.find(
       (pkg) => pkg.code === "topup_100" || Number(pkg.creditsAmount) === 100
@@ -49,7 +74,10 @@ export default async function PricingPage() {
         </div>
 
         <div className="mx-auto mt-10 grid max-w-5xl gap-6 lg:grid-cols-2">
-          <StarterPlanCard plan={plan} />
+          <StarterPlanCard
+            plan={plan}
+            hasActiveSubscription={!!subscriptionPayload}
+          />
           {topupPackage && <TopupCard pkg={topupPackage} />}
         </div>
       </div>
@@ -71,9 +99,7 @@ function formatPrice(priceMinor: number, currency: string) {
 function FeatureItem({ children }: { children: ReactNode }) {
   return (
     <li className="flex items-start gap-3 text-sm text-muted-foreground">
-      <span className="mt-0.5 rounded-full bg-primary/10 p-1 text-primary">
-        <CheckIcon className="h-3.5 w-3.5" />
-      </span>
+      <CheckCircleIcon className="mt-0.5 h-4 w-4 shrink-0 text-[#f87c07]" />
       <span>{children}</span>
     </li>
   );
@@ -81,8 +107,10 @@ function FeatureItem({ children }: { children: ReactNode }) {
 
 function StarterPlanCard({
   plan,
+  hasActiveSubscription = false,
 }: {
   plan: Awaited<ReturnType<typeof getPlanByCode>>;
+  hasActiveSubscription?: boolean;
 }) {
   if (!plan) {
     return (
@@ -112,10 +140,10 @@ function StarterPlanCard({
       <CardHeader className="space-y-4">
         <div className="flex items-center justify-between gap-3">
           <span className="inline-flex rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
-            Subscription
+            {hasActiveSubscription ? "Your plan" : "Subscription"}
           </span>
           <span className="inline-flex rounded-full border border-border px-3 py-1 text-xs text-muted-foreground">
-            Monthly billing
+            {hasActiveSubscription ? "Active" : "Monthly billing"}
           </span>
         </div>
         <div className="space-y-2">
@@ -160,12 +188,34 @@ function StarterPlanCard({
       </CardContent>
 
       <CardFooter className="mt-auto flex-col items-stretch gap-3">
-        <form action={checkoutAction}>
-          <SubmitButton variant="default" className="rounded-xl" />
-        </form>
-        <p className="text-center text-xs text-muted-foreground">
-          Renews automatically. Manage or cancel anytime in billing.
-        </p>
+        {hasActiveSubscription ? (
+          <>
+            <Button
+              disabled
+              variant="secondary"
+              className="rounded-xl cursor-not-allowed opacity-70"
+            >
+              Your current plan
+            </Button>
+            <p className="text-center text-xs text-muted-foreground">
+              <Link
+                href="/dashboard/payments"
+                className="underline hover:no-underline"
+              >
+                Manage subscription
+              </Link>
+            </p>
+          </>
+        ) : (
+          <>
+            <form action={checkoutAction}>
+              <SubmitButton variant="default" className="rounded-xl" />
+            </form>
+            <p className="text-center text-xs text-muted-foreground">
+              Renews automatically. Manage or cancel anytime in billing.
+            </p>
+          </>
+        )}
       </CardFooter>
     </Card>
   );

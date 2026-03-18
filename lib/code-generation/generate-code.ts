@@ -133,12 +133,15 @@ export function buildCodeGenerationPrompt(params: {
   );
 }
 
+type EnsureChargedForAction = (actionType: string) => Promise<void>;
+
 async function generateAndSaveSingleFile(params: {
   chatId: string;
   userId: number;
   destination: string;
   userRequest: string;
   isModification?: boolean;
+  ensureChargedForAction?: EnsureChargedForAction;
 }): Promise<
   | (CodeGenerationResult & {
     destination: string;
@@ -195,7 +198,9 @@ async function generateAndSaveSingleFile(params: {
     const actionType =
       inferredKind === "section" ? "regenerate_section" : "generate_page";
 
-    const account = await getOrCreateAccountForUser(params.userId);
+    const account = params.ensureChargedForAction
+      ? null
+      : await getOrCreateAccountForUser(params.userId);
     const idempotencyKey = `codegen-${params.chatId}-${normalizedDestination}-${Date.now()}`;
 
     let previousCode: string | undefined;
@@ -216,130 +221,137 @@ async function generateAndSaveSingleFile(params: {
       );
     }
 
+    const executeGeneration = async () => {
+      const prompt = buildCodeGenerationPrompt({
+        destination: normalizedDestination,
+        userRequest: params.userRequest,
+        previousCodeVersion: previousCode,
+        isModification: shouldModify,
+        existingSections:
+          existingSections.length > 0 ? existingSections : undefined,
+      });
+
+      const model = await getAIModel();
+
+      const genResult = await generateText({
+        model,
+        prompt,
+        experimental_telemetry: {
+          isEnabled: true,
+          functionId: "code-generation",
+          metadata: {
+            chatId: params.chatId,
+            userId: params.userId,
+            destination: normalizedDestination,
+          },
+        },
+      });
+
+      const generatedCode = genResult.text;
+
+      if (!generatedCode || generatedCode.trim().length === 0) {
+        console.error(
+          `[Code Generation] Empty result for user ${params.userId}, chat ${params.chatId}`
+        );
+        return {
+          success: false,
+          error: "Code generation returned empty result",
+        };
+      }
+
+      const isTsx = normalizedDestination.toLowerCase().endsWith(".tsx");
+      const validationResult = isTsx
+        ? validateReactCode(generatedCode)
+        : treatAsFragment
+          ? await validateAndFixFragment(generatedCode)
+          : await validateAndFixDocument(generatedCode);
+
+      if (!validationResult.isValid && validationResult.errors.length > 0) {
+        console.error(
+          `[Code Generation] Validation failed for user ${params.userId}, chat ${params.chatId}, dest ${normalizedDestination}: ${validationResult.errors.join(", ")}`
+        );
+        return {
+          success: false,
+          error: `Code validation failed: ${validationResult.errors.join(", ")}`,
+        };
+      }
+
+      let finalCode = validationResult.fixedCode;
+
+      if (isIndexDestination(normalizedDestination) && !isTsx) {
+        finalCode = enforceIndexShell(finalCode);
+        const revalidated = await validateAndFixDocument(finalCode);
+        if (revalidated.isValid) {
+          finalCode = revalidated.fixedCode;
+        }
+      } else if (!treatAsFragment && !isTsx) {
+        try {
+          const root = parse(finalCode);
+          const nestedHtml = root.querySelector("html html");
+          if (nestedHtml) {
+            return {
+              success: false,
+              error:
+                "Generated nested <html> tag. Page/section files should be fragments (no <html>/<head>/<body>).",
+            };
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      const revision = await createLandingSiteRevision({
+        chatId: params.chatId,
+        userId: params.userId,
+      });
+
+      if (!revision?.id || !revision?.revisionNumber) {
+        return {
+          success: false,
+          error: "Failed to create site revision",
+        };
+      }
+
+      const file = await upsertLandingSiteFile({
+        chatId: params.chatId,
+        path: normalizedDestination,
+        kind: inferredKind,
+      });
+
+      if (!file?.id) {
+        return { success: false, error: "Failed to upsert site file" };
+      }
+
+      await createLandingSiteFileVersion({
+        fileId: file.id,
+        revisionId: revision.id,
+        content: finalCode,
+      });
+
+      return {
+        success: true,
+        revisionId: revision.id,
+        revisionNumber: revision.revisionNumber,
+        codeContent: finalCode,
+        fixesApplied: validationResult.fixesApplied,
+        destination: normalizedDestination,
+      };
+    };
+
     try {
+      if (params.ensureChargedForAction) {
+        await params.ensureChargedForAction(actionType);
+        return await executeGeneration();
+      }
+
       return await runWithCredits(
         {
-          accountId: account.id,
+          accountId: account!.id,
           userId: params.userId,
           actionType,
           idempotencyKey,
         },
-        async () => {
-          const prompt = buildCodeGenerationPrompt({
-            destination: normalizedDestination,
-            userRequest: params.userRequest,
-            previousCodeVersion: previousCode,
-            isModification: shouldModify,
-            existingSections:
-              existingSections.length > 0 ? existingSections : undefined,
-          });
-
-          const model = await getAIModel();
-
-          const genResult = await generateText({
-            model,
-            prompt,
-            experimental_telemetry: {
-              isEnabled: true,
-              functionId: "code-generation",
-              metadata: {
-                chatId: params.chatId,
-                userId: params.userId,
-                destination: normalizedDestination,
-              },
-            },
-          });
-
-          const generatedCode = genResult.text;
-
-          if (!generatedCode || generatedCode.trim().length === 0) {
-            console.error(
-              `[Code Generation] Empty result for user ${params.userId}, chat ${params.chatId}`
-            );
-            return {
-              success: false,
-              error: "Code generation returned empty result",
-            };
-          }
-
-          const isTsx = normalizedDestination.toLowerCase().endsWith(".tsx");
-          const validationResult = isTsx
-            ? validateReactCode(generatedCode)
-            : treatAsFragment
-              ? await validateAndFixFragment(generatedCode)
-              : await validateAndFixDocument(generatedCode);
-
-          if (!validationResult.isValid && validationResult.errors.length > 0) {
-            console.error(
-              `[Code Generation] Validation failed for user ${params.userId}, chat ${params.chatId}, dest ${normalizedDestination}: ${validationResult.errors.join(", ")}`
-            );
-            return {
-              success: false,
-              error: `Code validation failed: ${validationResult.errors.join(", ")}`,
-            };
-          }
-
-          let finalCode = validationResult.fixedCode;
-
-          if (isIndexDestination(normalizedDestination) && !isTsx) {
-            finalCode = enforceIndexShell(finalCode);
-            const revalidated = await validateAndFixDocument(finalCode);
-            if (revalidated.isValid) {
-              finalCode = revalidated.fixedCode;
-            }
-          } else if (!treatAsFragment && !isTsx) {
-            try {
-              const root = parse(finalCode);
-              const nestedHtml = root.querySelector("html html");
-              if (nestedHtml) {
-                return {
-                  success: false,
-                  error:
-                    "Generated nested <html> tag. Page/section files should be fragments (no <html>/<head>/<body>).",
-                };
-              }
-            } catch {
-              // ignore
-            }
-          }
-
-          const revision = await createLandingSiteRevision({
-            chatId: params.chatId,
-            userId: params.userId,
-          });
-
-          if (!revision?.id || !revision?.revisionNumber) {
-            return {
-              success: false,
-              error: "Failed to create site revision",
-            };
-          }
-
-          const file = await upsertLandingSiteFile({
-            chatId: params.chatId,
-            path: normalizedDestination,
-            kind: inferredKind,
-          });
-
-          if (!file?.id) {
-            return { success: false, error: "Failed to upsert site file" };
-          }
-
-          await createLandingSiteFileVersion({
-            fileId: file.id,
-            revisionId: revision.id,
-            content: finalCode,
-          });
-
-          return {
-            success: true,
-            revisionId: revision.id,
-            revisionNumber: revision.revisionNumber,
-            codeContent: finalCode,
-            fixesApplied: validationResult.fixesApplied,
-            destination: normalizedDestination,
-          };
-        }
+        executeGeneration
       );
     } catch (err) {
       if (err instanceof InsufficientCreditsError) {
@@ -393,7 +405,8 @@ const createSectionSchema = z.object({
 
 const createSiteToolExecute = async (
   { userRequest }: z.infer<typeof createSiteSchema>,
-  chatId: string
+  chatId: string,
+  ensureChargedForAction?: EnsureChargedForAction
 ): Promise<any> => {
   const user = await getUser();
   if (!user) {
@@ -415,6 +428,7 @@ const createSiteToolExecute = async (
       userRequest +
       "\n\nCreate the entry React component for the site (landing/index.tsx) as a WIREFRAME ONLY.\n\nHard requirements:\n- Use React Router: import { HashRouter, Routes, Route } from 'react-router-dom'. Wrap the whole app in <HashRouter>. Put page content inside <Routes> and <Route path=\"/\" element={<Home />} /> (and Route path=\"/about\" element={<About />} etc.).\n- Import and render ONLY: Navbar from './sections/Navbar', Footer from './sections/Footer', and page components from './pages/...'. Structure: <HashRouter><div><Navbar /><main><Routes><Route path=\"/\" element={<Home />} /><Route path=\"/about\" element={<About />} />...</Routes></main><Footer /></div></HashRouter>.\n- Do NOT use window.location.hash or manual switch; use HashRouter and Routes only.\n- Do NOT output <!DOCTYPE html>, <html>, <head>, or <body>; the app wraps your component.\n- Use Tailwind utility classes (className).",
     isModification: false,
+    ensureChargedForAction,
   });
 
   if (result.success) {
@@ -433,7 +447,8 @@ const createSiteToolExecute = async (
 
 const createSectionToolExecute = async (
   { destination, userRequest, isModification }: z.infer<typeof createSectionSchema>,
-  chatId: string
+  chatId: string,
+  ensureChargedForAction?: EnsureChargedForAction
 ): Promise<any> => {
   const user = await getUser();
   if (!user) {
@@ -453,6 +468,7 @@ const createSectionToolExecute = async (
     destination,
     userRequest,
     isModification,
+    ensureChargedForAction,
   });
 
   if (result.success) {
@@ -484,25 +500,31 @@ const createSectionToolExecute = async (
 //   } as any);
 // }
 
-export function createSiteTool(chatId: string) {
+export function createSiteTool(
+  chatId: string,
+  ensureChargedForAction?: EnsureChargedForAction
+) {
   return tool({
     description:
       "Create the entry React component (landing/index.tsx) for a new site as a WIREFRAME ONLY. The file must import Navbar from './sections/Navbar', Footer from './sections/Footer', and page(s) from './pages/...', and render only those components (no inline navbar/footer markup). Call once at the start of building a new website.",
     inputSchema: createSiteSchema,
     execute: async (input: z.infer<typeof createSiteSchema>) => {
-      return createSiteToolExecute(input, chatId);
+      return createSiteToolExecute(input, chatId, ensureChargedForAction);
     },
   } as any);
 }
 
 
-export function createSectionTool(chatId: string) {
+export function createSectionTool(
+  chatId: string,
+  ensureChargedForAction?: EnsureChargedForAction
+) {
   return tool({
     description:
       "Create or modify exactly one React/TSX file (layout, page, or section) for the landing site. One tool call writes exactly one file. Use .tsx paths (e.g. landing/sections/Hero.tsx, landing/pages/Home.tsx).",
     inputSchema: createSectionSchema,
     execute: async (input: z.infer<typeof createSectionSchema>) => {
-      return createSectionToolExecute(input, chatId);
+      return createSectionToolExecute(input, chatId, ensureChargedForAction);
     },
   } as any);
 }
