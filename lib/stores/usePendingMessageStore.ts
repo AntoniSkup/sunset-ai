@@ -7,6 +7,15 @@ export interface PendingMessage {
   id: string;
   chatId: string;
   message: string;
+  attachments?: Array<{
+    id: number;
+    alias: string;
+    blobUrl: string;
+    mimeType: string;
+    intent: "reference" | "site_asset" | "both";
+    altHint?: string | null;
+    label?: string | null;
+  }>;
   createdAt: number;
 }
 

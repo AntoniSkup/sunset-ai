@@ -39,6 +39,7 @@ Generate exactly ONE React/TSX file for a landing site. Each tool call creates/u
 - Keep structure clean and minimal (MVP).
 - Ensure good spacing and readable typography (avoid overly large hero headings).
 - Use accessible markup: semantic elements, headings in order, labeled form fields, alt text for images, and visible focus states.
+- If you use an uploaded site asset, render it with the ImageAsset component and reference the provided asset alias, never a raw blob URL.
 - Make it responsive using Tailwind breakpoints (e.g., sm:, md:, lg:).
 - Use realistic placeholder content if specifics are missing, but never invent business facts.
 
@@ -89,4 +90,12 @@ ${blocks}
 
 export function buildUserRequestSection(userRequest: string): string {
   return `\nUser's request: ${userRequest}\n\nGenerate the complete React/JSX code now:`;
+}
+
+export function buildSiteAssetContextSection(siteAssetContext?: string): string {
+  if (!siteAssetContext?.trim()) {
+    return "";
+  }
+
+  return `\n\n${siteAssetContext.trim()}\n`;
 }

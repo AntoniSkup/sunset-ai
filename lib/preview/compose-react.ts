@@ -7,7 +7,12 @@ import * as path from "path";
 import {
   getLandingSiteFileContentAtOrBeforeRevision,
   getAllLandingSiteFilesAtOrBeforeRevision,
+  getReadySiteAssetsByChatId,
 } from "@/lib/db/queries";
+import {
+  IMAGE_ASSET_COMPONENT_PATH,
+  IMAGE_ASSET_MAP_PATH,
+} from "@/lib/site-assets/conventions";
 
 const ENTRY_PATH = "landing/index.tsx";
 const MAX_FILES = 50;
@@ -131,6 +136,94 @@ function wrapInHtml(bodyHtml: string): string {
 </html>`;
 }
 
+function escapeForJsString(value: string): string {
+  return JSON.stringify(value);
+}
+
+function buildRuntimeAssetMapModule(
+  assets: Array<{
+    alias: string;
+    blobUrl: string;
+    altHint?: string | null;
+    label?: string | null;
+    intent: string;
+  }>
+): string {
+  const entries = assets
+    .map(
+      (asset) =>
+        `  ${escapeForJsString(asset.alias)}: { url: ${escapeForJsString(
+          asset.blobUrl
+        )}, altHint: ${
+          asset.altHint ? escapeForJsString(asset.altHint) : "undefined"
+        }, label: ${
+          asset.label ? escapeForJsString(asset.label) : "undefined"
+        }, intent: ${escapeForJsString(asset.intent)} }`
+    )
+    .join(",\n");
+
+  return `
+export const ASSET_MAP = {
+${entries}
+};
+
+export function resolveAsset(alias) {
+  return ASSET_MAP[alias]?.url ?? "";
+}
+
+export function getAssetMeta(alias) {
+  return ASSET_MAP[alias] ?? null;
+}
+`.trim();
+}
+
+function buildRuntimeImageAssetModule(): string {
+  return `
+import React from "react";
+import { getAssetMeta, resolveAsset } from "./assets";
+
+export default function ImageAsset({ asset, alt, ...props }) {
+  const meta = getAssetMeta(asset);
+  const src = resolveAsset(asset);
+  const resolvedAlt = alt ?? meta?.altHint ?? meta?.label ?? asset;
+
+  if (!src) {
+    return (
+      <div
+        className={props.className}
+        data-missing-asset={asset}
+      >
+        Missing asset: {asset}
+      </div>
+    );
+  }
+
+  return <img {...props} src={src} alt={resolvedAlt} />;
+}
+`.trim();
+}
+
+function buildRuntimeFiles(
+  assets: Array<{
+    alias: string;
+    blobUrl: string;
+    altHint?: string | null;
+    label?: string | null;
+    intent: string;
+  }>
+): Array<{ path: string; content: string }> {
+  return [
+    {
+      path: IMAGE_ASSET_MAP_PATH,
+      content: buildRuntimeAssetMapModule(assets),
+    },
+    {
+      path: IMAGE_ASSET_COMPONENT_PATH,
+      content: buildRuntimeImageAssetModule(),
+    },
+  ];
+}
+
 export function getPreviewHtml(params: {
   chatId: string;
   revisionNumber: number;
@@ -179,6 +272,8 @@ export async function getPreviewBrowserBundle(params: {
     chatId,
     revisionNumber,
   });
+  const runtimeFiles = buildRuntimeFiles(await getReadySiteAssetsByChatId(chatId));
+  const allFilesWithRuntime = [...allFiles, ...runtimeFiles];
   const fileMap = new Map<string, string>();
   await collectFileMap({
     chatId,
@@ -186,7 +281,7 @@ export async function getPreviewBrowserBundle(params: {
     entryPath: ENTRY_PATH,
     map: fileMap,
     depth: 0,
-    allFiles,
+    allFiles: allFilesWithRuntime,
   });
 
   try {
@@ -333,11 +428,13 @@ export async function getComposedReactHtml(params: {
     chatId,
     revisionNumber,
   });
+  const runtimeFiles = buildRuntimeFiles(await getReadySiteAssetsByChatId(chatId));
+  const allFilesWithRuntime = [...allFiles, ...runtimeFiles];
   debugLog("revision files", {
     chatId,
     revisionNumber,
-    count: allFiles.length,
-    paths: allFiles.map((f) => f.path),
+    count: allFilesWithRuntime.length,
+    paths: allFilesWithRuntime.map((f) => f.path),
   });
 
   const fileMap = new Map<string, string>();
@@ -347,7 +444,7 @@ export async function getComposedReactHtml(params: {
     entryPath: ENTRY_PATH,
     map: fileMap,
     depth: 0,
-    allFiles,
+    allFiles: allFilesWithRuntime,
   });
   debugLog("fileMap keys", Array.from(fileMap.keys()));
 

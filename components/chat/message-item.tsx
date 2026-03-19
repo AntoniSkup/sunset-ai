@@ -1,9 +1,11 @@
 "use client";
 
 import React from "react";
-import type { UIMessage } from "ai";
+import type { FileUIPart, UIMessage } from "ai";
 import {
   Message,
+  MessageAttachment,
+  MessageAttachments,
   MessageContent,
   MessageResponse,
 } from "@/components/ai-elements/message";
@@ -88,6 +90,10 @@ function getTextContent(message: UIMessage): string {
     .filter((part) => part.type === "text")
     .map((part) => (part as { text: string }).text);
   return textParts.join("");
+}
+
+function getFileParts(message: UIMessage): FileUIPart[] {
+  return message.parts.filter((part) => part.type === "file") as FileUIPart[];
 }
 
 function getDefaultFileNameForTool(toolName: string): string {
@@ -177,12 +183,24 @@ export const MessageItem = React.memo(function MessageItem({
   const isUser = message.role === "user";
   const tokens = !isUser ? buildRenderTokens(message) : [];
   const content = isUser ? getTextContent(message) : "";
+  const attachments = isUser ? getFileParts(message) : [];
 
   return (
     <Message from={message.role}>
+      {isUser && attachments.length > 0 && (
+        <MessageAttachments className="mb-2">
+          {attachments.map((attachment, index) => (
+            <MessageAttachment
+              key={`${attachment.url}-${index}`}
+              data={attachment}
+              className="size-16"
+            />
+          ))}
+        </MessageAttachments>
+      )}
       <MessageContent>
         {isUser ? (
-          <p className="whitespace-pre-wrap">{content}</p>
+          <>{content && <p className="whitespace-pre-wrap">{content}</p>}</>
         ) : (
           <>
             {tokens.map((t, idx) => {

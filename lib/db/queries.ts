@@ -12,6 +12,7 @@ import {
   chats,
   chatMessages,
   chatToolCalls,
+  siteAssets,
   publishedSites,
 } from "./schema";
 import { nanoid } from "nanoid";
@@ -486,6 +487,118 @@ export async function getChatByPublicId(chatPublicId: string, userId: number) {
   return result.length > 0 ? result[0] : null;
 }
 
+export async function createSiteAsset(data: {
+  chatId: string;
+  userId: number;
+  alias: string;
+  blobUrl: string;
+  intent: string;
+  status: string;
+  mimeType: string;
+  sizeBytes: number;
+  width?: number | null;
+  height?: number | null;
+  originalFilename?: string | null;
+  altHint?: string | null;
+  label?: string | null;
+}) {
+  const result = await db
+    .insert(siteAssets)
+    .values({
+      chatId: data.chatId,
+      userId: data.userId,
+      alias: data.alias,
+      blobUrl: data.blobUrl,
+      intent: data.intent,
+      status: data.status,
+      mimeType: data.mimeType,
+      sizeBytes: data.sizeBytes,
+      width: data.width ?? null,
+      height: data.height ?? null,
+      originalFilename: data.originalFilename ?? null,
+      altHint: data.altHint ?? null,
+      label: data.label ?? null,
+      updatedAt: new Date(),
+    })
+    .returning();
+
+  await db
+    .update(chats)
+    .set({ updatedAt: new Date() })
+    .where(eq(chats.publicId, data.chatId));
+
+  return result[0];
+}
+
+export async function getSiteAssetsByChatId(chatId: string, userId: number) {
+  return await db
+    .select()
+    .from(siteAssets)
+    .where(and(eq(siteAssets.chatId, chatId), eq(siteAssets.userId, userId)))
+    .orderBy(asc(siteAssets.createdAt), asc(siteAssets.id));
+}
+
+export async function getReadySiteAssetsByChatId(chatId: string) {
+  return await db
+    .select()
+    .from(siteAssets)
+    .where(and(eq(siteAssets.chatId, chatId), eq(siteAssets.status, "ready")))
+    .orderBy(asc(siteAssets.createdAt), asc(siteAssets.id));
+}
+
+export async function getSiteAssetAliasesByChatId(chatId: string, userId: number) {
+  const rows = await db
+    .select({ alias: siteAssets.alias })
+    .from(siteAssets)
+    .where(and(eq(siteAssets.chatId, chatId), eq(siteAssets.userId, userId)));
+
+  return rows.map((row) => row.alias);
+}
+
+export async function updateSiteAsset(data: {
+  id: number;
+  chatId: string;
+  userId: number;
+  intent?: string;
+  altHint?: string | null;
+  label?: string | null;
+}) {
+  const update: Record<string, unknown> = {
+    updatedAt: new Date(),
+  };
+
+  if (typeof data.intent === "string") {
+    update.intent = data.intent;
+  }
+  if (data.altHint !== undefined) {
+    update.altHint = data.altHint;
+  }
+  if (data.label !== undefined) {
+    update.label = data.label;
+  }
+
+  const result = await db
+    .update(siteAssets)
+    .set(update)
+    .where(
+      and(
+        eq(siteAssets.id, data.id),
+        eq(siteAssets.chatId, data.chatId),
+        eq(siteAssets.userId, data.userId)
+      )
+    )
+    .returning();
+
+  if (result[0]) {
+    await db
+      .update(chats)
+      .set({ updatedAt: new Date() })
+      .where(eq(chats.publicId, data.chatId));
+  }
+
+  return result[0] ?? null;
+}
+
 export async function getChatsByUser(userId: number) {
   return await db
     .select()
@@ -565,6 +678,7 @@ export async function createChatMessage(data: {
   chatId: number;
   role: "user" | "assistant";
   content: string;
+  parts?: unknown[] | null;
 }) {
   const result = await db
     .insert(chatMessages)
@@ -572,6 +686,7 @@ export async function createChatMessage(data: {
       chatId: data.chatId,
       role: data.role,
       content: data.content,
+      parts: data.parts ?? null,
     })
     .returning();
 

@@ -11,6 +11,7 @@ import {
   getChatByPublicId,
   createChatMessage,
   createChatToolCall,
+  getSiteAssetsByChatId,
   updateChatByPublicId,
   generateChatName,
 } from "@/lib/db/queries";
@@ -23,9 +24,18 @@ import type { UIMessage } from "ai";
 import { createSectionTool, createSiteTool } from "@/lib/code-generation/generate-code";
 import { getAIModel, getAIModelId } from "@/lib/ai/get-ai-model";
 import { shouldUseLighterModel } from "@/lib/ai/should-use-lighter-model";
-import { chatSystemPrompt } from "@/prompts/chat-system-prompt";
+import { buildChatSystemPrompt } from "@/prompts/chat-system-prompt";
 import { captureLandingPageScreenshot } from "@/lib/screenshots/capture";
 import { langfuseSpanProcessor } from "@/instrumentation";
+import {
+  extractTextFromMessageParts,
+  hasDisplayableMessageParts,
+  sanitizePersistedMessageParts,
+} from "@/lib/chat/message-parts";
+import {
+  buildSiteAssetPromptContext,
+  toSiteAssetPromptDescriptors,
+} from "@/lib/site-assets/prompt-manifest";
 
 const BUILDER_TOOLS = new Set(["create_site", "create_section"]);
 
@@ -162,6 +172,12 @@ async function chatHandler(request: NextRequest) {
       getAIModel(useLighterModel),
       getAIModelId(useLighterModel),
     ]);
+    const promptableSiteAssets = toSiteAssetPromptDescriptors(
+      await getSiteAssetsByChatId(chatId, user.id)
+    );
+    const systemPrompt = buildChatSystemPrompt({
+      siteAssetContext: buildSiteAssetPromptContext(promptableSiteAssets),
+    });
 
     const createSiteToolCall = createSiteTool(
       chatId,
@@ -179,18 +195,17 @@ async function chatHandler(request: NextRequest) {
 
     const lastMessage = messages[messages.length - 1] as any;
     if (lastMessage?.role === "user" && Array.isArray(lastMessage.parts)) {
-      const userText = lastMessage.parts
-        .filter((p: any) => p?.type === "text")
-        .map((p: any) => p.text)
-        .join("");
-      if (userText && typeof userText === "string" && userText.trim()) {
+      const persistedParts = sanitizePersistedMessageParts(lastMessage.parts);
+      const userText = extractTextFromMessageParts(persistedParts);
+      if (hasDisplayableMessageParts(persistedParts)) {
         await createChatMessage({
           chatId: chat.id,
           role: "user",
           content: userText.trim(),
+          parts: persistedParts,
         });
 
-        if (!chat.title) {
+        if (!chat.title && userText.trim()) {
           const title = await generateChatName(userText.trim(), {
             userId: user.id,
             chatId,
@@ -231,7 +246,7 @@ async function chatHandler(request: NextRequest) {
 
     const result = streamText({
       model,
-      system: chatSystemPrompt,
+      system: systemPrompt,
       messages: modelMessages,
       tools,
       stopWhen: stepCountIs(20),
@@ -325,6 +340,7 @@ async function chatHandler(request: NextRequest) {
               chatId: chat.id,
               role: "assistant",
               content: finalText,
+              parts: [{ type: "text", text: finalText }],
             });
           } catch (e) {
             console.error("Failed to persist assistant message:", e);
@@ -379,6 +395,13 @@ const decideOnLighterModel = async (
   );
 
   const lastMessage = messages[messages.length - 1] as any;
+  if (Array.isArray(lastMessage?.parts)) {
+    const hasFileParts = lastMessage.parts.some((p: any) => p?.type === "file");
+    if (hasFileParts) {
+      return false;
+    }
+  }
+
   let userQuestion = "";
   if (lastMessage?.role === "user" && Array.isArray(lastMessage.parts)) {
     userQuestion = lastMessage.parts

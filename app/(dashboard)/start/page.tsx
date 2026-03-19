@@ -1,6 +1,13 @@
 "use client";
 
-import { useState, FormEvent, useEffect, useRef, useCallback } from "react";
+import {
+  useState,
+  FormEvent,
+  useEffect,
+  useRef,
+  useCallback,
+  ChangeEvent,
+} from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { nanoid } from "nanoid";
@@ -20,6 +27,11 @@ import sunsetLogoTree from "@/components/icons/sunset_logo_tree.png";
 import { BorderBeam } from "@/components/ui/border-beam";
 import TypingText from "@/components/ui/typewriter";
 import { SunsetLogoMenu } from "@/components/nav/sunset-logo-menu";
+import {
+  MessageAttachment,
+  MessageAttachments,
+} from "@/components/ai-elements/message";
+import type { FileUIPart } from "ai";
 
 type Chat = {
   id: number;
@@ -29,6 +41,12 @@ type Chat = {
   screenshot_url?: string | null;
   createdAt: string;
   updatedAt: string;
+};
+
+type StartAttachment = {
+  localId: string;
+  file: File;
+  previewUrl: string;
 };
 
 function getRelativeTime(dateStr: string) {
@@ -62,10 +80,25 @@ export default function StartPage() {
     undefined
   );
   const [loadingMore, setLoadingMore] = useState(false);
+  const [attachments, setAttachments] = useState<StartAttachment[]>([]);
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const attachmentUrlsRef = useRef<string[]>([]);
   const router = useRouter();
   const setPendingMessage = usePendingMessageStore((s) => s.setPendingMessage);
+
+  useEffect(() => {
+    attachmentUrlsRef.current = attachments.map((a) => a.previewUrl);
+  }, [attachments]);
+
+  useEffect(() => {
+    return () => {
+      for (const url of attachmentUrlsRef.current) {
+        URL.revokeObjectURL(url);
+      }
+    };
+  }, []);
 
   const loadPage = useCallback(async (cursor: string | null | undefined) => {
     if (cursor === null) return;
@@ -140,9 +173,30 @@ export default function StartPage() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [showPlaceholder, isLoading]);
 
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const next = Array.from(files).map((file) => ({
+      localId: nanoid(),
+      file,
+      previewUrl: URL.createObjectURL(file),
+    }));
+    setAttachments((prev) => [...prev, ...next]);
+    e.target.value = "";
+  };
+
+  const handleRemoveAttachment = (localId: string) => {
+    setAttachments((prev) => {
+      const target = prev.find((a) => a.localId === localId);
+      if (target) URL.revokeObjectURL(target.previewUrl);
+      return prev.filter((a) => a.localId !== localId);
+    });
+  };
+
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!input.trim() || isLoading) return;
+    if ((!input.trim() && attachments.length === 0) || isLoading) return;
 
     const message = input.trim();
     setIsLoading(true);
@@ -163,12 +217,53 @@ export default function StartPage() {
       const data = await response.json();
       const chatId = data.chat.publicId;
 
+      let uploadedAttachments: Array<{
+        id: number;
+        alias: string;
+        blobUrl: string;
+        mimeType: string;
+        intent: "reference" | "site_asset" | "both";
+        altHint?: string | null;
+        label?: string | null;
+      }> = [];
+
+      if (attachments.length > 0) {
+        const uploads = attachments.map(async (attachment) => {
+          const formData = new FormData();
+          formData.append("chatId", chatId);
+          formData.append("file", attachment.file);
+          formData.append("intent", "site_asset");
+
+          const res = await fetch("/api/site-assets", {
+            method: "POST",
+            body: formData,
+          });
+          const uploadData = await res.json().catch(() => null);
+          if (!res.ok || !uploadData?.asset) {
+            throw new Error(
+              uploadData?.error ||
+                `Failed to upload ${attachment.file.name || "image"}`
+            );
+          }
+          return uploadData.asset;
+        });
+
+        uploadedAttachments = await Promise.all(uploads);
+      }
+
       setPendingMessage({
         id: nanoid(),
         chatId,
         message,
+        attachments: uploadedAttachments,
         createdAt: Date.now(),
       });
+
+      for (const attachment of attachments) {
+        URL.revokeObjectURL(attachment.previewUrl);
+      }
+      setAttachments([]);
+      setInput("");
 
       router.push(`/builder/${chatId}`);
     } catch (error) {
@@ -237,7 +332,10 @@ export default function StartPage() {
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();
-                      if (!isLoading && input.trim()) {
+                      if (
+                        !isLoading &&
+                        (input.trim() || attachments.length > 0)
+                      ) {
                         (e.target as HTMLTextAreaElement).form?.requestSubmit();
                       }
                     }
@@ -251,19 +349,50 @@ export default function StartPage() {
                   className="relative w-full resize-none overflow-auto bg-transparent pt-2 text-base leading-normal text-gray-900 placeholder:text-gray-400 focus:outline-none disabled:opacity-50 h-full"
                 />
               </div>
+              <div
+                className={`overflow-hidden transition-[max-height,opacity,margin] duration-300 ease-out ${
+                  attachments.length > 0
+                    ? "mt-3 max-h-28 opacity-100"
+                    : "mt-0 max-h-0 opacity-0"
+                }`}
+              >
+                <MessageAttachments className="ml-0 flex-nowrap gap-2 overflow-x-auto">
+                  {attachments.map((attachment) => (
+                    <MessageAttachment
+                      key={attachment.localId}
+                      className="size-16 rounded-xl shrink-0"
+                      data={
+                        {
+                          type: "file",
+                          url: attachment.previewUrl,
+                          mediaType: attachment.file.type,
+                          filename: attachment.file.name,
+                        } as FileUIPart
+                      }
+                      onRemove={() =>
+                        handleRemoveAttachment(attachment.localId)
+                      }
+                    />
+                  ))}
+                </MessageAttachments>
+              </div>
 
               <div className="w-full flex justify-between ">
-                {/* <Button variant="ghost" size="icon"> */}
-                <div className="flex items-center gap-2">
-                  <PlusIcon className="h-4 w-4 color-black" />
-                  <span className="text-sm text-black font-medium">
-                    ATTACH FILES
-                  </span>
-                </div>
-                {/* </Button> */}
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex items-center justify-center h-8 w-8 rounded-full transition-colors hover:bg-gray-100 disabled:opacity-50"
+                  disabled={isLoading}
+                  aria-label="Attach files"
+                  title="Attach files"
+                >
+                  <PlusIcon className="h-4 w-4 text-black" />
+                </button>
                 <Button
                   type="submit"
-                  disabled={isLoading || !input.trim()}
+                  disabled={
+                    isLoading || (!input.trim() && attachments.length === 0)
+                  }
                   size="icon"
                   className="h-8 w-16 rounded-md
  bg-gray-900 text-white   hover:bg-gray-800 disabled:bg-gray-200 disabled:text-gray-500 "
@@ -277,6 +406,14 @@ export default function StartPage() {
                   )}
                 </Button>
               </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept=".jpg,.jpeg,.png,.webp"
+                className="hidden"
+                onChange={handleFileChange}
+              />
 
               <BorderBeam
                 duration={18}

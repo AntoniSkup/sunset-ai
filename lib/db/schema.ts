@@ -83,6 +83,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   teamMembers: many(teamMembers),
   invitationsSent: many(invitations),
   chats: many(chats),
+  siteAssets: many(siteAssets),
   accounts: many(accounts),
 }));
 
@@ -307,6 +308,7 @@ export const chatMessages = pgTable(
       .references(() => chats.id),
     role: varchar("role", { length: 20 }).notNull(),
     content: text("content").notNull(),
+    parts: jsonb("parts").$type<unknown[]>(),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
   (table) => ({
@@ -337,6 +339,41 @@ export const chatToolCalls = pgTable(
   })
 );
 
+export const siteAssets = pgTable(
+  "site_assets",
+  {
+    id: serial("id").primaryKey(),
+    chatId: varchar("chat_id", { length: 32 })
+      .notNull()
+      .references(() => chats.publicId),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id),
+    alias: varchar("alias", { length: 40 }).notNull(),
+    blobUrl: text("blob_url").notNull(),
+    intent: varchar("intent", { length: 20 }).notNull().default("site_asset"),
+    status: varchar("status", { length: 20 }).notNull().default("ready"),
+    mimeType: varchar("mime_type", { length: 100 }).notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    width: integer("width"),
+    height: integer("height"),
+    originalFilename: varchar("original_filename", { length: 255 }),
+    altHint: text("alt_hint"),
+    label: varchar("label", { length: 255 }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    chatAliasUnique: unique("site_assets_chat_alias_unique").on(
+      table.chatId,
+      table.alias
+    ),
+    chatIdIdx: index("site_assets_chat_id_idx").on(table.chatId),
+    userIdIdx: index("site_assets_user_id_idx").on(table.userId),
+    createdAtIdx: index("site_assets_created_at_idx").on(table.createdAt),
+  })
+);
+
 export const chatsRelations = relations(chats, ({ one, many }) => ({
   user: one(users, {
     fields: [chats.userId],
@@ -344,6 +381,7 @@ export const chatsRelations = relations(chats, ({ one, many }) => ({
   }),
   messages: many(chatMessages),
   toolCalls: many(chatToolCalls),
+  siteAssets: many(siteAssets),
 }));
 
 export const chatMessagesRelations = relations(chatMessages, ({ one }) => ({
@@ -360,12 +398,25 @@ export const chatToolCallsRelations = relations(chatToolCalls, ({ one }) => ({
   }),
 }));
 
+export const siteAssetsRelations = relations(siteAssets, ({ one }) => ({
+  chat: one(chats, {
+    fields: [siteAssets.chatId],
+    references: [chats.publicId],
+  }),
+  user: one(users, {
+    fields: [siteAssets.userId],
+    references: [users.id],
+  }),
+}));
+
 export type Chat = typeof chats.$inferSelect;
 export type NewChat = typeof chats.$inferInsert;
 export type ChatMessage = typeof chatMessages.$inferSelect;
 export type NewChatMessage = typeof chatMessages.$inferInsert;
 export type ChatToolCall = typeof chatToolCalls.$inferSelect;
 export type NewChatToolCall = typeof chatToolCalls.$inferInsert;
+export type SiteAsset = typeof siteAssets.$inferSelect;
+export type NewSiteAsset = typeof siteAssets.$inferInsert;
 
 export const publishedSites = pgTable(
   "published_sites",

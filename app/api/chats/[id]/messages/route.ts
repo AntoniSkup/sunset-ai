@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUser, getChatMessagesByPublicId } from "@/lib/db/queries";
 import type { UIMessage } from "ai";
+import { sanitizePersistedMessageParts } from "@/lib/chat/message-parts";
 
 export async function GET(
   request: NextRequest,
@@ -42,17 +43,30 @@ export async function GET(
       id: string;
       role: UIMessage["role"];
       content: string;
+      parts: UIMessage["parts"];
     }> = [];
 
 
     for (const m of result.messages) {
       const role = m.role as UIMessage["role"];
       const content = m.content ?? "";
+      const parts = sanitizePersistedMessageParts(m.parts);
 
       const last = merged[merged.length - 1];
 
-      if (role === "assistant" && last?.role === "assistant") {
+      if (
+        role === "assistant" &&
+        last?.role === "assistant" &&
+        parts.every((part) => part.type === "text") &&
+        last.parts.every((part) => part.type === "text")
+      ) {
         last.content = `${last.content}\n\n${content}`.trim();
+        last.parts = [
+          {
+            type: "text",
+            text: `${last.content}`.trim(),
+          },
+        ];
         continue;
       }
 
@@ -61,13 +75,15 @@ export async function GET(
         id: `db-${m.id}`,
         role,
         content,
+        parts:
+          parts.length > 0 ? parts : [{ type: "text", text: content }],
       });
     }
 
     const messages: UIMessage[] = merged.map((m) => ({
       id: m.id,
       role: m.role,
-      parts: [{ type: "text", text: m.content }],
+      parts: m.parts,
     }));
 
     return NextResponse.json({ chat: result.chat, messages });

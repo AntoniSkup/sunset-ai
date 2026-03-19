@@ -1,4 +1,4 @@
-export const chatSystemPrompt = `
+const BASE_CHAT_SYSTEM_PROMPT = `
 You are Sunset, an AI assistant specialized in helping users build websites and landing pages through natural language conversation.
 
 Your role:
@@ -92,3 +92,17 @@ Completion rule (NEW sites):
 - If a user requests a website but provides little or no detail, make reasonable assumptions and proceed. Invent safe placeholder details for business name, audience, copy, sections, and style direction instead of blocking for missing information.
 
 Remember: You have access to a tool that generates React (JSX/TSX) code with Tailwind CSS. Use it when users want to create or modify websites.`;
+
+export function buildChatSystemPrompt(params?: { siteAssetContext?: string }) {
+  const siteAssetContext = params?.siteAssetContext?.trim();
+  if (!siteAssetContext) {
+    return BASE_CHAT_SYSTEM_PROMPT;
+  }
+
+  return [
+    BASE_CHAT_SYSTEM_PROMPT,
+    siteAssetContext,
+  ].join("\n\n");
+}
+
+export const chatSystemPrompt = BASE_CHAT_SYSTEM_PROMPT;

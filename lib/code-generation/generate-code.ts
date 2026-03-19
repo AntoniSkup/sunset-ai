@@ -17,15 +17,21 @@ import {
   createLandingSiteRevision,
   getExistingLandingSiteFilesContent,
   getLatestLandingSiteFileContent,
+  getSiteAssetsByChatId,
   upsertLandingSiteFile,
 } from "@/lib/db/queries";
 import { checkRateLimit } from "@/lib/code-generation/rate-limit";
 import {
   buildExistingSectionsContext,
+  buildSiteAssetContextSection,
   buildModificationContext,
   buildUserRequestSection,
   createSectionPrompt,
 } from "@/prompts/tool-generate-code-prompt";
+import {
+  buildSiteAssetPromptContext,
+  toSiteAssetPromptDescriptors,
+} from "@/lib/site-assets/prompt-manifest";
 
 function normalizeDestinationPath(input: string): string | null {
   if (!input) return null;
@@ -100,6 +106,7 @@ export function buildCodeGenerationPrompt(params: {
   previousCodeVersion?: string;
   isModification?: boolean;
   existingSections?: Array<{ path: string; content: string }>;
+  siteAssetContext?: string;
 }): string {
   const previousCodeVersion = params.previousCodeVersion;
   const cleanedPreviousCodeVersion = previousCodeVersion
@@ -123,13 +130,18 @@ export function buildCodeGenerationPrompt(params: {
   const existingSectionsContext = params.existingSections?.length
     ? buildExistingSectionsContext(params.existingSections)
     : "";
+  const siteAssetContext = buildSiteAssetContextSection(params.siteAssetContext);
 
   const userRequestSection = buildUserRequestSection(
     `Destination: ${params.destination}\n\n${params.userRequest}`
   );
 
   return (
-    basePrompt + modificationContext + existingSectionsContext + userRequestSection
+    basePrompt +
+    modificationContext +
+    existingSectionsContext +
+    siteAssetContext +
+    userRequestSection
   );
 }
 
@@ -221,6 +233,11 @@ async function generateAndSaveSingleFile(params: {
       );
     }
 
+    const promptableSiteAssets = toSiteAssetPromptDescriptors(
+      await getSiteAssetsByChatId(params.chatId, params.userId)
+    );
+    const siteAssetContext = buildSiteAssetPromptContext(promptableSiteAssets);
+
     const executeGeneration = async () => {
       const prompt = buildCodeGenerationPrompt({
         destination: normalizedDestination,
@@ -229,6 +246,7 @@ async function generateAndSaveSingleFile(params: {
         isModification: shouldModify,
         existingSections:
           existingSections.length > 0 ? existingSections : undefined,
+        siteAssetContext,
       });
 
       const model = await getAIModel();

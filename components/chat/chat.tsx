@@ -20,6 +20,18 @@ import type { BillingApiResponse } from "@/app/api/billing/route";
 const billingFetcher = (url: string) => fetch(url).then((res) => res.json());
 const MIN_CREDITS_TO_SEND = 0.5;
 
+type PendingAttachment = {
+  localId: string;
+  id: number | null;
+  alias: string;
+  blobUrl: string;
+  mimeType: string;
+  intent: "reference" | "site_asset" | "both";
+  altHint?: string | null;
+  label?: string | null;
+  isUploading?: boolean;
+};
+
 interface ChatProps {
   chatId?: string;
 }
@@ -97,7 +109,13 @@ function ChatInner({
   const [chatId, setChatId] = useState<string | null>(providedChatId || null);
   const [isCreatingChat, setIsCreatingChat] = useState(false);
   const [showCreditsLimitModal, setShowCreditsLimitModal] = useState(false);
+  const [pendingAttachments, setPendingAttachments] = useState<
+    PendingAttachment[]
+  >([]);
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const [isUploadingAttachments, setIsUploadingAttachments] = useState(false);
   const lastUserMessageRef = useRef<string>("");
+  const lastUserMessagePartsRef = useRef<UIMessage["parts"]>([]);
   const lastPreviewVersionIdRef = useRef<number | null>(null);
   const previewLoaderShownForToolCallIdsRef = useRef<Set<string>>(new Set());
   const pendingMessage = usePendingMessageStore((s) => s.pendingMessage);
@@ -161,6 +179,38 @@ function ChatInner({
   >([]);
   const toolErrorKeysRef = useRef<Set<string>>(new Set());
 
+  const buildUserMessageParts = (
+    text: string,
+    attachments: PendingAttachment[]
+  ): UIMessage["parts"] => {
+    const parts: UIMessage["parts"] = [];
+
+    if (text.trim()) {
+      parts.push({ type: "text", text: text.trim() });
+    }
+
+    for (const attachment of attachments) {
+      parts.push({
+        type: "file",
+        url: attachment.blobUrl,
+        mediaType: attachment.mimeType,
+        filename: attachment.alias,
+        assetId: attachment.id,
+        assetAlias: attachment.alias,
+        assetIntent: attachment.intent,
+        altHint: attachment.altHint ?? undefined,
+        label: attachment.label ?? undefined,
+      } as UIMessage["parts"][number]);
+    }
+
+    return parts;
+  };
+
+  const getRetryableUserParts = (message: UIMessage): UIMessage["parts"] =>
+    message.parts.filter(
+      (part) => part.type === "text" || part.type === "file"
+    ) as UIMessage["parts"];
+
   const { messages, sendMessage, status } = useChat({
     messages: initialMessages,
     transport,
@@ -203,9 +253,30 @@ function ChatInner({
       consumedPendingIdsRef.current.add(pendingMessage.id);
       setPendingMessage(null);
 
+      const parts: UIMessage["parts"] = [];
+      if (pendingMessage.message.trim()) {
+        parts.push({ type: "text", text: pendingMessage.message.trim() });
+      }
+      if (Array.isArray(pendingMessage.attachments)) {
+        for (const attachment of pendingMessage.attachments) {
+          parts.push({
+            type: "file",
+            url: attachment.blobUrl,
+            mediaType: attachment.mimeType,
+            filename: attachment.alias,
+            assetId: attachment.id,
+            assetAlias: attachment.alias,
+            assetIntent: attachment.intent,
+            altHint: attachment.altHint ?? undefined,
+            label: attachment.label ?? undefined,
+          } as UIMessage["parts"][number]);
+        }
+      }
+      if (parts.length === 0) return;
+      lastUserMessagePartsRef.current = parts;
       sendMessage({
         role: "user",
-        parts: [{ type: "text", text: pendingMessage.message }],
+        parts,
       });
     }
   }, [
@@ -220,9 +291,170 @@ function ChatInner({
 
   const isLoading = status === "streaming" || status === "submitted";
 
+  const handleAttachmentUpload = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    if (!chatId) {
+      setAttachmentError("Please wait for the chat to initialize.");
+      return;
+    }
+
+    setAttachmentError(null);
+    setIsUploadingAttachments(true);
+
+    try {
+      const selectedFiles = Array.from(files);
+      const optimisticAttachments: PendingAttachment[] = selectedFiles.map(
+        (file) => ({
+          localId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          id: null,
+          alias: file.name || "image",
+          blobUrl: URL.createObjectURL(file),
+          mimeType: file.type || "image/png",
+          intent: "site_asset",
+          isUploading: true,
+        })
+      );
+
+      setPendingAttachments((prev) => [...prev, ...optimisticAttachments]);
+
+      const uploads = optimisticAttachments.map(async (attachment, index) => {
+        const file = selectedFiles[index];
+        const formData = new FormData();
+        formData.append("chatId", chatId);
+        formData.append("file", file);
+        formData.append("intent", "site_asset");
+
+        const res = await fetch("/api/site-assets", {
+          method: "POST",
+          body: formData,
+        });
+
+        const data = await res.json().catch(() => null);
+        if (!res.ok || !data?.asset) {
+          throw new Error(
+            data?.error || `Failed to upload ${file.name || "image"}`
+          );
+        }
+
+        return {
+          localId: attachment.localId,
+          asset: data.asset as Omit<PendingAttachment, "localId" | "isUploading">,
+        };
+      });
+
+      const settled = await Promise.allSettled(uploads);
+      const uploadErrors: string[] = [];
+
+      setPendingAttachments((prev) => {
+        let next = [...prev];
+
+        for (const result of settled) {
+          if (result.status === "fulfilled") {
+            const { localId, asset } = result.value;
+            next = next.map((item) => {
+              if (item.localId !== localId) return item;
+              if (item.blobUrl.startsWith("blob:")) {
+                URL.revokeObjectURL(item.blobUrl);
+              }
+              return {
+                ...asset,
+                localId,
+                isUploading: false,
+              };
+            });
+          } else {
+            const message =
+              result.reason instanceof Error
+                ? result.reason.message
+                : "Failed to upload image.";
+            uploadErrors.push(message);
+          }
+        }
+
+        const failedLocalIds = new Set<string>();
+        settled.forEach((result, index) => {
+          if (result.status === "rejected") {
+            const localId = optimisticAttachments[index]?.localId;
+            if (localId) failedLocalIds.add(localId);
+          }
+        });
+
+        for (const item of next) {
+          if (failedLocalIds.has(item.localId) && item.blobUrl.startsWith("blob:")) {
+            URL.revokeObjectURL(item.blobUrl);
+          }
+        }
+
+        return next.filter((item) => !failedLocalIds.has(item.localId));
+      });
+
+      if (uploadErrors.length > 0) {
+        setAttachmentError(uploadErrors[0]);
+      }
+    } catch (error) {
+      setAttachmentError(
+        error instanceof Error ? error.message : "Failed to upload image."
+      );
+    } finally {
+      setIsUploadingAttachments(false);
+    }
+  };
+
+  const handleAttachmentIntentChange = async (
+    assetId: number,
+    intent: PendingAttachment["intent"]
+  ) => {
+    if (!chatId) return;
+
+    const current = pendingAttachments.find((asset) => asset.id === assetId);
+    if (!current || current.intent === intent) return;
+
+    setAttachmentError(null);
+    setPendingAttachments((prev) =>
+      prev.map((asset) => (asset.id === assetId ? { ...asset, intent } : asset))
+    );
+
+    const res = await fetch("/api/site-assets", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: assetId,
+        chatId,
+        intent,
+      }),
+    });
+
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data?.asset) {
+      setPendingAttachments((prev) =>
+        prev.map((asset) =>
+          asset.id === assetId ? { ...asset, intent: current.intent } : asset
+        )
+      );
+      setAttachmentError(data?.error || "Failed to update image usage intent.");
+    }
+  };
+
+  const handleRemovePendingAttachment = (localId: string) => {
+    setPendingAttachments((prev) => {
+      const target = prev.find((asset) => asset.localId === localId);
+      if (target?.blobUrl.startsWith("blob:")) {
+        URL.revokeObjectURL(target.blobUrl);
+      }
+      return prev.filter((asset) => asset.localId !== localId);
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!input.trim() || isLoading || !chatId) return;
+    if (
+      (input.trim().length === 0 && pendingAttachments.length === 0) ||
+      isLoading ||
+      isUploadingAttachments ||
+      !chatId
+    ) {
+      return;
+    }
 
     if (!hasCredits) {
       setShowCreditsLimitModal(true);
@@ -230,11 +462,23 @@ function ChatInner({
     }
 
     const message = input.trim();
+    const readyAttachments = pendingAttachments.filter((a) => a.id != null);
+    const parts = buildUserMessageParts(message, readyAttachments);
     lastUserMessageRef.current = message;
+    lastUserMessagePartsRef.current = parts;
     setInput("");
+    setPendingAttachments((prev) => {
+      for (const attachment of prev) {
+        if (attachment.blobUrl.startsWith("blob:")) {
+          URL.revokeObjectURL(attachment.blobUrl);
+        }
+      }
+      return [];
+    });
+    setAttachmentError(null);
     sendMessage({
       role: "user",
-      parts: [{ type: "text", text: message }],
+      parts,
     });
   };
 
@@ -249,10 +493,12 @@ function ChatInner({
     if (!errorMsg) return;
 
     let messageToRetry = lastUserMessageRef.current;
+    let partsToRetry = lastUserMessagePartsRef.current;
 
     if (errorMsg.userMessageId) {
       const userMessage = messages.find((m) => m.id === errorMsg.userMessageId);
       if (userMessage) {
+        partsToRetry = getRetryableUserParts(userMessage);
         messageToRetry =
           userMessage.parts
             .filter((p) => p.type === "text")
@@ -261,13 +507,14 @@ function ChatInner({
       }
     }
 
-    if (!messageToRetry) return;
+    if (!messageToRetry && partsToRetry.length === 0) return;
 
     setErrorMessages((prev) => prev.filter((e) => e.id !== errorMessageId));
+    lastUserMessagePartsRef.current = partsToRetry;
 
     sendMessage({
       role: "user",
-      parts: [{ type: "text", text: messageToRetry }],
+      parts: partsToRetry,
     });
   };
 
@@ -431,6 +678,7 @@ function ChatInner({
   useEffect(() => {
     const lastMessage = messages[messages.length - 1];
     if (lastMessage?.role === "user") {
+      lastUserMessagePartsRef.current = getRetryableUserParts(lastMessage);
       const messageText = lastMessage.parts
         .filter((p) => p.type === "text")
         .map((p) => (p as { text: string }).text)
@@ -477,6 +725,12 @@ function ChatInner({
         handleSubmit={handleSubmit}
         handleInputChange={handleInputChange}
         isLoading={isLoading}
+        isUploadingAttachments={isUploadingAttachments}
+        pendingAttachments={pendingAttachments}
+        attachmentError={attachmentError}
+        onFilesSelected={handleAttachmentUpload}
+        onAttachmentIntentChange={handleAttachmentIntentChange}
+        onAttachmentRemove={handleRemovePendingAttachment}
       />
       <CreditsLimitModal
         open={showCreditsLimitModal}
