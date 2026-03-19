@@ -229,16 +229,25 @@ export const MessageItem = React.memo(function MessageItem({
 interface ErrorMessageItemProps {
   error: string;
   onRetry: () => void;
+  errorId: string;
+  chatId?: string | null;
 }
 
 export const ErrorMessageItem = React.memo(function ErrorMessageItem({
   error,
   onRetry,
+  errorId,
+  chatId,
 }: ErrorMessageItemProps) {
   return (
     <Message from="assistant">
-      <MessageContent className="bg-destructive text-destructive-foreground">
-        <ErrorMessage error={error} onRetry={onRetry} />
+      <MessageContent className="rounded-3xl overflow-visible p-2">
+        <ErrorMessage
+          error={error}
+          onRetry={onRetry}
+          errorId={errorId}
+          chatId={chatId}
+        />
       </MessageContent>
     </Message>
   );

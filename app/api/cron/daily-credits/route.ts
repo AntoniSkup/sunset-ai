@@ -22,6 +22,8 @@ export async function GET() {
       ok: true,
       accountsProcessed: result.accountsProcessed,
       grantsCreated: result.grantsCreated,
+      grantsExpired: result.grantsExpired,
+      creditsExpired: result.creditsExpired,
     });
   } catch (error) {
     console.error("[DailyCredits] Error:", error);

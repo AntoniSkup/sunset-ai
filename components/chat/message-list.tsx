@@ -20,6 +20,7 @@ interface MessageListProps {
   isLoading: boolean;
   errorMessages?: ErrorMessage[];
   onRetry?: (errorMessageId: string) => void;
+  chatId?: string | null;
 }
 
 type MergedMessage =
@@ -37,30 +38,17 @@ export function MessageList({
   isLoading,
   errorMessages = [],
   onRetry,
+  chatId,
 }: MessageListProps) {
   const mergedMessages: MergedMessage[] = useMemo(() => {
-    const result: MergedMessage[] = [];
-    const errorMap = new Map(
-      errorMessages.map((error) => [error.userMessageId || "", error])
-    );
+    const result: MergedMessage[] = messages.map((m) => ({
+      type: "message",
+      data: m,
+    }));
 
-    for (const message of messages) {
-      result.push({ type: "message", data: message });
-      if (message.role === "user") {
-        const error = errorMap.get(message.id);
-        if (error) {
-          result.push({ type: "error", data: error });
-        }
-      }
-    }
-
-    const orphanedErrors = errorMessages.filter(
-      (error) =>
-        !error.userMessageId ||
-        !messages.some((m) => m.id === error.userMessageId)
-    );
-
-    for (const error of orphanedErrors) {
+    // Always render errors at the bottom (below the latest user message),
+    // so the user sees the latest failure as part of the current turn.
+    for (const error of errorMessages) {
       result.push({ type: "error", data: error });
     }
 
@@ -78,6 +66,8 @@ export function MessageList({
               <div key={getMergedMessageKey(item)} className="py-4">
                 <ErrorMessageItem
                   error={item.data.message}
+                  errorId={item.data.id}
+                  chatId={chatId}
                   onRetry={
                     onRetry
                       ? () => onRetry(item.data.id)

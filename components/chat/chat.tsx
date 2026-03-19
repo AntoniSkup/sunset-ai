@@ -108,8 +108,7 @@ function ChatInner({
     billingFetcher
   );
   const hasCredits =
-    billing === undefined ||
-    Number(billing.balance) >= MIN_CREDITS_TO_SEND;
+    billing === undefined || Number(billing.balance) >= MIN_CREDITS_TO_SEND;
 
   useEffect(() => {
     const createNewChat = async () => {
@@ -469,6 +468,7 @@ function ChatInner({
             isLoading={isLoading}
             errorMessages={errorMessages}
             onRetry={handleRetry}
+            chatId={providedChatId ?? chatId}
           />
         )}
       </div>

@@ -17,12 +17,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { signOut } from "@/app/(login)/actions";
 import { mutate } from "swr";
-import {
-  DropdownMenu,
-  DropdownMenuItem,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { SunsetLogoMenu } from "@/components/nav/sunset-logo-menu";
 
 export default function DashboardLayout({
   children,
@@ -73,53 +68,7 @@ export default function DashboardLayout({
         >
           <nav className="h-full overflow-y-auto p-4 flex flex-col ">
             <div className="flex items-center justify-between">
-              <DropdownMenu modal={false}>
-                <DropdownMenuTrigger asChild>
-                  <img
-                    src="/sunset-logo.png"
-                    alt="Sunset"
-                    className="h-8 w-auto object-contain shrink-0 hover:scale-95 click:scale-105 transition-all duration-200 cursor-pointer ease-in-out"
-                  />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-48">
-                  <DropdownMenuItem asChild>
-                    <Link
-                      href="/start"
-                      className="flex items-center cursor-pointer"
-                    >
-                      <HomeIcon
-                        className="mr-2 h-4 w-4 font-bold text-black"
-                        strokeWidth={1.5}
-                      />
-                      Home
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <Link
-                      href="/pricing"
-                      className="flex items-center cursor-pointer"
-                    >
-                      <CreditCardIcon
-                        className="mr-2 h-4 w-4 font-bold text-black"
-                        strokeWidth={1.5}
-                      />
-                      Preview payment
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <Link
-                      href="/dashboard/general"
-                      className="flex items-center cursor-pointer"
-                    >
-                      <Cog6ToothIcon
-                        className="mr-2 h-4 w-4 font-bold text-black"
-                        strokeWidth={1.5}
-                      />
-                      Settings
-                    </Link>
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <SunsetLogoMenu variant="dashboard" contentClassName="w-48" />
             </div>
 
             <div className="flex-1">

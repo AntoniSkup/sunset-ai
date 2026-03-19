@@ -3,6 +3,7 @@ import { db } from "@/lib/db/drizzle";
 import { creditGrants, creditWallets, subscriptionCycles } from "@/lib/db/schema";
 import { getPlanForAccount } from "./plans";
 import { createGrantForDailyBonus } from "./grants";
+import { expireCreditsForAccount } from "./expire-credits";
 
 /**
  * Start of today in UTC (00:00:00.000).
@@ -138,14 +139,22 @@ export async function ensureDailyCreditsForAccount(
 export async function processDailyCredits(): Promise<{
   accountsProcessed: number;
   grantsCreated: number;
+  grantsExpired: number;
+  creditsExpired: number;
 }> {
   const wallets = await db.select({ accountId: creditWallets.accountId }).from(creditWallets);
   let accountsProcessed = 0;
   let grantsCreated = 0;
+  let grantsExpired = 0;
+  let creditsExpired = 0;
 
   for (const { accountId } of wallets) {
     accountsProcessed++;
     try {
+      const expired = await expireCreditsForAccount(accountId);
+      grantsExpired += expired.grantsExpired;
+      creditsExpired += expired.expiredCredits;
+
       const result = await ensureDailyCreditsForAccount(accountId);
       if (result.granted) {
         grantsCreated++;
@@ -155,5 +164,5 @@ export async function processDailyCredits(): Promise<{
     }
   }
 
-  return { accountsProcessed, grantsCreated };
+  return { accountsProcessed, grantsCreated, grantsExpired, creditsExpired };
 }

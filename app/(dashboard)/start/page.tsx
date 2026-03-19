@@ -19,21 +19,7 @@ import sunsetLogoTree from "@/components/icons/sunset_logo_tree.png";
 
 import { BorderBeam } from "@/components/ui/border-beam";
 import TypingText from "@/components/ui/typewriter";
-import {
-  DropdownMenu,
-  DropdownMenuItem,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-  DropdownMenuGroup,
-  DropdownMenuShortcut,
-  DropdownMenuSeparator,
-  DropdownMenuPortal,
-  DropdownMenuSubContent,
-  DropdownMenuSub,
-  DropdownMenuSubTrigger,
-  DropdownMenuLabel,
-} from "@/components/ui/dropdown-menu";
-import { signOut } from "@/app/(login)/actions";
+import { SunsetLogoMenu } from "@/components/nav/sunset-logo-menu";
 
 type Chat = {
   id: number;
@@ -80,11 +66,6 @@ export default function StartPage() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const router = useRouter();
   const setPendingMessage = usePendingMessageStore((s) => s.setPendingMessage);
-
-  async function handleSignOut() {
-    await signOut();
-    router.push("/");
-  }
 
   const loadPage = useCallback(async (cursor: string | null | undefined) => {
     if (cursor === null) return;
@@ -198,57 +179,7 @@ export default function StartPage() {
 
   return (
     <div className="rounded-2xl border border-gray-200 bg-white px-4 py-6 sm:px-8 md:px-12">
-      <DropdownMenu modal={false}>
-        <DropdownMenuTrigger asChild>
-          <img
-            src="/sunset-logo.png"
-            alt="Sunset"
-            className="h-8 w-auto object-contain shrink-0 hover:scale-95 click:scale-105 transition-all duration-200 cursor-pointer ease-in-out"
-          />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent className="w-40" align="start">
-          <DropdownMenuGroup>
-            <DropdownMenuLabel
-              className="text-gray-500 text-xs font-medium"
-              onClick={() => router.push("/dashboard")}
-            >
-              My Account
-            </DropdownMenuLabel>
-
-            <DropdownMenuItem onClick={() => router.push("/pricing")}>
-              Billing
-              <DropdownMenuShortcut>⌘B</DropdownMenuShortcut>
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => router.push("/dashboard")}>
-              Settings
-              <DropdownMenuShortcut>⌘S</DropdownMenuShortcut>
-            </DropdownMenuItem>
-          </DropdownMenuGroup>
-          <DropdownMenuSeparator />
-          <DropdownMenuGroup>
-            <DropdownMenuItem>Team</DropdownMenuItem>
-            <DropdownMenuSub>
-              <DropdownMenuSubTrigger>Invite users</DropdownMenuSubTrigger>
-              <DropdownMenuPortal>
-                <DropdownMenuSubContent>
-                  <DropdownMenuItem>Email</DropdownMenuItem>
-                  <DropdownMenuItem>Message</DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem>More...</DropdownMenuItem>
-                </DropdownMenuSubContent>
-              </DropdownMenuPortal>
-            </DropdownMenuSub>
-          </DropdownMenuGroup>
-
-          <DropdownMenuSeparator />
-          <DropdownMenuGroup>
-            <DropdownMenuItem onClick={handleSignOut}>
-              Log out
-              <DropdownMenuShortcut>⇧⌘Q</DropdownMenuShortcut>
-            </DropdownMenuItem>
-          </DropdownMenuGroup>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <SunsetLogoMenu contentClassName="w-40" />
 
       <section className="flex min-h-[70vh] items-center justify-center flex-row">
         <div className="mx-auto flex w-full max-w-3xl flex-col items-start text-start">
