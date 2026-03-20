@@ -7,7 +7,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { ArrowPathIcon, ArrowUpIcon } from "@heroicons/react/24/outline";
 import type { FileUIPart } from "ai";
-import { FormEvent, useRef } from "react";
+import { FormEvent, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { PlusIcon } from "lucide-react";
 
@@ -35,6 +35,18 @@ interface ChatInputProps {
     intent: PendingAttachment["intent"]
   ) => void;
   onAttachmentRemove: (localId: string) => void;
+  /** When true, printable keys focus the input and append when focus is not already in an editable field (builder). */
+  captureGlobalTyping?: boolean;
+  onInsertText?: (text: string) => void;
+}
+
+function isEditableKeyTarget(target: EventTarget | null): boolean {
+  if (!target || !(target instanceof HTMLElement)) return false;
+  const el = target;
+  if (el.isContentEditable) return true;
+  const tag = el.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+  return el.closest("[contenteditable='true']") != null;
 }
 
 export function ChatInput({
@@ -48,10 +60,42 @@ export function ChatInput({
   onFilesSelected,
   onAttachmentIntentChange,
   onAttachmentRemove,
+  captureGlobalTyping = false,
+  onInsertText,
 }: ChatInputProps) {
   const formRef = useRef<HTMLFormElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const canSubmit = input.trim().length > 0 || pendingAttachments.length > 0;
+
+  useEffect(() => {
+    if (
+      !captureGlobalTyping ||
+      !onInsertText ||
+      isLoading ||
+      isUploadingAttachments
+    ) {
+      return;
+    }
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const t = e.target;
+      if (
+        textareaRef.current &&
+        (t === textareaRef.current || textareaRef.current.contains(t as Node))
+      ) {
+        return;
+      }
+      if (isEditableKeyTarget(t)) return;
+
+      if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        textareaRef.current?.focus();
+        onInsertText(e.key);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [captureGlobalTyping, onInsertText, isLoading, isUploadingAttachments]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -102,11 +146,11 @@ export function ChatInput({
           </MessageAttachments>
         </div>
         <textarea
+          ref={textareaRef}
           value={input}
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
           placeholder="What would you like to change?"
-          disabled={isLoading}
           className={cn(
             "w-full pl-4 pt-4 pr-16 text-sm resize-none overflow-auto ",
             "focus:outline-none bg-transparent rounded-b-lg",
@@ -123,9 +167,9 @@ export function ChatInput({
           type="button"
           variant="ghost"
           size="icon"
-          className="absolute bottom-3 left-3 h-8 w-8 rounded-full"
+          className="absolute bottom-3 left-3 h-8 w-8 cursor-pointer rounded-full"
           onClick={() => fileInputRef.current?.click()}
-          disabled={isLoading || isUploadingAttachments}
+          disabled={isUploadingAttachments}
           aria-label="Attach image"
           title="Attach image"
         >

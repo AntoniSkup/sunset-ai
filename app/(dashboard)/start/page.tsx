@@ -381,7 +381,7 @@ export default function StartPage() {
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="flex items-center justify-center h-8 w-8 rounded-full transition-colors hover:bg-gray-100 disabled:opacity-50"
+                  className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full transition-colors hover:bg-gray-100 "
                   disabled={isLoading}
                   aria-label="Attach files"
                   title="Attach files"
@@ -395,7 +395,7 @@ export default function StartPage() {
                   }
                   size="icon"
                   className="h-8 w-16 rounded-md
- bg-gray-900 text-white   hover:bg-gray-800 disabled:bg-gray-200 disabled:text-gray-500 "
+ bg-gray-900 text-white   hover:bg-gray-800 disabled:bg-gray-200 disabled:text-gray-500 cursor-"
                   aria-label="Submit"
                 >
                   {isLoading ? (

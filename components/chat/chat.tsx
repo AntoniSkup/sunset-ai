@@ -338,7 +338,10 @@ function ChatInner({
 
         return {
           localId: attachment.localId,
-          asset: data.asset as Omit<PendingAttachment, "localId" | "isUploading">,
+          asset: data.asset as Omit<
+            PendingAttachment,
+            "localId" | "isUploading"
+          >,
         };
       });
 
@@ -380,7 +383,10 @@ function ChatInner({
         });
 
         for (const item of next) {
-          if (failedLocalIds.has(item.localId) && item.blobUrl.startsWith("blob:")) {
+          if (
+            failedLocalIds.has(item.localId) &&
+            item.blobUrl.startsWith("blob:")
+          ) {
             URL.revokeObjectURL(item.blobUrl);
           }
         }
