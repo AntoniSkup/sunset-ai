@@ -35,11 +35,15 @@ function sanitizeFilePart(part: unknown) {
     return null;
   }
 
+  const mediaType =
+    typeof candidate.mediaType === "string" && candidate.mediaType.trim()
+      ? candidate.mediaType
+      : "application/octet-stream";
+
   return {
     type: "file" as const,
     url: candidate.url,
-    mediaType:
-      typeof candidate.mediaType === "string" ? candidate.mediaType : undefined,
+    mediaType,
     filename:
       typeof candidate.filename === "string" ? candidate.filename : undefined,
     ...(typeof candidate.assetId === "number"
@@ -63,9 +67,11 @@ export function sanitizePersistedMessageParts(parts: unknown): MessagePart[] {
     return [];
   }
 
-  return parts
-    .map((part) => sanitizeTextPart(part) ?? sanitizeFilePart(part))
-    .filter((part): part is MessagePart => part !== null);
+  return parts.flatMap((part): MessagePart[] => {
+    const sanitized =
+      sanitizeTextPart(part) ?? sanitizeFilePart(part);
+    return sanitized ? [sanitized] : [];
+  });
 }
 
 export function extractTextFromMessageParts(parts: unknown): string {
