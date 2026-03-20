@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useRef, useEffect } from "react";
+import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import type { UIMessage } from "ai";
@@ -114,6 +114,9 @@ function ChatInner({
   >([]);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [isUploadingAttachments, setIsUploadingAttachments] = useState(false);
+  const insertTextFromGlobalKey = useCallback((text: string) => {
+    setInput((prev) => prev + text);
+  }, []);
   const lastUserMessageRef = useRef<string>("");
   const lastUserMessagePartsRef = useRef<UIMessage["parts"]>([]);
   const lastPreviewVersionIdRef = useRef<number | null>(null);
@@ -737,6 +740,8 @@ function ChatInner({
         onFilesSelected={handleAttachmentUpload}
         onAttachmentIntentChange={handleAttachmentIntentChange}
         onAttachmentRemove={handleRemovePendingAttachment}
+        captureGlobalTyping={Boolean(providedChatId)}
+        onInsertText={insertTextFromGlobalKey}
       />
       <CreditsLimitModal
         open={showCreditsLimitModal}
