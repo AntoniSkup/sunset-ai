@@ -12,7 +12,7 @@ const ibmPlexSans = IBM_Plex_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Next.js SaaS Starter",
+  title: "Sunset AI",
   description: "Get started quickly with Next.js, Postgres, and Stripe.",
 };
 
