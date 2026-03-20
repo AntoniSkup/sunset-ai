@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { customerPortalAction } from "@/lib/payments/actions";
 import useSWR, { mutate } from "swr";
-import { useEffect } from "react";
+import { Suspense, useEffect } from "react";
 import type { BillingApiResponse } from "@/app/api/billing/route";
 import { BanknotesIcon, CreditCardIcon } from "@heroicons/react/24/outline";
 
@@ -64,7 +64,8 @@ function BillingCard() {
             </p>
           )}
           <p className="text-sm text-muted-foreground mt-1">
-            Credits are used for AI-powered code generation (e.g. create site, add section).
+            Credits are used for AI-powered code generation (e.g. create site,
+            add section).
           </p>
         </div>
 
@@ -93,7 +94,10 @@ function BillingCard() {
                 <Link href="/pricing">Subscribe</Link>
               </Button>
             )}
-            <Button asChild className="bg-orange-500 hover:bg-orange-600 text-white">
+            <Button
+              asChild
+              className="bg-orange-500 hover:bg-orange-600 text-white"
+            >
               <Link href="/pricing">
                 <CreditCardIcon className="h-4 w-4 mr-2" />
                 Pricing & top-ups
@@ -106,7 +110,7 @@ function BillingCard() {
   );
 }
 
-export default function PaymentsPage() {
+function PaymentsPageContent() {
   const searchParams = useSearchParams();
   const topupSuccess = searchParams.get("topup") === "1";
 
@@ -129,5 +133,24 @@ export default function PaymentsPage() {
       )}
       <BillingCard />
     </section>
+  );
+}
+
+function PaymentsPageFallback() {
+  return (
+    <section className="flex-1 p-4 lg:p-8">
+      <h1 className="text-lg lg:text-2xl font-medium text-gray-900 mb-6">
+        Payments
+      </h1>
+      <BillingSkeleton />
+    </section>
+  );
+}
+
+export default function PaymentsPage() {
+  return (
+    <Suspense fallback={<PaymentsPageFallback />}>
+      <PaymentsPageContent />
+    </Suspense>
   );
 }

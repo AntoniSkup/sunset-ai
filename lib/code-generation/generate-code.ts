@@ -147,6 +147,14 @@ export function buildCodeGenerationPrompt(params: {
 
 type EnsureChargedForAction = (actionType: string) => Promise<void>;
 
+type GenerateAndSaveSingleFileResult =
+  | (CodeGenerationResult & {
+      destination: string;
+      revisionId?: number;
+      revisionNumber?: number;
+    })
+  | { success: false; error: string };
+
 async function generateAndSaveSingleFile(params: {
   chatId: string;
   userId: number;
@@ -154,14 +162,7 @@ async function generateAndSaveSingleFile(params: {
   userRequest: string;
   isModification?: boolean;
   ensureChargedForAction?: EnsureChargedForAction;
-}): Promise<
-  | (CodeGenerationResult & {
-    destination: string;
-    revisionId?: number;
-    revisionNumber?: number;
-  })
-  | { success: false; error: string }
-> {
+}): Promise<GenerateAndSaveSingleFileResult> {
   try {
     const rateLimit = checkRateLimit(params.userId);
     if (!rateLimit.allowed) {
@@ -238,7 +239,8 @@ async function generateAndSaveSingleFile(params: {
     );
     const siteAssetContext = buildSiteAssetPromptContext(promptableSiteAssets);
 
-    const executeGeneration = async () => {
+    const executeGeneration =
+      async (): Promise<GenerateAndSaveSingleFileResult> => {
       const prompt = buildCodeGenerationPrompt({
         destination: normalizedDestination,
         userRequest: params.userRequest,
