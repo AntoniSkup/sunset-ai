@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowPathIcon, ArrowUpIcon } from "@heroicons/react/24/outline";
 import type { FileUIPart } from "ai";
 import { FormEvent, useEffect, useRef } from "react";
+import TextareaAutosize from "react-textarea-autosize";
 import { cn } from "@/lib/utils";
 import { PlusIcon } from "lucide-react";
 
@@ -145,56 +146,55 @@ export function ChatInput({
             ))}
           </MessageAttachments>
         </div>
-        <textarea
-          ref={textareaRef}
-          value={input}
-          onChange={handleInputChange}
-          onKeyDown={handleKeyDown}
-          placeholder="What would you like to change?"
-          className={cn(
-            "w-full pl-4 pt-4 pr-16 text-sm resize-none overflow-auto ",
-            "focus:outline-none bg-transparent rounded-b-lg",
-            "placeholder:text-muted-foreground",
-            "disabled:opacity-50"
-          )}
-          style={{
-            height: "100px",
-            minHeight: "100px",
-            maxHeight: "400px",
-          }}
-        />
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="absolute bottom-3 left-3 h-8 w-8 cursor-pointer rounded-full"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={isUploadingAttachments}
-          aria-label="Attach image"
-          title="Attach image"
-        >
-          <PlusIcon className="h-4 w-4" />
-        </Button>
-        <Button
-          type="submit"
-          disabled={isLoading || isUploadingAttachments || !canSubmit}
-          size="icon"
-          className={cn(
-            "absolute bottom-3 right-3 h-8 w-8 rounded-full bg-[#222424]",
+        <div className="relative rounded-b-lg pb-12">
+          <TextareaAutosize
+            ref={textareaRef}
+            value={input}
+            onChange={handleInputChange}
+            onKeyDown={handleKeyDown}
+            placeholder="What would you like to change?"
+            minRows={3}
+            maxRows={10}
+            className={cn(
+              "w-full resize-none overflow-y-auto pl-4 pt-4 pr-16 pb-2 text-sm",
+              "focus:outline-none bg-transparent",
+              "placeholder:text-muted-foreground",
+              "disabled:opacity-50"
+            )}
+          />
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="absolute bottom-3 left-3 h-8 w-8 cursor-pointer rounded-full"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isUploadingAttachments}
+            aria-label="Attach image"
+            title="Attach image"
+          >
+            <PlusIcon className="h-4 w-4" />
+          </Button>
+          <Button
+            type="submit"
+            disabled={isLoading || isUploadingAttachments || !canSubmit}
+            size="icon"
+            className={cn(
+              "absolute bottom-3 right-3 h-8 w-8 rounded-full bg-[#222424]",
 
-            isLoading || isUploadingAttachments || !canSubmit
-              ? "bg-muted text-muted-foreground hover:bg-muted"
-              : ""
-          )}
-          aria-label="Send message"
-          title="Send message"
-        >
-          {isLoading ? (
-            <ArrowPathIcon className="h-5 w-5 animate-spin" />
-          ) : (
-            <ArrowUpIcon className="h-6 w-6" strokeWidth={2} />
-          )}
-        </Button>
+              isLoading || isUploadingAttachments || !canSubmit
+                ? "bg-muted text-muted-foreground hover:bg-muted"
+                : ""
+            )}
+            aria-label="Send message"
+            title="Send message"
+          >
+            {isLoading ? (
+              <ArrowPathIcon className="h-5 w-5 animate-spin" />
+            ) : (
+              <ArrowUpIcon className="h-6 w-6" strokeWidth={2} />
+            )}
+          </Button>
+        </div>
       </div>
       <input
         ref={fileInputRef}
