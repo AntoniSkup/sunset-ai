@@ -436,12 +436,12 @@ export default function StartPage() {
           <h2 className="text-base font-semibold text-gray-900">
             Your projects
           </h2>
-          <Link
+          {/* <Link
             href="/start"
             className="text-sm font-medium text-[#ff6313] transition-colors hover:text-[#ff4a13]"
           >
             See more
-          </Link>
+          </Link> */}
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
