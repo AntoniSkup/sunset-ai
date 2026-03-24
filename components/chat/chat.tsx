@@ -705,14 +705,12 @@ function ChatInner({
         const next = [...prev];
         const message = { ...next[idx] };
         const parts = [...message.parts];
-        const textPartIdx = parts.findIndex((p) => p.type === "text");
-        if (textPartIdx === -1) {
+        const lastPart = parts[parts.length - 1];
+        if (!lastPart || lastPart.type !== "text") {
           parts.push({ type: "text", text });
         } else {
-          const existing = (
-            parts[textPartIdx] as { type: "text"; text: string }
-          ).text;
-          parts[textPartIdx] = { type: "text", text: `${existing}${text}` };
+          const existing = (lastPart as { type: "text"; text: string }).text;
+          parts[parts.length - 1] = { type: "text", text: `${existing}${text}` };
         }
         message.parts = parts;
         next[idx] = message;
