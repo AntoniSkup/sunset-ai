@@ -1,7 +1,7 @@
 import { generateText, tool } from "ai";
 import { z } from "zod";
+import { transform } from "esbuild";
 import { getAIModel } from "@/lib/ai/get-ai-model";
-import { getUser } from "@/lib/db/queries";
 import { getOrCreateAccountForUser } from "@/lib/billing/accounts";
 import { runWithCredits } from "@/lib/credits/run-with-credits";
 import { InsufficientCreditsError } from "@/lib/credits/debit";
@@ -92,12 +92,73 @@ function validateReactCode(code: string): CodeValidationResult {
       errors: ["Generated code is empty or only contained markdown fences"],
     };
   }
+
+  const fixesApplied = wasStripped ? ["Stripped markdown code fences"] : [];
   return {
     isValid: true,
     fixedCode: trimmed,
-    fixesApplied: wasStripped ? ["Stripped markdown code fences"] : [],
+    fixesApplied,
     errors: [],
   };
+}
+
+async function validateAndFixReactCode(code: string): Promise<CodeValidationResult> {
+  const base = validateReactCode(code);
+  if (!base.isValid) return base;
+
+  const tryParse = async (input: string) => {
+    await transform(input, {
+      loader: "tsx",
+      format: "esm",
+      target: "es2020",
+      sourcemap: false,
+    });
+  };
+
+  try {
+    await tryParse(base.fixedCode);
+    return base;
+  } catch (err) {
+    const parseError =
+      err instanceof Error ? err.message : "Invalid TSX syntax generated";
+
+    // Minimal heuristic: escape apostrophes in contractions inside single-quoted literals.
+    const escapedContractions = base.fixedCode.replace(
+      /([A-Za-z])'([A-Za-z])/g,
+      "$1\\'$2"
+    );
+
+    if (escapedContractions !== base.fixedCode) {
+      try {
+        await tryParse(escapedContractions);
+        return {
+          isValid: true,
+          fixedCode: escapedContractions,
+          fixesApplied: [
+            ...base.fixesApplied,
+            "Escaped apostrophes in contractions for valid TSX",
+          ],
+          errors: [],
+        };
+      } catch (fixErr) {
+        const fixError =
+          fixErr instanceof Error ? fixErr.message : "Invalid TSX syntax after fix";
+        return {
+          isValid: false,
+          fixedCode: base.fixedCode,
+          fixesApplied: base.fixesApplied,
+          errors: [parseError, fixError],
+        };
+      }
+    }
+
+    return {
+      isValid: false,
+      fixedCode: base.fixedCode,
+      fixesApplied: base.fixesApplied,
+      errors: [parseError],
+    };
+  }
 }
 
 export function buildCodeGenerationPrompt(params: {
@@ -136,12 +197,17 @@ export function buildCodeGenerationPrompt(params: {
     `Destination: ${params.destination}\n\n${params.userRequest}`
   );
 
+  const tsxSafetyInstruction = params.destination.toLowerCase().endsWith(".tsx")
+    ? "\nTypeScript/TSX string literal safety:\n- Prefer double-quoted strings for text content.\n- If you use single-quoted strings, escape apostrophes (e.g. what\\'s).\n"
+    : "";
+
   return (
     basePrompt +
     modificationContext +
     existingSectionsContext +
     siteAssetContext +
-    userRequestSection
+    userRequestSection +
+    tsxSafetyInstruction
   );
 }
 
@@ -281,7 +347,7 @@ async function generateAndSaveSingleFile(params: {
 
       const isTsx = normalizedDestination.toLowerCase().endsWith(".tsx");
       const validationResult = isTsx
-        ? validateReactCode(generatedCode)
+        ? await validateAndFixReactCode(generatedCode)
         : treatAsFragment
           ? await validateAndFixFragment(generatedCode)
           : await validateAndFixDocument(generatedCode);
@@ -426,23 +492,16 @@ const createSectionSchema = z.object({
 const createSiteToolExecute = async (
   { userRequest }: z.infer<typeof createSiteSchema>,
   chatId: string,
+  userId: number,
   ensureChargedForAction?: EnsureChargedForAction
 ): Promise<any> => {
-  const user = await getUser();
-  if (!user) {
-    return {
-      success: false,
-      error: "User not authenticated",
-    };
-  }
-
   if (!chatId) {
     return { success: false, error: "Chat ID is required" };
   }
 
   const result = await generateAndSaveSingleFile({
     chatId,
-    userId: user.id,
+    userId,
     destination: "landing/index.tsx",
     userRequest:
       userRequest +
@@ -468,23 +527,16 @@ const createSiteToolExecute = async (
 const createSectionToolExecute = async (
   { destination, userRequest, isModification }: z.infer<typeof createSectionSchema>,
   chatId: string,
+  userId: number,
   ensureChargedForAction?: EnsureChargedForAction
 ): Promise<any> => {
-  const user = await getUser();
-  if (!user) {
-    return {
-      success: false,
-      error: "User not authenticated",
-    };
-  }
-
   if (!chatId) {
     return { success: false, error: "Chat ID is required" };
   }
 
   const result = await generateAndSaveSingleFile({
     chatId,
-    userId: user.id,
+    userId,
     destination,
     userRequest,
     isModification,
@@ -522,6 +574,7 @@ const createSectionToolExecute = async (
 
 export function createSiteTool(
   chatId: string,
+  userId: number,
   ensureChargedForAction?: EnsureChargedForAction
 ) {
   return tool({
@@ -529,7 +582,12 @@ export function createSiteTool(
       "Create the entry React component (landing/index.tsx) for a new site as a WIREFRAME ONLY. The file must import Navbar from './sections/Navbar', Footer from './sections/Footer', and page(s) from './pages/...', and render only those components (no inline navbar/footer markup). Call once at the start of building a new website.",
     inputSchema: createSiteSchema,
     execute: async (input: z.infer<typeof createSiteSchema>) => {
-      return createSiteToolExecute(input, chatId, ensureChargedForAction);
+      return createSiteToolExecute(
+        input,
+        chatId,
+        userId,
+        ensureChargedForAction
+      );
     },
   } as any);
 }
@@ -537,6 +595,7 @@ export function createSiteTool(
 
 export function createSectionTool(
   chatId: string,
+  userId: number,
   ensureChargedForAction?: EnsureChargedForAction
 ) {
   return tool({
@@ -544,7 +603,12 @@ export function createSectionTool(
       "Create or modify exactly one React/TSX file (layout, page, or section) for the landing site. One tool call writes exactly one file. Use .tsx paths (e.g. landing/sections/Hero.tsx, landing/pages/Home.tsx).",
     inputSchema: createSectionSchema,
     execute: async (input: z.infer<typeof createSectionSchema>) => {
-      return createSectionToolExecute(input, chatId, ensureChargedForAction);
+      return createSectionToolExecute(
+        input,
+        chatId,
+        userId,
+        ensureChargedForAction
+      );
     },
   } as any);
 }

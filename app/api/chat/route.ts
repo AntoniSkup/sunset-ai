@@ -86,6 +86,69 @@ function escapeToolAttr(value: string): string {
     .replace(/>/g, "&gt;");
 }
 
+function normalizeChunkEventType(value: unknown): string {
+  return typeof value === "string" ? value.trim().toLowerCase() : "unknown";
+}
+
+function isAssistantTextDeltaEventType(eventType: string): boolean {
+  const t = normalizeChunkEventType(eventType);
+  return (
+    t === "text-delta" ||
+    t === "text_delta" ||
+    t.endsWith(".text-delta") ||
+    t.endsWith(".text_delta")
+  );
+}
+
+function isNonAssistantOrToolChunkType(eventType: string): boolean {
+  const t = normalizeChunkEventType(eventType);
+  return (
+    t.includes("tool") ||
+    t.includes("input-json") ||
+    t.includes("arguments") ||
+    t.includes("reasoning") ||
+    t.includes("metadata")
+  );
+}
+
+function isToolCallLikeChunkType(eventType: string): boolean {
+  const t = normalizeChunkEventType(eventType);
+  return (
+    t.includes("tool-call") ||
+    t.includes("tool_call") ||
+    t.includes("tool-input") ||
+    t.includes("tool_input")
+  );
+}
+
+function getToolCallIdFromChunkEvent(evt: any): string | null {
+  const id =
+    evt?.toolCallId ??
+    evt?.tool_call_id ??
+    evt?.id ??
+    evt?.chunk?.toolCallId ??
+    evt?.chunk?.tool_call_id ??
+    evt?.chunk?.id ??
+    null;
+  if (typeof id !== "string") return null;
+  const trimmed = id.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function getToolNameFromChunkEvent(evt: any): string | null {
+  const name =
+    evt?.toolName ??
+    evt?.tool_name ??
+    evt?.name ??
+    evt?.chunk?.toolName ??
+    evt?.chunk?.tool_name ??
+    evt?.chunk?.name ??
+    null;
+  if (typeof name !== "string") return null;
+  const trimmed = name.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
 /** Single segment of the assistant response: either text or a tool marker (in order). */
 type ContentSegment =
   | { type: "text"; text: string }
@@ -233,10 +296,12 @@ async function chatHandler(request: NextRequest) {
 
     const createSiteToolCall = createSiteTool(
       chatId,
+      user.id,
       billingSession.ensureChargedForAction
     );
     const createSectionToolCall = createSectionTool(
       chatId,
+      user.id,
       billingSession.ensureChargedForAction
     );
 
@@ -274,6 +339,7 @@ async function chatHandler(request: NextRequest) {
     let liveTextFlushTimer: ReturnType<typeof setTimeout> | null = null;
     let emittedAssistantChars = 0;
     let stepCounter = 0;
+    const emittedToolCallEventIds = new Set<string>();
     let lastSuccessfulRevision: {
       chatId: string;
       revisionNumber: number;
@@ -340,12 +406,48 @@ async function chatHandler(request: NextRequest) {
       onChunk: async (chunkEvent: unknown) => {
         try {
           const evt = chunkEvent as any;
-          const eventType =
+          const rawEventType =
             typeof evt?.type === "string"
               ? evt.type
               : typeof evt?.chunk?.type === "string"
               ? evt.chunk.type
               : "unknown";
+          const eventType = normalizeChunkEventType(rawEventType);
+
+          if (isToolCallLikeChunkType(eventType)) {
+            const toolCallId = getToolCallIdFromChunkEvent(evt);
+            const toolName = getToolNameFromChunkEvent(evt) ?? "unknown";
+            const destination = getDestinationFromToolCall(evt);
+            if (toolCallId && !emittedToolCallEventIds.has(toolCallId)) {
+              emittedToolCallEventIds.add(toolCallId);
+              await emitTurnEvent("tool_call", {
+                toolCallId,
+                toolName,
+                destination,
+              });
+              debugChatStream("tool-call-emitted-from-chunk", {
+                chatId,
+                turnRunId: turnRunId ?? null,
+                eventType,
+                toolCallId,
+                toolName,
+                destination,
+              });
+            }
+          }
+
+          // Prevent tool payload JSON (args/input) from leaking into assistant text stream.
+          if (
+            !isAssistantTextDeltaEventType(eventType) ||
+            isNonAssistantOrToolChunkType(eventType)
+          ) {
+            debugChatStream("chunk-skipped-non-assistant-text", {
+              chatId,
+              turnRunId: turnRunId ?? null,
+              eventType,
+            });
+            return;
+          }
           const textDelta =
             (typeof evt?.textDelta === "string" ? evt.textDelta : null) ??
             (typeof evt?.delta === "string" ? evt.delta : null) ??
@@ -439,12 +541,15 @@ async function chatHandler(request: NextRequest) {
                     : getToolTitle(toolName)),
                 toolName,
               });
-              await emitTurnEvent("tool_call", {
-                toolCallId,
-                toolName,
-                stepNumber,
-                destination,
-              });
+              if (toolCallId && !emittedToolCallEventIds.has(toolCallId)) {
+                emittedToolCallEventIds.add(toolCallId);
+                await emitTurnEvent("tool_call", {
+                  toolCallId,
+                  toolName,
+                  stepNumber,
+                  destination,
+                });
+              }
             }
           }
           debugChatStream("step-finish-summary", {

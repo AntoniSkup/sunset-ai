@@ -83,7 +83,8 @@ function ChatWithHistory({ chatId }: { chatId: string }) {
     const hasPendingForThisChat = pendingForMountRef.current;
     debugPendingFlow("ChatWithHistory effect start", {
       chatId,
-      pendingChatId: usePendingMessageStore.getState().pendingMessage?.chatId ?? null,
+      pendingChatId:
+        usePendingMessageStore.getState().pendingMessage?.chatId ?? null,
       hasPendingForThisChat,
     });
     setInitialMessages(hasPendingForThisChat ? [] : null);
@@ -140,11 +141,7 @@ function ChatWithHistory({ chatId }: { chatId: string }) {
   }
 
   return (
-    <ChatInner
-      key={chatId}
-      chatId={chatId}
-      initialMessages={initialMessages}
-    />
+    <ChatInner key={chatId} chatId={chatId} initialMessages={initialMessages} />
   );
 }
 
