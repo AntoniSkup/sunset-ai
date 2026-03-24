@@ -1,6 +1,7 @@
 import {
   pgTable,
   serial,
+  uuid,
   varchar,
   text,
   timestamp,
@@ -8,10 +9,11 @@ import {
   boolean,
   index,
   unique,
+  uniqueIndex,
   jsonb,
   numeric,
 } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
@@ -339,6 +341,70 @@ export const chatToolCalls = pgTable(
   })
 );
 
+export const chatTurnRuns = pgTable(
+  "chat_turn_runs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    chatId: integer("chat_id")
+      .notNull()
+      .references(() => chats.id),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id),
+    status: varchar("status", { length: 20 }).notNull(), // pending, running, succeeded, failed, canceled
+    sequence: integer("sequence").notNull(),
+    triggerRunId: varchar("trigger_run_id", { length: 64 }),
+    idempotencyKey: varchar("idempotency_key", { length: 128 }).notNull(),
+    errorMessage: text("error_message"),
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    startedAt: timestamp("started_at"),
+    completedAt: timestamp("completed_at"),
+  },
+  (table) => ({
+    idempotencyKeyUnique: unique("chat_turn_runs_idempotency_key_unique").on(
+      table.idempotencyKey
+    ),
+    chatIdStatusIdx: index("chat_turn_runs_chat_id_status_idx").on(
+      table.chatId,
+      table.status
+    ),
+    chatIdSequenceIdx: index("chat_turn_runs_chat_id_sequence_idx").on(
+      table.chatId,
+      table.sequence
+    ),
+    oneRunningPerChat: uniqueIndex("chat_turn_runs_one_running_per_chat")
+      .on(table.chatId)
+      .where(sql`${table.status} = 'running'`),
+  })
+);
+
+export const chatStreamEvents = pgTable(
+  "chat_stream_events",
+  {
+    id: serial("id").primaryKey(),
+    chatId: integer("chat_id")
+      .notNull()
+      .references(() => chats.id),
+    runId: uuid("run_id")
+      .notNull()
+      .references(() => chatTurnRuns.id),
+    eventType: varchar("event_type", { length: 40 }).notNull(),
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    chatIdIdIdx: index("chat_stream_events_chat_id_id_idx").on(
+      table.chatId,
+      table.id
+    ),
+    runIdIdIdx: index("chat_stream_events_run_id_id_idx").on(
+      table.runId,
+      table.id
+    ),
+  })
+);
+
 export const siteAssets = pgTable(
   "site_assets",
   {
@@ -381,6 +447,8 @@ export const chatsRelations = relations(chats, ({ one, many }) => ({
   }),
   messages: many(chatMessages),
   toolCalls: many(chatToolCalls),
+  turnRuns: many(chatTurnRuns),
+  streamEvents: many(chatStreamEvents),
   siteAssets: many(siteAssets),
 }));
 
@@ -395,6 +463,29 @@ export const chatToolCallsRelations = relations(chatToolCalls, ({ one }) => ({
   chat: one(chats, {
     fields: [chatToolCalls.chatId],
     references: [chats.id],
+  }),
+}));
+
+export const chatTurnRunsRelations = relations(chatTurnRuns, ({ one, many }) => ({
+  chat: one(chats, {
+    fields: [chatTurnRuns.chatId],
+    references: [chats.id],
+  }),
+  user: one(users, {
+    fields: [chatTurnRuns.userId],
+    references: [users.id],
+  }),
+  streamEvents: many(chatStreamEvents),
+}));
+
+export const chatStreamEventsRelations = relations(chatStreamEvents, ({ one }) => ({
+  chat: one(chats, {
+    fields: [chatStreamEvents.chatId],
+    references: [chats.id],
+  }),
+  run: one(chatTurnRuns, {
+    fields: [chatStreamEvents.runId],
+    references: [chatTurnRuns.id],
   }),
 }));
 
@@ -415,6 +506,10 @@ export type ChatMessage = typeof chatMessages.$inferSelect;
 export type NewChatMessage = typeof chatMessages.$inferInsert;
 export type ChatToolCall = typeof chatToolCalls.$inferSelect;
 export type NewChatToolCall = typeof chatToolCalls.$inferInsert;
+export type ChatTurnRun = typeof chatTurnRuns.$inferSelect;
+export type NewChatTurnRun = typeof chatTurnRuns.$inferInsert;
+export type ChatStreamEvent = typeof chatStreamEvents.$inferSelect;
+export type NewChatStreamEvent = typeof chatStreamEvents.$inferInsert;
 export type SiteAsset = typeof siteAssets.$inferSelect;
 export type NewSiteAsset = typeof siteAssets.$inferInsert;
 

@@ -1,4 +1,4 @@
-import { desc, and, eq, isNull, max, asc, lte, lt, or } from "drizzle-orm";
+import { desc, and, eq, isNull, max, asc, lte, lt, or, gt, sql } from "drizzle-orm";
 import { db } from "./drizzle";
 import {
   activityLogs,
@@ -12,6 +12,8 @@ import {
   chats,
   chatMessages,
   chatToolCalls,
+  chatTurnRuns,
+  chatStreamEvents,
   siteAssets,
   publishedSites,
 } from "./schema";
@@ -78,6 +80,16 @@ export async function getUser() {
   }
 
   return user[0];
+}
+
+export async function getUserById(userId: number) {
+  const user = await db
+    .select()
+    .from(users)
+    .where(and(eq(users.id, userId), isNull(users.deletedAt)))
+    .limit(1);
+
+  return user[0] ?? null;
 }
 
 export async function getTeamByStripeCustomerId(customerId: string) {
@@ -721,7 +733,7 @@ export async function createChatToolCall(data: {
   toolName: string;
   toolCallId?: string | null;
   input?: unknown;
-  output?: unknown;
+  output?: unknown;    
 }) {
   const result = await db
     .insert(chatToolCalls)
@@ -739,6 +751,225 @@ export async function createChatToolCall(data: {
   await db.update(chats).set({ updatedAt: new Date() }).where(eq(chats.id, data.chatId));
 
   return result[0];
+}
+
+export async function getRunningChatTurnRun(chatId: number) {
+  const rows = await db
+    .select()
+    .from(chatTurnRuns)
+    .where(and(eq(chatTurnRuns.chatId, chatId), eq(chatTurnRuns.status, "running")))
+    .limit(1);
+
+  return rows[0] ?? null;
+}
+
+export async function getChatTurnRunByIdempotencyKey(idempotencyKey: string) {
+  const rows = await db
+    .select()
+    .from(chatTurnRuns)
+    .where(eq(chatTurnRuns.idempotencyKey, idempotencyKey))
+    .limit(1);
+
+  return rows[0] ?? null;
+}
+
+export async function getChatTurnRunById(runId: string) {
+  const rows = await db
+    .select()
+    .from(chatTurnRuns)
+    .where(eq(chatTurnRuns.id, runId))
+    .limit(1);
+
+  return rows[0] ?? null;
+}
+
+export async function markChatTurnRunRunning(runId: string) {
+  const [row] = await db
+    .update(chatTurnRuns)
+    .set({
+      status: "running",
+      startedAt: new Date(),
+    })
+    .where(and(eq(chatTurnRuns.id, runId), eq(chatTurnRuns.status, "pending")))
+    .returning();
+
+  return row ?? null;
+}
+
+export async function enqueueChatTurnRun(data: {
+  chatId: number;
+  userId: number;
+  idempotencyKey: string;
+  payload: Record<string, unknown>;
+}) {
+  const [{ nextSequence }] = await db
+    .select({
+      nextSequence: sql<number>`coalesce(max(${chatTurnRuns.sequence}), 0) + 1`,
+    })
+    .from(chatTurnRuns)
+    .where(eq(chatTurnRuns.chatId, data.chatId));
+
+  const [row] = await db
+    .insert(chatTurnRuns)
+    .values({
+      chatId: data.chatId,
+      userId: data.userId,
+      status: "pending",
+      sequence: nextSequence ?? 1,
+      idempotencyKey: data.idempotencyKey,
+      payload: data.payload,
+    })
+    .returning();
+
+  return row;
+}
+
+export async function claimNextPendingChatTurnRun(chatId: number) {
+  const nextPending = await db
+    .select()
+    .from(chatTurnRuns)
+    .where(and(eq(chatTurnRuns.chatId, chatId), eq(chatTurnRuns.status, "pending")))
+    .orderBy(asc(chatTurnRuns.sequence))
+    .limit(1);
+
+  const candidate = nextPending[0];
+  if (!candidate) return null;
+
+  const [claimed] = await db
+    .update(chatTurnRuns)
+    .set({
+      status: "running",
+      startedAt: new Date(),
+    })
+    .where(
+      and(eq(chatTurnRuns.id, candidate.id), eq(chatTurnRuns.status, "pending"))
+    )
+    .returning();
+
+  return claimed ?? null;
+}
+
+export async function attachTriggerRunIdToChatTurnRun(params: {
+  runId: string;
+  triggerRunId: string;
+}) {
+  const [row] = await db
+    .update(chatTurnRuns)
+    .set({
+      triggerRunId: params.triggerRunId,
+    })
+    .where(eq(chatTurnRuns.id, params.runId))
+    .returning();
+
+  return row ?? null;
+}
+
+export async function markChatTurnRunSucceeded(runId: string) {
+  const [row] = await db
+    .update(chatTurnRuns)
+    .set({
+      status: "succeeded",
+      completedAt: new Date(),
+    })
+    .where(eq(chatTurnRuns.id, runId))
+    .returning();
+
+  return row ?? null;
+}
+
+export async function markChatTurnRunFailed(params: {
+  runId: string;
+  errorMessage: string;
+}) {
+  const [row] = await db
+    .update(chatTurnRuns)
+    .set({
+      status: "failed",
+      errorMessage: params.errorMessage.slice(0, 2000),
+      completedAt: new Date(),
+    })
+    .where(eq(chatTurnRuns.id, params.runId))
+    .returning();
+
+  return row ?? null;
+}
+
+export async function appendChatStreamEvent(data: {
+  chatId: number;
+  runId: string;
+  eventType: string;
+  payload: Record<string, unknown>;
+}) {
+  const [row] = await db
+    .insert(chatStreamEvents)
+    .values({
+      chatId: data.chatId,
+      runId: data.runId,
+      eventType: data.eventType,
+      payload: data.payload,
+    })
+    .returning();
+
+  return row;
+}
+
+export async function getChatStreamEventsAfter(data: {
+  chatId: number;
+  afterEventId?: number;
+  limit?: number;
+}) {
+  const limit = Math.min(data.limit ?? 100, 500);
+  const conditions = [eq(chatStreamEvents.chatId, data.chatId)];
+  if (typeof data.afterEventId === "number" && Number.isFinite(data.afterEventId)) {
+    conditions.push(gt(chatStreamEvents.id, data.afterEventId));
+  }
+
+  return db
+    .select()
+    .from(chatStreamEvents)
+    .where(and(...conditions))
+    .orderBy(asc(chatStreamEvents.id))
+    .limit(limit);
+}
+
+export async function getLatestChatStreamEvent(chatId: number) {
+  const rows = await db
+    .select()
+    .from(chatStreamEvents)
+    .where(eq(chatStreamEvents.chatId, chatId))
+    .orderBy(desc(chatStreamEvents.id))
+    .limit(1);
+
+  return rows[0] ?? null;
+}
+
+export async function getChatTurnRunQueueSummary(chatId: number) {
+  const rows = await db
+    .select({
+      status: chatTurnRuns.status,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(chatTurnRuns)
+    .where(
+      and(
+        eq(chatTurnRuns.chatId, chatId),
+        or(eq(chatTurnRuns.status, "pending"), eq(chatTurnRuns.status, "running"))
+      )
+    )
+    .groupBy(chatTurnRuns.status);
+
+  let pendingCount = 0;
+  let runningCount = 0;
+  for (const row of rows) {
+    if (row.status === "pending") pendingCount = Number(row.count ?? 0);
+    if (row.status === "running") runningCount = Number(row.count ?? 0);
+  }
+
+  return {
+    pendingCount,
+    runningCount,
+    hasActiveRuns: pendingCount > 0 || runningCount > 0,
+  };
 }
 
 export async function createPublishedSite(data: {

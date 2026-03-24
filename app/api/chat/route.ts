@@ -8,12 +8,16 @@ import {
 } from "@langfuse/tracing";
 import {
   getUser,
+  getUserById,
   getChatByPublicId,
   createChatMessage,
   createChatToolCall,
   getSiteAssetsByChatId,
   updateChatByPublicId,
   generateChatName,
+  appendChatStreamEvent,
+  markChatTurnRunSucceeded,
+  markChatTurnRunFailed,
 } from "@/lib/db/queries";
 import { getOrCreateAccountForUser } from "@/lib/billing/accounts";
 import { ensureDailyCreditsForAccount } from "@/lib/billing/daily-credits";
@@ -38,8 +42,19 @@ import {
 } from "@/lib/site-assets/prompt-manifest";
 
 const BUILDER_TOOLS = new Set(["create_site", "create_section"]);
+const TEXT_DELTA_FLUSH_MS = 90;
+const TEXT_DELTA_FLUSH_CHARS = 24;
 
-const requestQueues = new Map<string, Promise<void>>();
+const CHAT_STREAM_DEBUG_ENABLED = process.env.DEBUG_CHAT_STREAM === "1";
+
+function debugChatStream(message: string, payload?: Record<string, unknown>) {
+  if (!CHAT_STREAM_DEBUG_ENABLED) return;
+  if (payload) {
+    console.log(`[chat-stream-debug] ${message}`, payload);
+    return;
+  }
+  console.log(`[chat-stream-debug] ${message}`);
+}
 
 function getToolTitle(toolName: string): string {
   if (toolName === "create_site") {
@@ -91,26 +106,30 @@ function buildOrderedAssistantContent(segments: ContentSegment[]): string {
   return parts.join("\n\n").trim();
 }
 
-async function processRequestQueue(chatId: string): Promise<void> {
-  const queue = requestQueues.get(chatId);
-  if (queue) {
-    await queue;
-  }
-}
-
 async function chatHandler(request: NextRequest) {
-  const user = await getUser();
-
-  if (!user) {
-    return NextResponse.json(
-      { error: "Unauthorized", code: "UNAUTHORIZED" },
-      { status: 401 }
-    );
-  }
-
   try {
     const body = await request.json();
-    const { messages, chatId } = body;
+    const { messages, chatId, turnRunId } = body as {
+      messages?: Array<Omit<UIMessage, "id">>;
+      chatId?: string;
+      userId?: number;
+      turnRunId?: string;
+    };
+    const internalSecret = request.headers.get("x-internal-job-secret");
+    const isInternalJobCall =
+      Boolean(process.env.INTERNAL_JOB_SECRET) &&
+      internalSecret === process.env.INTERNAL_JOB_SECRET;
+
+    const user = isInternalJobCall
+      ? await getUserById(Number((body as any)?.userId))
+      : await getUser();
+
+    if (!user) {
+      return NextResponse.json(
+        { error: "Unauthorized", code: "UNAUTHORIZED" },
+        { status: 401 }
+      );
+    }
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return NextResponse.json(
@@ -134,9 +153,42 @@ async function chatHandler(request: NextRequest) {
       );
     }
 
+    const emitTurnEvent = async (
+      eventType: string,
+      payload: Record<string, unknown>
+    ) => {
+      if (!turnRunId) return;
+      try {
+        await appendChatStreamEvent({
+          chatId: chat.id,
+          runId: turnRunId,
+          eventType,
+          payload,
+        });
+      } catch (error) {
+        console.error(`Failed to append ${eventType} stream event:`, error);
+      }
+    };
+    if (turnRunId) {
+      await emitTurnEvent("run_started", {
+        chatId,
+        turnRunId,
+      });
+    }
+    debugChatStream("run-started", {
+      chatId,
+      turnRunId: turnRunId ?? null,
+      userId: user.id,
+      messageCount: messages.length,
+      internalCall: isInternalJobCall,
+    });
+
     const account = await getOrCreateAccountForUser(user.id);
     await ensureDailyCreditsForAccount(account.id);
-    const idempotencyKey = `chat-${chatId}-${user.id}-${messages.length}`;
+    const idempotencyKey =
+      typeof turnRunId === "string" && turnRunId.trim()
+        ? `chat-turn-${turnRunId.trim()}`
+        : `chat-${chatId}-${user.id}-${messages.length}`;
     const billingSession = createMessageBillingSession({
       accountId: account.id,
       userId: user.id,
@@ -194,7 +246,7 @@ async function chatHandler(request: NextRequest) {
     };
 
     const lastMessage = messages[messages.length - 1] as any;
-    if (lastMessage?.role === "user" && Array.isArray(lastMessage.parts)) {
+    if (!isInternalJobCall && lastMessage?.role === "user" && Array.isArray(lastMessage.parts)) {
       const persistedParts = sanitizePersistedMessageParts(lastMessage.parts);
       const userText = extractTextFromMessageParts(persistedParts);
       if (hasDisplayableMessageParts(persistedParts)) {
@@ -218,6 +270,9 @@ async function chatHandler(request: NextRequest) {
     // Here we start with the chat request
     // Accumulate assistant content in true order: text, tool, text, tool, ... (per step.content)
     const contentSegments: ContentSegment[] = [];
+    let liveTextBuffer = "";
+    let liveTextFlushTimer: ReturnType<typeof setTimeout> | null = null;
+    let emittedAssistantChars = 0;
     let stepCounter = 0;
     let lastSuccessfulRevision: {
       chatId: string;
@@ -244,6 +299,29 @@ async function chatHandler(request: NextRequest) {
       metadata: { model: modelId },
     });
 
+    const flushLiveTextDelta = async () => {
+      if (!liveTextBuffer) return;
+      const chunk = liveTextBuffer;
+      liveTextBuffer = "";
+      emittedAssistantChars += chunk.length;
+      debugChatStream("emit-text-delta", {
+        chatId,
+        turnRunId: turnRunId ?? null,
+        chunkLength: chunk.length,
+        emittedAssistantChars,
+        chunkPreview: chunk.slice(0, 120),
+      });
+      await emitTurnEvent("text_delta", { text: chunk });
+    };
+
+    const queueLiveTextFlush = () => {
+      if (liveTextFlushTimer) return;
+      liveTextFlushTimer = setTimeout(() => {
+        liveTextFlushTimer = null;
+        void flushLiveTextDelta();
+      }, TEXT_DELTA_FLUSH_MS);
+    };
+
     const result = streamText({
       model,
       system: systemPrompt,
@@ -259,6 +337,61 @@ async function chatHandler(request: NextRequest) {
           sessionId: chatId,
         },
       },
+      onChunk: async (chunkEvent: unknown) => {
+        try {
+          const evt = chunkEvent as any;
+          const eventType =
+            typeof evt?.type === "string"
+              ? evt.type
+              : typeof evt?.chunk?.type === "string"
+              ? evt.chunk.type
+              : "unknown";
+          const textDelta =
+            (typeof evt?.textDelta === "string" ? evt.textDelta : null) ??
+            (typeof evt?.delta === "string" ? evt.delta : null) ??
+            (typeof evt?.text === "string" ? evt.text : null) ??
+            (typeof evt?.chunk?.textDelta === "string"
+              ? evt.chunk.textDelta
+              : null) ??
+            (typeof evt?.chunk?.delta === "string" ? evt.chunk.delta : null) ??
+            (typeof evt?.chunk?.text === "string" ? evt.chunk.text : null) ??
+            null;
+
+          if (!textDelta) {
+            debugChatStream("chunk-without-text-delta", {
+              chatId,
+              turnRunId: turnRunId ?? null,
+              eventType,
+              evtKeys: evt && typeof evt === "object" ? Object.keys(evt).slice(0, 12) : [],
+              chunkKeys:
+                evt?.chunk && typeof evt.chunk === "object"
+                  ? Object.keys(evt.chunk).slice(0, 12)
+                  : [],
+            });
+            return;
+          }
+          debugChatStream("chunk-text-delta", {
+            chatId,
+            turnRunId: turnRunId ?? null,
+            eventType,
+            deltaLength: textDelta.length,
+            deltaPreview: textDelta.slice(0, 120),
+          });
+          liveTextBuffer += textDelta;
+
+          if (liveTextBuffer.length >= TEXT_DELTA_FLUSH_CHARS) {
+            if (liveTextFlushTimer) {
+              clearTimeout(liveTextFlushTimer);
+              liveTextFlushTimer = null;
+            }
+            await flushLiveTextDelta();
+          } else {
+            queueLiveTextFlush();
+          }
+        } catch (e) {
+          console.error("Failed to process chunk delta:", e);
+        }
+      },
       onStepFinish: async (step) => {
         try {
           stepCounter += 1;
@@ -269,10 +402,14 @@ async function chatHandler(request: NextRequest) {
           const staticResults = (step as any).staticToolResults ?? [];
 
           // Process step.content in order so DB message reflects "Text 1" → tool 1 → "Text 2" structure
+          const stepTextParts: string[] = [];
           for (const part of content) {
             if (part?.type === "text" && typeof part.text === "string") {
               const t = part.text.trim();
-              if (t) contentSegments.push({ type: "text", text: t });
+              if (t) {
+                contentSegments.push({ type: "text", text: t });
+                stepTextParts.push(t);
+              }
             } else if (part?.type === "tool-call") {
               const toolName =
                 (part as any).toolName ?? (part as any).name ?? "unknown";
@@ -302,6 +439,55 @@ async function chatHandler(request: NextRequest) {
                     : getToolTitle(toolName)),
                 toolName,
               });
+              await emitTurnEvent("tool_call", {
+                toolCallId,
+                toolName,
+                stepNumber,
+                destination,
+              });
+            }
+          }
+          debugChatStream("step-finish-summary", {
+            chatId,
+            turnRunId: turnRunId ?? null,
+            stepNumber,
+            stepTextPartsCount: stepTextParts.length,
+            stepTextTotalLength: stepTextParts.reduce((sum, t) => sum + t.length, 0),
+            contentPartsCount: content.length,
+            staticResultsCount: staticResults.length,
+          });
+
+          // Fallback for providers/paths where onChunk doesn't emit text deltas:
+          // emit only the assistant suffix that wasn't emitted yet.
+          if (stepTextParts.length > 0) {
+            if (liveTextFlushTimer) {
+              clearTimeout(liveTextFlushTimer);
+              liveTextFlushTimer = null;
+            }
+            await flushLiveTextDelta();
+
+            const aggregated = contentSegments
+              .filter(
+                (segment): segment is Extract<ContentSegment, { type: "text" }> =>
+                  segment.type === "text"
+              )
+              .map((segment) => segment.text)
+              .join("");
+
+            if (aggregated.length > emittedAssistantChars) {
+              const fallbackDelta = aggregated.slice(emittedAssistantChars);
+              if (fallbackDelta) {
+                emittedAssistantChars += fallbackDelta.length;
+                debugChatStream("fallback-step-delta", {
+                  chatId,
+                  turnRunId: turnRunId ?? null,
+                  stepNumber,
+                  fallbackLength: fallbackDelta.length,
+                  emittedAssistantChars,
+                  fallbackPreview: fallbackDelta.slice(0, 120),
+                });
+                await emitTurnEvent("text_delta", { text: fallbackDelta });
+              }
             }
           }
 
@@ -317,6 +503,12 @@ async function chatHandler(request: NextRequest) {
               toolCallId,
               output: res,
             });
+            await emitTurnEvent("tool_result", {
+              toolCallId,
+              toolName,
+              stepNumber,
+              result: res,
+            });
 
             if (BUILDER_TOOLS.has(toolName)) {
               const output = (res as any).output ?? (res as any).result ?? res;
@@ -325,6 +517,11 @@ async function chatHandler(request: NextRequest) {
                   chatId,
                   revisionNumber: Number(output.revisionNumber),
                 };
+                await emitTurnEvent("preview_update", {
+                  chatId,
+                  revisionNumber: Number(output.revisionNumber),
+                  revisionId: Number(output.revisionId ?? output.versionId ?? 0),
+                });
               }
             }
           }
@@ -333,7 +530,21 @@ async function chatHandler(request: NextRequest) {
         }
       },
       onFinish: async () => {
+        if (liveTextFlushTimer) {
+          clearTimeout(liveTextFlushTimer);
+          liveTextFlushTimer = null;
+        }
+        await flushLiveTextDelta();
+
         const finalText = buildOrderedAssistantContent(contentSegments);
+        debugChatStream("run-finish", {
+          chatId,
+          turnRunId: turnRunId ?? null,
+          contentSegments: contentSegments.length,
+          finalTextLength: finalText.length,
+          emittedAssistantChars,
+          finalTextPreview: finalText.slice(0, 160),
+        });
         if (finalText) {
           try {
             await createChatMessage({
@@ -347,6 +558,14 @@ async function chatHandler(request: NextRequest) {
           }
         }
         await billingSession.markSucceeded();
+        if (turnRunId) {
+          await markChatTurnRunSucceeded(turnRunId);
+          await emitTurnEvent("run_completed", {
+            chatId,
+            turnRunId,
+            hasAssistantText: Boolean(finalText),
+          });
+        }
         updateActiveObservation({ output: finalText || undefined });
         updateActiveTrace({ output: finalText || undefined });
         trace.getActiveSpan()?.end();
@@ -360,8 +579,30 @@ async function chatHandler(request: NextRequest) {
         }
       },
       onError: async (error) => {
+        if (liveTextFlushTimer) {
+          clearTimeout(liveTextFlushTimer);
+          liveTextFlushTimer = null;
+        }
+        await flushLiveTextDelta();
+
         const errMsg = error instanceof Error ? error.message : String(error);
+        debugChatStream("run-error", {
+          chatId,
+          turnRunId: turnRunId ?? null,
+          error: errMsg,
+        });
         await billingSession.markFailed(errMsg);
+        if (turnRunId) {
+          await markChatTurnRunFailed({
+            runId: turnRunId,
+            errorMessage: errMsg,
+          });
+          await emitTurnEvent("run_failed", {
+            chatId,
+            turnRunId,
+            error: errMsg,
+          });
+        }
         updateActiveObservation({ output: errMsg, level: "ERROR" });
         updateActiveTrace({ output: errMsg });
         trace.getActiveSpan()?.end();

@@ -35,6 +35,7 @@
     "@radix-ui/react-use-controllable-state": "^1.2.2",
     "@tailwindcss/postcss": "4.1.7",
     "@tanstack/react-virtual": "^3.13.13",
+    "@trigger.dev/sdk": "4.4.3",
     "@types/node": "^22.15.18",
     "@types/react": "19.1.4",
     "@types/react-dom": "19.1.5",
@@ -53,6 +54,7 @@
     "esbuild": "^0.27.3",
     "face-api.js": "^0.22.2",
     "gsap": "^3.14.2",
+    "import-in-the-middle": "^3.0.0",
     "jose": "^6.0.11",
     "lucide-react": "^0.511.0",
     "motion": "^12.23.12",
@@ -66,10 +68,11 @@
     "radix-ui": "^1.4.2",
     "react": "19.1.0",
     "react-dom": "19.1.0",
-    "react-router-dom": "^6.28.0",
     "react-resizable-panels": "^4.0.15",
+    "react-router-dom": "^6.28.0",
     "react-shaders": "^0.0.4",
     "react-textarea-autosize": "^8.5.9",
+    "require-in-the-middle": "^8.0.1",
     "server-only": "^0.0.1",
     "shiki": "^3.20.0",
     "streamdown": "^1.6.10",
@@ -86,6 +89,9 @@
     "zustand": "4.5.7"
   },
   "devDependencies": {
-    "prettier": "^3.7.4"
+    "@trigger.dev/build": "4.4.3",
+    "baseline-browser-mapping": "^2.10.10",
+    "prettier": "^3.7.4",
+    "trigger.dev": "^4.4.3"
   }
 }

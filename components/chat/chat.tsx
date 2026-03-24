@@ -1,8 +1,6 @@
 "use client";
 
-import { useState, useMemo, useRef, useEffect, useCallback } from "react";
-import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport } from "ai";
+import { useState, useRef, useEffect, useCallback } from "react";
 import type { UIMessage } from "ai";
 import useSWR from "swr";
 import { WelcomeMessage } from "./welcome-message";
@@ -19,6 +17,17 @@ import type { BillingApiResponse } from "@/app/api/billing/route";
 
 const billingFetcher = (url: string) => fetch(url).then((res) => res.json());
 const MIN_CREDITS_TO_SEND = 0.5;
+const CHAT_PENDING_DEBUG_ENABLED =
+  process.env.NEXT_PUBLIC_CHAT_DEBUG_PENDING === "1";
+
+function debugPendingFlow(message: string, payload?: Record<string, unknown>) {
+  if (!CHAT_PENDING_DEBUG_ENABLED) return;
+  if (payload) {
+    console.log(`[chat-pending-debug] ${message}`, payload);
+    return;
+  }
+  console.log(`[chat-pending-debug] ${message}`);
+}
 
 type PendingAttachment = {
   localId: string;
@@ -30,6 +39,15 @@ type PendingAttachment = {
   altHint?: string | null;
   label?: string | null;
   isUploading?: boolean;
+};
+
+type StreamEnvelope = {
+  id: number;
+  chatId: number;
+  runId: string;
+  eventType: string;
+  payload: Record<string, any>;
+  createdAt: string;
 };
 
 interface ChatProps {
@@ -45,14 +63,30 @@ export function Chat({ chatId: providedChatId }: ChatProps = {}) {
 }
 
 function ChatWithHistory({ chatId }: { chatId: string }) {
+  const pendingForMountRef = useRef(false);
   const [initialMessages, setInitialMessages] = useState<UIMessage[] | null>(
-    null
+    () => {
+      const pending = usePendingMessageStore.getState().pendingMessage;
+      pendingForMountRef.current = pending != null && pending.chatId === chatId;
+      debugPendingFlow("ChatWithHistory initial pending snapshot", {
+        chatId,
+        pendingChatId: pending?.chatId ?? null,
+        hasPending: Boolean(pending),
+      });
+      return pendingForMountRef.current ? [] : null;
+    }
   );
   const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    setInitialMessages(null);
+    const hasPendingForThisChat = pendingForMountRef.current;
+    debugPendingFlow("ChatWithHistory effect start", {
+      chatId,
+      pendingChatId: usePendingMessageStore.getState().pendingMessage?.chatId ?? null,
+      hasPendingForThisChat,
+    });
+    setInitialMessages(hasPendingForThisChat ? [] : null);
     setLoadError(null);
 
     (async () => {
@@ -66,12 +100,22 @@ function ChatWithHistory({ chatId }: { chatId: string }) {
         }
         const data = await res.json();
         if (!cancelled) {
+          debugPendingFlow("ChatWithHistory fetched history", {
+            chatId,
+            fetchedMessages: Array.isArray(data?.messages)
+              ? data.messages.length
+              : 0,
+          });
           setInitialMessages(
             Array.isArray(data?.messages) ? data.messages : []
           );
         }
       } catch (e) {
         if (!cancelled) {
+          debugPendingFlow("ChatWithHistory fetch failed", {
+            chatId,
+            error: e instanceof Error ? e.message : String(e),
+          });
           setLoadError(e instanceof Error ? e.message : "Failed to load chat");
           setInitialMessages([]);
         }
@@ -95,7 +139,13 @@ function ChatWithHistory({ chatId }: { chatId: string }) {
     console.warn(loadError);
   }
 
-  return <ChatInner chatId={chatId} initialMessages={initialMessages} />;
+  return (
+    <ChatInner
+      key={chatId}
+      chatId={chatId}
+      initialMessages={initialMessages}
+    />
+  );
 }
 
 function ChatInner({
@@ -161,26 +211,30 @@ function ChatInner({
     createNewChat();
   }, [chatId, isCreatingChat, providedChatId]);
 
-  const transport = useMemo(
-    () =>
-      new DefaultChatTransport({
-        api: "/api/chat",
-        async fetch(url, options) {
-          if (chatId && options?.body) {
-            const body = JSON.parse(options.body as string);
-            body.chatId = chatId;
-            options.body = JSON.stringify(body);
-          }
-          return fetch(url, options);
-        },
-      }),
-    [chatId]
-  );
-
   const [errorMessages, setErrorMessages] = useState<
     Array<{ id: string; message: string; userMessageId?: string }>
   >([]);
+  const [messages, setMessages] = useState<UIMessage[]>(initialMessages);
+  const [status, setStatus] = useState<"ready" | "submitted" | "streaming">(
+    "ready"
+  );
+  const activeAssistantMessageIdRef = useRef<string | null>(null);
+  const lastEventIdRef = useRef<number>(0);
+  const eventSourceRef = useRef<EventSource | null>(null);
+  const reconnectTimerRef = useRef<number | null>(null);
+  const streamInitializedRef = useRef(false);
   const toolErrorKeysRef = useRef<Set<string>>(new Set());
+  const loadMessages = useCallback(async () => {
+    if (!chatId) return;
+    const res = await fetch(
+      `/api/chats/${encodeURIComponent(chatId)}/messages`
+    );
+    if (!res.ok) {
+      throw new Error("Failed to load chat messages");
+    }
+    const data = await res.json();
+    setMessages(Array.isArray(data?.messages) ? data.messages : []);
+  }, [chatId]);
 
   const buildUserMessageParts = (
     text: string,
@@ -214,46 +268,148 @@ function ChatInner({
       (part) => part.type === "text" || part.type === "file"
     ) as UIMessage["parts"];
 
-  const { messages, sendMessage, status } = useChat({
-    messages: initialMessages,
-    transport,
-    onError: (error) => {
-      const errorMessage =
-        error.message || "An error occurred. Please try again.";
-      const lastUserMessage = [...messages]
-        .reverse()
-        .find((m) => m.role === "user");
-      setErrorMessages((prev) => [
+  useEffect(() => {
+    setMessages((prev) => {
+      if (initialMessages.length === 0 && prev.length > 0) {
+        return prev;
+      }
+      return initialMessages;
+    });
+  }, [initialMessages]);
+
+  const enqueueTurnRun = useCallback(
+    async (parts: UIMessage["parts"]) => {
+      if (!chatId || parts.length === 0) return;
+      debugPendingFlow("enqueueTurnRun called", {
+        chatId,
+        partsCount: parts.length,
+        textChars: parts
+          .filter((p) => p.type === "text")
+          .map((p) => (p as { type: "text"; text: string }).text)
+          .join("").length,
+      });
+
+      const userMessageId = `local-user-${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2)}`;
+      const assistantMessageId = `local-assistant-${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2)}`;
+      activeAssistantMessageIdRef.current = assistantMessageId;
+
+      setMessages((prev) => [
         ...prev,
         {
-          id: `error-${Date.now()}-${Math.random()}`,
-          message: errorMessage,
-          userMessageId: lastUserMessage?.id,
+          id: userMessageId,
+          role: "user",
+          parts,
+        },
+        {
+          id: assistantMessageId,
+          role: "assistant",
+          parts: [{ type: "text", text: "" }],
         },
       ]);
-    },
-  });
 
-  const statusRef = useRef(status);
+      setStatus("submitted");
+      showPreviewLoader("Generating website...");
+
+      const idempotencyKey = `turn-${chatId}-${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2, 10)}`;
+
+      const response = await fetch(
+        `/api/chats/${encodeURIComponent(chatId)}/turn-runs`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            payload: {
+              chatId,
+              messages: [{ role: "user", parts }],
+            },
+            idempotencyKey,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        const errMsg =
+          data?.error || `Failed to queue generation (${response.status})`;
+        setErrorMessages((prev) => [
+          ...prev,
+          {
+            id: `error-${Date.now()}-${Math.random()}`,
+            message: errMsg,
+            userMessageId,
+          },
+        ]);
+        setStatus("ready");
+        hidePreviewLoader();
+        debugPendingFlow("enqueueTurnRun failed", {
+          chatId,
+          status: response.status,
+          error: errMsg,
+        });
+        return;
+      }
+
+      await response.json().catch(() => null);
+      debugPendingFlow("enqueueTurnRun accepted", {
+        chatId,
+      });
+      setStatus("streaming");
+    },
+    [chatId]
+  );
+
   useEffect(() => {
     if (
       chatId &&
       pendingMessage &&
       pendingMessage.chatId === chatId &&
-      messages.length === 0 &&
-      status !== "streaming" &&
-      status !== "submitted"
+      status === "ready"
     ) {
-      if (consumedPendingIdsRef.current.has(pendingMessage.id)) return;
+      const consumedStorageKey = `pending-consumed:${pendingMessage.id}`;
+      const alreadyConsumedInSession =
+        typeof window !== "undefined" &&
+        window.sessionStorage.getItem(consumedStorageKey) === "1";
+      debugPendingFlow("pending consume effect candidate", {
+        chatId,
+        pendingId: pendingMessage.id,
+        pendingChatId: pendingMessage.chatId,
+        currentMessages: messages.length,
+        status,
+        alreadyConsumedInSession,
+      });
+      if (
+        consumedPendingIdsRef.current.has(pendingMessage.id) ||
+        alreadyConsumedInSession
+      ) {
+        return;
+      }
 
       if (!hasCredits) {
         consumedPendingIdsRef.current.add(pendingMessage.id);
+        if (typeof window !== "undefined") {
+          window.sessionStorage.setItem(consumedStorageKey, "1");
+        }
         setPendingMessage(null);
         setShowCreditsLimitModal(true);
+        debugPendingFlow("pending blocked by credits", {
+          chatId,
+          pendingId: pendingMessage.id,
+        });
         return;
       }
 
       consumedPendingIdsRef.current.add(pendingMessage.id);
+      if (typeof window !== "undefined") {
+        window.sessionStorage.setItem(consumedStorageKey, "1");
+      }
       setPendingMessage(null);
 
       const parts: UIMessage["parts"] = [];
@@ -277,17 +433,19 @@ function ChatInner({
       }
       if (parts.length === 0) return;
       lastUserMessagePartsRef.current = parts;
-      sendMessage({
-        role: "user",
-        parts,
+      debugPendingFlow("pending consumed -> enqueue", {
+        chatId,
+        pendingId: pendingMessage.id,
+        partsCount: parts.length,
       });
+      void enqueueTurnRun(parts);
     }
   }, [
     chatId,
     pendingMessage,
     messages.length,
     status,
-    sendMessage,
+    enqueueTurnRun,
     setPendingMessage,
     billing,
   ]);
@@ -485,10 +643,7 @@ function ChatInner({
       return [];
     });
     setAttachmentError(null);
-    sendMessage({
-      role: "user",
-      parts,
-    });
+    void enqueueTurnRun(parts);
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -520,169 +675,246 @@ function ChatInner({
 
     setErrorMessages((prev) => prev.filter((e) => e.id !== errorMessageId));
     lastUserMessagePartsRef.current = partsToRetry;
-
-    sendMessage({
-      role: "user",
-      parts: partsToRetry,
-    });
+    void enqueueTurnRun(partsToRetry);
   };
 
   useEffect(() => {
-    let newestSuccessful: {
-      versionId: number;
-      versionNumber: number;
-      chatId: string;
-    } | null = null;
-    let newestFailure: { error: string; toolCallId?: string } | null = null;
-    const lastUserMessageId = [...messages]
-      .reverse()
-      .find((m) => m.role === "user")?.id;
+    if (!chatId) return;
 
-    const builderToolNames = new Set([
-      "create_site",
-      "create_section",
-      "generate_landing_page_code",
-    ]);
+    let cancelled = false;
+    streamInitializedRef.current = false;
+    lastEventIdRef.current = 0;
 
-    const isBuilderTool = (toolName: unknown) =>
-      typeof toolName === "string" && builderToolNames.has(toolName);
+    const upsertAssistantText = (deltaText: string) => {
+      const text = String(deltaText || "");
+      if (!text) return;
+      const assistantId =
+        activeAssistantMessageIdRef.current ||
+        `local-assistant-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      activeAssistantMessageIdRef.current = assistantId;
 
-    const extractVersionLike = (result: any) => {
-      if (!result || result.success !== true) return null;
-      const id = result.revisionId ?? result.versionId;
-      const num = result.revisionNumber ?? result.versionNumber;
-      if (!id || !num) return null;
-      return { versionId: Number(id), versionNumber: Number(num) };
+      setMessages((prev) => {
+        const idx = prev.findIndex((m) => m.id === assistantId);
+        if (idx === -1) {
+          return [
+            ...prev,
+            {
+              id: assistantId,
+              role: "assistant",
+              parts: [{ type: "text", text }],
+            },
+          ];
+        }
+        const next = [...prev];
+        const message = { ...next[idx] };
+        const parts = [...message.parts];
+        const textPartIdx = parts.findIndex((p) => p.type === "text");
+        if (textPartIdx === -1) {
+          parts.push({ type: "text", text });
+        } else {
+          const existing = (
+            parts[textPartIdx] as { type: "text"; text: string }
+          ).text;
+          parts[textPartIdx] = { type: "text", text: `${existing}${text}` };
+        }
+        message.parts = parts;
+        next[idx] = message;
+        return next;
+      });
     };
 
-    for (const message of messages) {
-      if (message.role !== "assistant") continue;
-
-      for (const part of message.parts as any[]) {
-        const partType = String(part?.type || "");
-
-        if (partType === "tool-call" && isBuilderTool(part?.toolName)) {
-          const toolCallId = String(
-            part?.toolCallId || part?.toolName || "tool"
-          );
-          if (!previewLoaderShownForToolCallIdsRef.current.has(toolCallId)) {
-            previewLoaderShownForToolCallIdsRef.current.add(toolCallId);
-            showPreviewLoader("Generating website...");
-          }
+    const appendAssistantPart = (part: any) => {
+      const assistantId =
+        activeAssistantMessageIdRef.current ||
+        `local-assistant-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      activeAssistantMessageIdRef.current = assistantId;
+      setMessages((prev) => {
+        const idx = prev.findIndex((m) => m.id === assistantId);
+        if (idx === -1) {
+          return [
+            ...prev,
+            { id: assistantId, role: "assistant", parts: [part] },
+          ];
         }
+        const next = [...prev];
+        const message = { ...next[idx], parts: [...next[idx]!.parts, part] };
+        next[idx] = message;
+        return next;
+      });
+    };
 
-        if (partType.startsWith("tool-")) {
-          const toolName = partType.replace("tool-", "");
-          if (isBuilderTool(toolName)) {
-            const hasResult = "result" in part || "output" in part;
-            if (!hasResult) {
-              const toolCallId = String(part?.toolCallId || toolName || "tool");
-              if (
-                !previewLoaderShownForToolCallIdsRef.current.has(toolCallId)
-              ) {
-                previewLoaderShownForToolCallIdsRef.current.add(toolCallId);
-                showPreviewLoader("Generating website...");
-              }
-            }
-          }
-        }
+    const handleEnvelope = (envelope: StreamEnvelope) => {
+      if (envelope.id <= lastEventIdRef.current) return;
+      lastEventIdRef.current = envelope.id;
 
-        if (partType === "tool-result" && isBuilderTool(part?.toolName)) {
-          const result = part?.result ?? part?.output ?? null;
-          const extracted = extractVersionLike(result);
-          if (extracted) {
-            const candidate = {
-              versionId: extracted.versionId,
-              versionNumber: extracted.versionNumber,
-              chatId: String(chatId || ""),
-            };
-            if (
-              !newestSuccessful ||
-              candidate.versionNumber > newestSuccessful.versionNumber
-            ) {
-              newestSuccessful = candidate;
-            }
-          }
-          if (
-            result?.success === false &&
-            typeof result?.error === "string" &&
-            result.error
-          ) {
-            newestFailure = {
-              error: result.error,
-              toolCallId: String(part?.toolCallId || ""),
-            };
-          }
-        }
+      const payload = envelope.payload ?? {};
+      const eventType = envelope.eventType;
 
-        if (partType.startsWith("tool-")) {
-          const toolName = partType.replace("tool-", "");
-          if (!isBuilderTool(toolName)) continue;
-          const result = part?.result ?? part?.output ?? null;
-          const extracted = extractVersionLike(result);
-          if (extracted) {
-            const candidate = {
-              versionId: extracted.versionId,
-              versionNumber: extracted.versionNumber,
-              chatId: String(chatId || ""),
-            };
-            if (
-              !newestSuccessful ||
-              candidate.versionNumber > newestSuccessful.versionNumber
-            ) {
-              newestSuccessful = candidate;
-            }
-          }
-          if (
-            result?.success === false &&
-            typeof result?.error === "string" &&
-            result.error
-          ) {
-            newestFailure = {
-              error: result.error,
-              toolCallId: String(part?.toolCallId || ""),
-            };
-          }
-        }
+      if (eventType === "run_enqueued") {
+        return;
       }
-    }
-
-    if (newestFailure?.error) {
-      const key = `${newestFailure.toolCallId || "tool"}:${newestFailure.error}`;
-      if (!toolErrorKeysRef.current.has(key)) {
-        toolErrorKeysRef.current.add(key);
+      if (eventType === "run_started") {
+        setStatus("streaming");
+        showPreviewLoader("Generating website...");
+        return;
+      }
+      if (eventType === "text_delta") {
+        setStatus("streaming");
+        upsertAssistantText(String(payload.text ?? ""));
+        return;
+      }
+      if (eventType === "tool_call") {
+        const toolCallId = String(payload.toolCallId ?? "");
+        const toolName = String(payload.toolName ?? "unknown");
+        const destination =
+          typeof payload.destination === "string"
+            ? payload.destination
+            : undefined;
+        if (toolCallId) {
+          previewLoaderShownForToolCallIdsRef.current.add(toolCallId);
+        }
+        appendAssistantPart({
+          type: "tool-call",
+          toolCallId,
+          toolName,
+          args: destination ? { destination } : undefined,
+        });
+        return;
+      }
+      if (eventType === "tool_result") {
+        const toolCallId = String(payload.toolCallId ?? "");
+        const toolName = String(payload.toolName ?? "unknown");
+        const result = payload.result ?? null;
+        appendAssistantPart({
+          type: "tool-result",
+          toolCallId,
+          toolName,
+          result,
+        });
+        if (
+          result?.success === false &&
+          typeof result?.error === "string" &&
+          result.error
+        ) {
+          const key = `${toolCallId || "tool"}:${result.error}`;
+          if (!toolErrorKeysRef.current.has(key)) {
+            toolErrorKeysRef.current.add(key);
+            setErrorMessages((prev) => [
+              ...prev,
+              {
+                id: `tool-error-${Date.now()}-${Math.random()}`,
+                message: `Generation failed: ${result.error}`,
+              },
+            ]);
+          }
+        }
+        return;
+      }
+      if (eventType === "preview_update") {
+        const versionNumber = Number(payload.revisionNumber ?? 0);
+        const versionId = Number(payload.revisionId ?? 0);
+        if (versionId && versionNumber && chatId) {
+          if (lastPreviewVersionIdRef.current !== versionId) {
+            lastPreviewVersionIdRef.current = versionId;
+            updatePreviewPanel(versionId, versionNumber, chatId);
+          }
+        }
+        return;
+      }
+      if (eventType === "run_completed") {
+        setStatus("ready");
+        hidePreviewLoader();
+        activeAssistantMessageIdRef.current = null;
+        void loadMessages();
+        return;
+      }
+      if (eventType === "run_failed") {
+        setStatus("ready");
+        hidePreviewLoader();
+        activeAssistantMessageIdRef.current = null;
+        const err = String(payload.error ?? "Generation failed");
         setErrorMessages((prev) => [
           ...prev,
           {
-            id: `tool-error-${Date.now()}-${Math.random()}`,
-            message: `Generation failed: ${newestFailure.error}`,
-            userMessageId: lastUserMessageId,
+            id: `error-${Date.now()}-${Math.random()}`,
+            message: err,
           },
         ]);
       }
-    }
+    };
 
-    const isTurnFinished = status !== "streaming" && status !== "submitted";
-    if (!isTurnFinished) return;
+    const connect = (afterEventId: number) => {
+      const source = new EventSource(
+        `/api/chats/${encodeURIComponent(chatId)}/stream?afterEventId=${afterEventId}`
+      );
+      eventSourceRef.current = source;
 
-    if (newestSuccessful?.versionId && newestSuccessful.chatId) {
-      if (lastPreviewVersionIdRef.current !== newestSuccessful.versionId) {
-        lastPreviewVersionIdRef.current = newestSuccessful.versionId;
-        updatePreviewPanel(
-          newestSuccessful.versionId,
-          newestSuccessful.versionNumber,
-          newestSuccessful.chatId
-        );
-      } else {
-        hidePreviewLoader();
+      const eventTypes = [
+        "run_enqueued",
+        "run_started",
+        "text_delta",
+        "tool_call",
+        "tool_result",
+        "preview_update",
+        "run_completed",
+        "run_failed",
+      ];
+
+      const listener = (event: MessageEvent) => {
+        try {
+          const envelope = JSON.parse(event.data) as StreamEnvelope;
+          handleEnvelope(envelope);
+        } catch {
+          // ignore malformed event
+        }
+      };
+
+      for (const eventType of eventTypes) {
+        source.addEventListener(eventType, listener as EventListener);
       }
-      return;
-    }
 
-    if (newestFailure?.error) {
-      hidePreviewLoader();
-    }
-  }, [messages, status]);
+      source.onerror = () => {
+        source.close();
+        if (cancelled) return;
+        reconnectTimerRef.current = window.setTimeout(() => {
+          connect(lastEventIdRef.current);
+        }, 1200);
+      };
+    };
+
+    const bootstrap = async () => {
+      if (!streamInitializedRef.current) {
+        try {
+          const res = await fetch(
+            `/api/chats/${encodeURIComponent(chatId)}/turn-runs?latest=1`
+          );
+          const data = await res.json().catch(() => null);
+          const latestId = Number(data?.event?.id ?? 0);
+          if (Number.isFinite(latestId) && latestId > 0) {
+            lastEventIdRef.current = latestId;
+          }
+        } catch {
+          // fallback to 0 when latest lookup fails
+        }
+        streamInitializedRef.current = true;
+      }
+      connect(lastEventIdRef.current);
+    };
+
+    void bootstrap();
+
+    return () => {
+      cancelled = true;
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+      if (reconnectTimerRef.current != null) {
+        window.clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+    };
+  }, [chatId, loadMessages]);
 
   useEffect(() => {
     const lastMessage = messages[messages.length - 1];
