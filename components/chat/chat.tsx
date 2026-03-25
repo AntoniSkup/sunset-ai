@@ -748,12 +748,7 @@ function ChatInner({
       destination?: string;
     }) => {
       if (!toolCallId) {
-        appendAssistantPart({
-          type: "tool-call",
-          toolCallId,
-          toolName,
-          args: destination ? { destination } : undefined,
-        });
+        // Skip anonymous tool-call parts to avoid permanent fallback labels.
         return;
       }
 
@@ -856,6 +851,17 @@ function ChatInner({
         const toolCallId = String(payload.toolCallId ?? "");
         const toolName = String(payload.toolName ?? "unknown");
         const result = payload.result ?? null;
+        const destination =
+          typeof result?.destination === "string"
+            ? String(result.destination)
+            : undefined;
+        if (toolCallId && destination) {
+          upsertAssistantToolCallPart({
+            toolCallId,
+            toolName,
+            destination,
+          });
+        }
         appendAssistantPart({
           type: "tool-result",
           toolCallId,

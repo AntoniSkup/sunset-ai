@@ -69,14 +69,39 @@ function getToolTitle(toolName: string): string {
 
 function getDestinationFromToolCall(call: unknown): string | null {
   const c = call as any;
-  const dest =
-    c?.args?.destination ??
-    c?.input?.destination ??
-    c?.arguments?.destination ??
-    c?.parameters?.destination;
-  if (typeof dest !== "string") return null;
-  const trimmed = dest.trim();
-  return trimmed ? trimmed : null;
+  const normalize = (value: unknown): string | null => {
+    if (typeof value !== "string") return null;
+    const trimmed = value.trim();
+    return trimmed || null;
+  };
+
+  const fromObject = (obj: unknown): string | null => {
+    if (!obj || typeof obj !== "object") return null;
+    return normalize((obj as Record<string, unknown>).destination);
+  };
+
+  const fromMaybeJson = (value: unknown): string | null => {
+    const direct = fromObject(value);
+    if (direct) return direct;
+    if (typeof value !== "string") return null;
+    try {
+      return fromObject(JSON.parse(value));
+    } catch {
+      return null;
+    }
+  };
+
+  return (
+    fromMaybeJson(c?.input) ??
+    fromMaybeJson(c?.args) ??
+    fromMaybeJson(c?.arguments) ??
+    fromMaybeJson(c?.parameters) ??
+    fromMaybeJson(c?.chunk?.input) ??
+    fromMaybeJson(c?.chunk?.args) ??
+    fromMaybeJson(c?.chunk?.arguments) ??
+    fromMaybeJson(c?.chunk?.parameters) ??
+    null
+  );
 }
 
 function escapeToolAttr(value: string): string {
@@ -126,10 +151,8 @@ function getToolCallIdFromChunkEvent(evt: any): string | null {
   const id =
     evt?.toolCallId ??
     evt?.tool_call_id ??
-    evt?.id ??
     evt?.chunk?.toolCallId ??
     evt?.chunk?.tool_call_id ??
-    evt?.chunk?.id ??
     null;
   if (typeof id !== "string") return null;
   const trimmed = id.trim();
