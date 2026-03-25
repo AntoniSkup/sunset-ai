@@ -7,11 +7,7 @@ import { WelcomeMessage } from "./welcome-message";
 import { MessageList } from "./message-list";
 import { ChatInput } from "./chat-input";
 import { CreditsLimitModal } from "./credits-limit-modal";
-import {
-  showPreviewLoader,
-  hidePreviewLoader,
-  updatePreviewPanel,
-} from "@/lib/preview/update-preview";
+import { updatePreviewPanel } from "@/lib/preview/update-preview";
 import { usePendingMessageStore } from "@/lib/stores/usePendingMessageStore";
 import type { BillingApiResponse } from "@/app/api/billing/route";
 
@@ -167,7 +163,10 @@ function ChatInner({
   const lastUserMessageRef = useRef<string>("");
   const lastUserMessagePartsRef = useRef<UIMessage["parts"]>([]);
   const lastPreviewVersionIdRef = useRef<number | null>(null);
-  const previewLoaderShownForToolCallIdsRef = useRef<Set<string>>(new Set());
+  const pendingPreviewUpdateRef = useRef<{
+    versionId: number;
+    versionNumber: number;
+  } | null>(null);
   const pendingMessage = usePendingMessageStore((s) => s.pendingMessage);
   const setPendingMessage = usePendingMessageStore((s) => s.setPendingMessage);
   const consumedPendingIdsRef = useRef<Set<string>>(new Set());
@@ -309,7 +308,6 @@ function ChatInner({
       ]);
 
       setStatus("submitted");
-      showPreviewLoader("Generating website...");
 
       const idempotencyKey = `turn-${chatId}-${Date.now()}-${Math.random()
         .toString(36)
@@ -345,7 +343,6 @@ function ChatInner({
           },
         ]);
         setStatus("ready");
-        hidePreviewLoader();
         debugPendingFlow("enqueueTurnRun failed", {
           chatId,
           status: response.status,
@@ -710,7 +707,10 @@ function ChatInner({
           parts.push({ type: "text", text });
         } else {
           const existing = (lastPart as { type: "text"; text: string }).text;
-          parts[parts.length - 1] = { type: "text", text: `${existing}${text}` };
+          parts[parts.length - 1] = {
+            type: "text",
+            text: `${existing}${text}`,
+          };
         }
         message.parts = parts;
         next[idx] = message;
@@ -738,6 +738,87 @@ function ChatInner({
       });
     };
 
+    const upsertAssistantToolCallPart = ({
+      toolCallId,
+      toolName,
+      destination,
+    }: {
+      toolCallId: string;
+      toolName: string;
+      destination?: string;
+    }) => {
+      if (!toolCallId) {
+        appendAssistantPart({
+          type: "tool-call",
+          toolCallId,
+          toolName,
+          args: destination ? { destination } : undefined,
+        });
+        return;
+      }
+
+      const assistantId =
+        activeAssistantMessageIdRef.current ||
+        `local-assistant-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      activeAssistantMessageIdRef.current = assistantId;
+
+      setMessages((prev) => {
+        const idx = prev.findIndex((m) => m.id === assistantId);
+        if (idx === -1) {
+          return [
+            ...prev,
+            {
+              id: assistantId,
+              role: "assistant",
+              parts: [
+                {
+                  type: "tool-call",
+                  toolCallId,
+                  toolName,
+                  args: destination ? { destination } : undefined,
+                },
+              ],
+            } as any,
+          ];
+        }
+
+        const next = [...prev];
+        const message = { ...next[idx] };
+        const parts = [...message.parts];
+        const existingIdx = parts.findIndex(
+          (p: any) => p?.type === "tool-call" && p?.toolCallId === toolCallId
+        );
+
+        if (existingIdx === -1) {
+          parts.push({
+            type: "tool-call",
+            toolCallId,
+            toolName,
+            args: destination ? { destination } : undefined,
+          } as any);
+        } else {
+          const existing = parts[existingIdx] as any;
+          parts[existingIdx] = {
+            ...existing,
+            toolName:
+              typeof existing?.toolName === "string" &&
+              existing.toolName.length > 0 &&
+              existing.toolName !== "unknown"
+                ? existing.toolName
+                : toolName,
+            args:
+              destination && (!existing?.args || !existing.args.destination)
+                ? { ...(existing?.args ?? {}), destination }
+                : existing?.args,
+          } as any;
+        }
+
+        message.parts = parts;
+        next[idx] = message;
+        return next;
+      });
+    };
+
     const handleEnvelope = (envelope: StreamEnvelope) => {
       if (envelope.id <= lastEventIdRef.current) return;
       lastEventIdRef.current = envelope.id;
@@ -750,7 +831,6 @@ function ChatInner({
       }
       if (eventType === "run_started") {
         setStatus("streaming");
-        showPreviewLoader("Generating website...");
         return;
       }
       if (eventType === "text_delta") {
@@ -765,14 +845,10 @@ function ChatInner({
           typeof payload.destination === "string"
             ? payload.destination
             : undefined;
-        if (toolCallId) {
-          previewLoaderShownForToolCallIdsRef.current.add(toolCallId);
-        }
-        appendAssistantPart({
-          type: "tool-call",
+        upsertAssistantToolCallPart({
           toolCallId,
           toolName,
-          args: destination ? { destination } : undefined,
+          destination,
         });
         return;
       }
@@ -809,23 +885,33 @@ function ChatInner({
         const versionNumber = Number(payload.revisionNumber ?? 0);
         const versionId = Number(payload.revisionId ?? 0);
         if (versionId && versionNumber && chatId) {
-          if (lastPreviewVersionIdRef.current !== versionId) {
-            lastPreviewVersionIdRef.current = versionId;
-            updatePreviewPanel(versionId, versionNumber, chatId);
-          }
+          pendingPreviewUpdateRef.current = { versionId, versionNumber };
         }
         return;
       }
       if (eventType === "run_completed") {
+        const pendingPreview = pendingPreviewUpdateRef.current;
+        if (
+          pendingPreview &&
+          chatId &&
+          lastPreviewVersionIdRef.current !== pendingPreview.versionId
+        ) {
+          lastPreviewVersionIdRef.current = pendingPreview.versionId;
+          updatePreviewPanel(
+            pendingPreview.versionId,
+            pendingPreview.versionNumber,
+            chatId
+          );
+        }
+        pendingPreviewUpdateRef.current = null;
         setStatus("ready");
-        hidePreviewLoader();
         activeAssistantMessageIdRef.current = null;
         void loadMessages();
         return;
       }
       if (eventType === "run_failed") {
+        pendingPreviewUpdateRef.current = null;
         setStatus("ready");
-        hidePreviewLoader();
         activeAssistantMessageIdRef.current = null;
         const err = String(payload.error ?? "Generation failed");
         setErrorMessages((prev) => [

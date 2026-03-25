@@ -21,12 +21,12 @@ type RenderToken =
   | { type: "text"; text: string }
   | { type: "tool-marker"; id: string; title: string; toolName: string }
   | {
-    type: "tool-call";
-    toolCallId: string;
-    toolName: string;
-    isComplete: boolean;
-    destination?: string;
-  };
+      type: "tool-call";
+      toolCallId: string;
+      toolName: string;
+      isComplete: boolean;
+      destination?: string;
+    };
 
 function unescapeAttr(value: string): string {
   return value
@@ -78,9 +78,7 @@ function tokenizeTextWithToolMarkers(text: string): RenderToken[] {
 
   return tokens
     .map((t) =>
-      t.type === "text"
-        ? { ...t, text: t.text.replace(/\n{3,}/g, "\n\n") }
-        : t
+      t.type === "text" ? { ...t, text: t.text.replace(/\n{3,}/g, "\n\n") } : t
     )
     .filter((t) => (t.type === "text" ? t.text.trim().length > 0 : true));
 }
@@ -166,7 +164,8 @@ function buildRenderTokens(message: UIMessage): RenderToken[] {
         type: "tool-call",
         toolCallId,
         toolName,
-        isComplete: hasResult || !!(toolCallId && hasResultById.get(toolCallId)),
+        isComplete:
+          hasResult || !!(toolCallId && hasResultById.get(toolCallId)),
         destination,
       });
       continue;
@@ -206,7 +205,9 @@ export const MessageItem = React.memo(function MessageItem({
             {tokens.map((t, idx) => {
               switch (t.type) {
                 case "text":
-                  return <MessageResponse key={`t-${idx}`}>{t.text}</MessageResponse>;
+                  return (
+                    <MessageResponse key={`t-${idx}`}>{t.text}</MessageResponse>
+                  );
                 case "tool-marker":
                   return (
                     <div key={`m-${t.id || idx}`} className="my-1">
@@ -218,7 +219,8 @@ export const MessageItem = React.memo(function MessageItem({
                     </div>
                   );
                 case "tool-call": {
-                  const fileName = t.destination || getDefaultFileNameForTool(t.toolName);
+                  const fileName =
+                    t.destination || getDefaultFileNameForTool(t.toolName);
                   return (
                     <div key={`c-${t.toolCallId || idx}`} className="my-1">
                       <ToolCallIndicator

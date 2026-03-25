@@ -10,6 +10,7 @@ import {
   getUser,
   getUserById,
   getChatByPublicId,
+  getChatMessagesByPublicId,
   createChatMessage,
   createChatToolCall,
   getSiteAssetsByChatId,
@@ -274,11 +275,47 @@ async function chatHandler(request: NextRequest) {
       throw err;
     }
 
-    const modelMessages = await convertToModelMessages(
-      messages as Array<Omit<UIMessage, "id">>
-    );
+    const lastIncomingMessage = messages[messages.length - 1] as any;
+    if (
+      !isInternalJobCall &&
+      lastIncomingMessage?.role === "user" &&
+      Array.isArray(lastIncomingMessage.parts)
+    ) {
+      const persistedParts = sanitizePersistedMessageParts(lastIncomingMessage.parts);
+      const userText = extractTextFromMessageParts(persistedParts);
+      if (hasDisplayableMessageParts(persistedParts)) {
+        await createChatMessage({
+          chatId: chat.id,
+          role: "user",
+          content: userText.trim(),
+          parts: persistedParts,
+        });
 
-    const useLighterModel = await decideOnLighterModel(messages as Array<Omit<UIMessage, "id">>, {
+        if (!chat.title && userText.trim()) {
+          const title = await generateChatName(userText.trim(), {
+            userId: user.id,
+            chatId,
+          });
+          await updateChatByPublicId(chatId, user.id, { title });
+        }
+      }
+    }
+
+    const persistedContext = await getChatMessagesByPublicId(chatId, user.id);
+    const contextMessages: Array<Omit<UIMessage, "id">> =
+      persistedContext?.messages?.length
+        ? persistedContext.messages.map((m) => {
+            const parts = sanitizePersistedMessageParts(m.parts);
+            return {
+              role: m.role as UIMessage["role"],
+              parts: parts.length > 0 ? parts : [{ type: "text", text: m.content ?? "" }],
+            };
+          })
+        : (messages as Array<Omit<UIMessage, "id">>);
+
+    const modelMessages = await convertToModelMessages(contextMessages);
+
+    const useLighterModel = await decideOnLighterModel(contextMessages, {
       userId: user.id,
       chatId,
     });
@@ -310,27 +347,7 @@ async function chatHandler(request: NextRequest) {
       create_section: createSectionToolCall,
     };
 
-    const lastMessage = messages[messages.length - 1] as any;
-    if (!isInternalJobCall && lastMessage?.role === "user" && Array.isArray(lastMessage.parts)) {
-      const persistedParts = sanitizePersistedMessageParts(lastMessage.parts);
-      const userText = extractTextFromMessageParts(persistedParts);
-      if (hasDisplayableMessageParts(persistedParts)) {
-        await createChatMessage({
-          chatId: chat.id,
-          role: "user",
-          content: userText.trim(),
-          parts: persistedParts,
-        });
-
-        if (!chat.title && userText.trim()) {
-          const title = await generateChatName(userText.trim(), {
-            userId: user.id,
-            chatId,
-          });
-          await updateChatByPublicId(chatId, user.id, { title });
-        }
-      }
-    }
+    const lastMessage = contextMessages[contextMessages.length - 1] as any;
 
     // Here we start with the chat request
     // Accumulate assistant content in true order: text, tool, text, tool, ... (per step.content)
@@ -339,10 +356,11 @@ async function chatHandler(request: NextRequest) {
     let liveTextFlushTimer: ReturnType<typeof setTimeout> | null = null;
     let emittedAssistantChars = 0;
     let stepCounter = 0;
-    const emittedToolCallEventIds = new Set<string>();
+    const emittedToolCallMeta = new Map<string, { hasDestination: boolean }>();
     let lastSuccessfulRevision: {
       chatId: string;
       revisionNumber: number;
+      revisionId: number;
     } | null = null;
 
     const lastUserText =
@@ -415,11 +433,19 @@ async function chatHandler(request: NextRequest) {
           const eventType = normalizeChunkEventType(rawEventType);
 
           if (isToolCallLikeChunkType(eventType)) {
+            if (liveTextFlushTimer) {
+              clearTimeout(liveTextFlushTimer);
+              liveTextFlushTimer = null;
+            }
+            await flushLiveTextDelta();
+
             const toolCallId = getToolCallIdFromChunkEvent(evt);
             const toolName = getToolNameFromChunkEvent(evt) ?? "unknown";
             const destination = getDestinationFromToolCall(evt);
-            if (toolCallId && !emittedToolCallEventIds.has(toolCallId)) {
-              emittedToolCallEventIds.add(toolCallId);
+            if (toolCallId && !emittedToolCallMeta.has(toolCallId)) {
+              emittedToolCallMeta.set(toolCallId, {
+                hasDestination: Boolean(destination),
+              });
               await emitTurnEvent("tool_call", {
                 toolCallId,
                 toolName,
@@ -541,8 +567,17 @@ async function chatHandler(request: NextRequest) {
                     : getToolTitle(toolName)),
                 toolName,
               });
-              if (toolCallId && !emittedToolCallEventIds.has(toolCallId)) {
-                emittedToolCallEventIds.add(toolCallId);
+              const existingMeta =
+                toolCallId ? emittedToolCallMeta.get(toolCallId) : undefined;
+              const shouldEmitToolCall =
+                !toolCallId ||
+                !existingMeta ||
+                (!existingMeta.hasDestination && Boolean(destination));
+              if (toolCallId && shouldEmitToolCall) {
+                emittedToolCallMeta.set(toolCallId, {
+                  hasDestination:
+                    Boolean(destination) || Boolean(existingMeta?.hasDestination),
+                });
                 await emitTurnEvent("tool_call", {
                   toolCallId,
                   toolName,
@@ -621,12 +656,8 @@ async function chatHandler(request: NextRequest) {
                 lastSuccessfulRevision = {
                   chatId,
                   revisionNumber: Number(output.revisionNumber),
-                };
-                await emitTurnEvent("preview_update", {
-                  chatId,
-                  revisionNumber: Number(output.revisionNumber),
                   revisionId: Number(output.revisionId ?? output.versionId ?? 0),
-                });
+                };
               }
             }
           }
@@ -661,6 +692,13 @@ async function chatHandler(request: NextRequest) {
           } catch (e) {
             console.error("Failed to persist assistant message:", e);
           }
+        }
+        if (lastSuccessfulRevision) {
+          await emitTurnEvent("preview_update", {
+            chatId: lastSuccessfulRevision.chatId,
+            revisionNumber: lastSuccessfulRevision.revisionNumber,
+            revisionId: lastSuccessfulRevision.revisionId,
+          });
         }
         await billingSession.markSucceeded();
         if (turnRunId) {
