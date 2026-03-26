@@ -112,6 +112,7 @@ export function PreviewPanel({
 }: PreviewPanelProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isIframeLoading, setIsIframeLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState<string>("");
   const [currentVersionId, setCurrentVersionId] = useState<number | null>(null);
   const [revisionNumber, setRevisionNumber] = useState<number | null>(null);
@@ -141,6 +142,7 @@ export function PreviewPanel({
           const previewUrl =
             updatePayload.previewUrl ||
             `/api/preview/${updatePayload.chatId}/${updatePayload.versionNumber}`;
+          setIsIframeLoading(true);
           iframeRef.current.src = previewUrl;
         }
       }
@@ -197,6 +199,7 @@ export function PreviewPanel({
         if (id && data?.previewUrl && iframeRef.current) {
           setCurrentVersionId(id);
           setRevisionNumber(revNum ?? null);
+          setIsIframeLoading(true);
           iframeRef.current.src = data.previewUrl;
         }
       } catch (e) {
@@ -223,12 +226,14 @@ export function PreviewPanel({
         />
       ) : (
         <>
-          {isLoading && (
+          {(isLoading || isIframeLoading) && (
             <div className="absolute inset-0 flex items-center justify-center bg-background z-10">
               <div className="flex flex-col items-center gap-3">
                 <ArrowPathIcon className="h-8 w-8 animate-spin text-muted-foreground" />
                 <p className="text-sm text-muted-foreground">
-                  {loadingMessage || "Generating landing page..."}
+                  {isLoading
+                    ? loadingMessage || "Generating landing page..."
+                    : "Loading preview..."}
                 </p>
               </div>
             </div>
@@ -240,6 +245,8 @@ export function PreviewPanel({
             className="h-full w-full  rounded-lg"
             title="Website Preview"
             sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
+            onLoad={() => setIsIframeLoading(false)}
+            onError={() => setIsIframeLoading(false)}
           />
           {!isLoading && !currentVersionId && (
             <div className="absolute inset-0 bg-white rounded-lg ">

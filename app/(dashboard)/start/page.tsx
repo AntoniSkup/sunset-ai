@@ -32,6 +32,10 @@ import {
   MessageAttachments,
 } from "@/components/ai-elements/message";
 import type { FileUIPart } from "ai";
+import {
+  UploadProgressToast,
+  type UploadProgressToastState,
+} from "@/components/chat/upload-progress-toast";
 
 type Chat = {
   id: number;
@@ -81,12 +85,26 @@ export default function StartPage() {
   );
   const [loadingMore, setLoadingMore] = useState(false);
   const [attachments, setAttachments] = useState<StartAttachment[]>([]);
+  const [uploadToast, setUploadToast] = useState<UploadProgressToastState | null>(
+    null
+  );
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const attachmentUrlsRef = useRef<string[]>([]);
+  const uploadToastTimerRef = useRef<number | null>(null);
   const router = useRouter();
   const setPendingMessage = usePendingMessageStore((s) => s.setPendingMessage);
+
+  const scheduleUploadToastHide = useCallback((delayMs: number) => {
+    if (uploadToastTimerRef.current != null) {
+      window.clearTimeout(uploadToastTimerRef.current);
+    }
+    uploadToastTimerRef.current = window.setTimeout(() => {
+      setUploadToast(null);
+      uploadToastTimerRef.current = null;
+    }, delayMs);
+  }, []);
 
   useEffect(() => {
     attachmentUrlsRef.current = attachments.map((a) => a.previewUrl);
@@ -96,6 +114,10 @@ export default function StartPage() {
     return () => {
       for (const url of attachmentUrlsRef.current) {
         URL.revokeObjectURL(url);
+      }
+      if (uploadToastTimerRef.current != null) {
+        window.clearTimeout(uploadToastTimerRef.current);
+        uploadToastTimerRef.current = null;
       }
     };
   }, []);
@@ -199,6 +221,7 @@ export default function StartPage() {
     if ((!input.trim() && attachments.length === 0) || isLoading) return;
 
     const message = input.trim();
+    let startedUploads = false;
     setIsLoading(true);
 
     try {
@@ -228,27 +251,68 @@ export default function StartPage() {
       }> = [];
 
       if (attachments.length > 0) {
+        startedUploads = true;
+        if (uploadToastTimerRef.current != null) {
+          window.clearTimeout(uploadToastTimerRef.current);
+          uploadToastTimerRef.current = null;
+        }
+        setUploadToast({
+          status: "uploading",
+          total: attachments.length,
+          completed: 0,
+        });
         const uploads = attachments.map(async (attachment) => {
-          const formData = new FormData();
-          formData.append("chatId", chatId);
-          formData.append("file", attachment.file);
-          formData.append("intent", "site_asset");
+          try {
+            const formData = new FormData();
+            formData.append("chatId", chatId);
+            formData.append("file", attachment.file);
+            formData.append("intent", "site_asset");
 
-          const res = await fetch("/api/site-assets", {
-            method: "POST",
-            body: formData,
-          });
-          const uploadData = await res.json().catch(() => null);
-          if (!res.ok || !uploadData?.asset) {
-            throw new Error(
-              uploadData?.error ||
-                `Failed to upload ${attachment.file.name || "image"}`
-            );
+            const res = await fetch("/api/site-assets", {
+              method: "POST",
+              body: formData,
+            });
+            const uploadData = await res.json().catch(() => null);
+            if (!res.ok || !uploadData?.asset) {
+              throw new Error(
+                uploadData?.error ||
+                  `Failed to upload ${attachment.file.name || "image"}`
+              );
+            }
+            return uploadData.asset;
+          } finally {
+            setUploadToast((prev) => {
+              if (!prev || prev.status !== "uploading") return prev;
+              return {
+                ...prev,
+                completed: Math.min(prev.total, prev.completed + 1),
+              };
+            });
           }
-          return uploadData.asset;
         });
 
-        uploadedAttachments = await Promise.all(uploads);
+        const settled = await Promise.allSettled(uploads);
+        const failed = settled.find((item) => item.status === "rejected") as
+          | PromiseRejectedResult
+          | undefined;
+        if (failed) {
+          throw (
+            failed.reason instanceof Error
+              ? failed.reason
+              : new Error("Failed to upload image.")
+          );
+        }
+        uploadedAttachments = settled
+          .filter((item): item is PromiseFulfilledResult<any> => item.status === "fulfilled")
+          .map((item) => item.value);
+
+        setUploadToast({
+          status: "success",
+          total: attachments.length,
+          completed: attachments.length,
+          message: attachments.length === 1 ? "Upload complete." : "All files uploaded.",
+        });
+        scheduleUploadToastHide(1200);
       }
 
       setPendingMessage({
@@ -268,6 +332,16 @@ export default function StartPage() {
       router.push(`/builder/${chatId}`);
     } catch (error) {
       console.error("Error creating chat:", error);
+      if (startedUploads || uploadToast?.status === "uploading") {
+        setUploadToast({
+          status: "error",
+          total: Math.max(attachments.length, 1),
+          completed: Math.max(attachments.length, 1),
+          message:
+            error instanceof Error ? error.message : "Failed to upload image.",
+        });
+        scheduleUploadToastHide(3500);
+      }
       setIsLoading(false);
     }
   };
@@ -430,6 +504,8 @@ export default function StartPage() {
           </form>
         </div>
       </section>
+
+      <UploadProgressToast toast={uploadToast} />
 
       <section className="mx-auto w-full max-w-7xl pb-6">
         <div className="mb-4 flex items-center justify-between">

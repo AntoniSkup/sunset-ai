@@ -7,6 +7,10 @@ import { WelcomeMessage } from "./welcome-message";
 import { MessageList } from "./message-list";
 import { ChatInput } from "./chat-input";
 import { CreditsLimitModal } from "./credits-limit-modal";
+import {
+  UploadProgressToast,
+  type UploadProgressToastState,
+} from "./upload-progress-toast";
 import { updatePreviewPanel } from "@/lib/preview/update-preview";
 import { usePendingMessageStore } from "@/lib/stores/usePendingMessageStore";
 import type { BillingApiResponse } from "@/app/api/billing/route";
@@ -157,6 +161,9 @@ function ChatInner({
   >([]);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [isUploadingAttachments, setIsUploadingAttachments] = useState(false);
+  const [uploadToast, setUploadToast] = useState<UploadProgressToastState | null>(
+    null
+  );
   const insertTextFromGlobalKey = useCallback((text: string) => {
     setInput((prev) => prev + text);
   }, []);
@@ -167,6 +174,7 @@ function ChatInner({
     versionId: number;
     versionNumber: number;
   } | null>(null);
+  const uploadToastTimerRef = useRef<number | null>(null);
   const pendingMessage = usePendingMessageStore((s) => s.pendingMessage);
   const setPendingMessage = usePendingMessageStore((s) => s.setPendingMessage);
   const consumedPendingIdsRef = useRef<Set<string>>(new Set());
@@ -176,6 +184,25 @@ function ChatInner({
   );
   const hasCredits =
     billing === undefined || Number(billing.balance) >= MIN_CREDITS_TO_SEND;
+
+  const scheduleUploadToastHide = useCallback((delayMs: number) => {
+    if (uploadToastTimerRef.current != null) {
+      window.clearTimeout(uploadToastTimerRef.current);
+    }
+    uploadToastTimerRef.current = window.setTimeout(() => {
+      setUploadToast(null);
+      uploadToastTimerRef.current = null;
+    }, delayMs);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (uploadToastTimerRef.current != null) {
+        window.clearTimeout(uploadToastTimerRef.current);
+        uploadToastTimerRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const createNewChat = async () => {
@@ -458,6 +485,15 @@ function ChatInner({
 
     try {
       const selectedFiles = Array.from(files);
+      if (uploadToastTimerRef.current != null) {
+        window.clearTimeout(uploadToastTimerRef.current);
+        uploadToastTimerRef.current = null;
+      }
+      setUploadToast({
+        status: "uploading",
+        total: selectedFiles.length,
+        completed: 0,
+      });
       const optimisticAttachments: PendingAttachment[] = selectedFiles.map(
         (file) => ({
           localId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -474,30 +510,40 @@ function ChatInner({
 
       const uploads = optimisticAttachments.map(async (attachment, index) => {
         const file = selectedFiles[index];
-        const formData = new FormData();
-        formData.append("chatId", chatId);
-        formData.append("file", file);
-        formData.append("intent", "site_asset");
+        try {
+          const formData = new FormData();
+          formData.append("chatId", chatId);
+          formData.append("file", file);
+          formData.append("intent", "site_asset");
 
-        const res = await fetch("/api/site-assets", {
-          method: "POST",
-          body: formData,
-        });
+          const res = await fetch("/api/site-assets", {
+            method: "POST",
+            body: formData,
+          });
 
-        const data = await res.json().catch(() => null);
-        if (!res.ok || !data?.asset) {
-          throw new Error(
-            data?.error || `Failed to upload ${file.name || "image"}`
-          );
+          const data = await res.json().catch(() => null);
+          if (!res.ok || !data?.asset) {
+            throw new Error(
+              data?.error || `Failed to upload ${file.name || "image"}`
+            );
+          }
+
+          return {
+            localId: attachment.localId,
+            asset: data.asset as Omit<
+              PendingAttachment,
+              "localId" | "isUploading"
+            >,
+          };
+        } finally {
+          setUploadToast((prev) => {
+            if (!prev || prev.status !== "uploading") return prev;
+            return {
+              ...prev,
+              completed: Math.min(prev.total, prev.completed + 1),
+            };
+          });
         }
-
-        return {
-          localId: attachment.localId,
-          asset: data.asset as Omit<
-            PendingAttachment,
-            "localId" | "isUploading"
-          >,
-        };
       });
 
       const settled = await Promise.allSettled(uploads);
@@ -551,11 +597,36 @@ function ChatInner({
 
       if (uploadErrors.length > 0) {
         setAttachmentError(uploadErrors[0]);
+        setUploadToast({
+          status: "error",
+          total: selectedFiles.length,
+          completed: selectedFiles.length,
+          message: uploadErrors[0],
+        });
+        scheduleUploadToastHide(3500);
+      } else {
+        setUploadToast({
+          status: "success",
+          total: selectedFiles.length,
+          completed: selectedFiles.length,
+          message:
+            selectedFiles.length === 1
+              ? "Upload complete."
+              : "All files uploaded.",
+        });
+        scheduleUploadToastHide(1800);
       }
     } catch (error) {
-      setAttachmentError(
-        error instanceof Error ? error.message : "Failed to upload image."
-      );
+      const message =
+        error instanceof Error ? error.message : "Failed to upload image.";
+      setAttachmentError(message);
+      setUploadToast({
+        status: "error",
+        total: 1,
+        completed: 1,
+        message,
+      });
+      scheduleUploadToastHide(3500);
     } finally {
       setIsUploadingAttachments(false);
     }
@@ -1069,6 +1140,7 @@ function ChatInner({
           if (!open) mutateBilling();
         }}
       />
+      <UploadProgressToast toast={uploadToast} />
     </div>
   );
 }

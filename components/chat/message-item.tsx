@@ -237,7 +237,7 @@ export const MessageItem = React.memo(function MessageItem({
             })}
 
             {isStreaming && (
-              <span className="inline-block w-2 h-4 bg-current animate-pulse ml-1" />
+              <span className="inline-block h-4 w-4 rounded-full bg-current animate-pulse ml-1" />
             )}
           </>
         )}
