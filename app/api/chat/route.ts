@@ -16,7 +16,7 @@ import {
   getSiteAssetsByChatId,
   updateChatByPublicId,
   generateChatName,
-  appendChatStreamEvent,
+  appendChatStreamEvents,
   markChatTurnRunSucceeded,
   markChatTurnRunFailed,
 } from "@/lib/db/queries";
@@ -29,6 +29,7 @@ import type { UIMessage } from "ai";
 import { createSectionTool, createSiteTool } from "@/lib/code-generation/generate-code";
 import { getAIModel, getAIModelId } from "@/lib/ai/get-ai-model";
 import { shouldUseLighterModel } from "@/lib/ai/should-use-lighter-model";
+import type { ModelRoutingDecision } from "@/lib/ai/should-use-lighter-model";
 import { buildChatSystemPrompt } from "@/prompts/chat-system-prompt";
 import { captureLandingPageScreenshot } from "@/lib/screenshots/capture";
 import { langfuseSpanProcessor } from "@/instrumentation";
@@ -43,8 +44,10 @@ import {
 } from "@/lib/site-assets/prompt-manifest";
 
 const BUILDER_TOOLS = new Set(["create_site", "create_section"]);
-const TEXT_DELTA_FLUSH_MS = 90;
-const TEXT_DELTA_FLUSH_CHARS = 24;
+const TEXT_DELTA_FLUSH_MS = 35;
+const TEXT_DELTA_FLUSH_CHARS = 8;
+const TURN_EVENT_FLUSH_MS = 120;
+const TURN_EVENT_BATCH_SIZE = 24;
 
 const CHAT_STREAM_DEBUG_ENABLED = process.env.DEBUG_CHAT_STREAM === "1";
 
@@ -116,16 +119,6 @@ function normalizeChunkEventType(value: unknown): string {
   return typeof value === "string" ? value.trim().toLowerCase() : "unknown";
 }
 
-function isAssistantTextDeltaEventType(eventType: string): boolean {
-  const t = normalizeChunkEventType(eventType);
-  return (
-    t === "text-delta" ||
-    t === "text_delta" ||
-    t.endsWith(".text-delta") ||
-    t.endsWith(".text_delta")
-  );
-}
-
 function isNonAssistantOrToolChunkType(eventType: string): boolean {
   const t = normalizeChunkEventType(eventType);
   return (
@@ -195,6 +188,7 @@ function buildOrderedAssistantContent(segments: ContentSegment[]): string {
 
 async function chatHandler(request: NextRequest) {
   try {
+    const requestStartedAtMs = Date.now();
     const body = await request.json();
     const { messages, chatId, turnRunId } = body as {
       messages?: Array<Omit<UIMessage, "id">>;
@@ -240,27 +234,75 @@ async function chatHandler(request: NextRequest) {
       );
     }
 
+    const pendingTurnEvents: Array<{
+      eventType: string;
+      payload: Record<string, unknown>;
+    }> = [];
+    let turnEventsFlushTimer: ReturnType<typeof setTimeout> | null = null;
+    let turnEventsFlushChain: Promise<void> = Promise.resolve();
+
+    const flushPendingTurnEvents = async () => {
+      if (!turnRunId || pendingTurnEvents.length === 0) return;
+
+      while (pendingTurnEvents.length > 0) {
+        const events = pendingTurnEvents.splice(0, TURN_EVENT_BATCH_SIZE);
+        try {
+          await appendChatStreamEvents({
+            chatId: chat.id,
+            runId: turnRunId,
+            events,
+          });
+        } catch (error) {
+          console.error("Failed to append stream event batch:", error);
+        }
+      }
+    };
+
+    const queueTurnEventFlush = () => {
+      turnEventsFlushChain = turnEventsFlushChain
+        .then(async () => {
+          await flushPendingTurnEvents();
+        })
+        .catch((error) => {
+          console.error("Failed to flush queued stream events:", error);
+        });
+      return turnEventsFlushChain;
+    };
+
+    const flushTurnEventsNow = async () => {
+      if (turnEventsFlushTimer) {
+        clearTimeout(turnEventsFlushTimer);
+        turnEventsFlushTimer = null;
+      }
+      await queueTurnEventFlush();
+    };
+
     const emitTurnEvent = async (
       eventType: string,
-      payload: Record<string, unknown>
+      payload: Record<string, unknown>,
+      options?: { urgent?: boolean }
     ) => {
       if (!turnRunId) return;
-      try {
-        await appendChatStreamEvent({
-          chatId: chat.id,
-          runId: turnRunId,
-          eventType,
-          payload,
-        });
-      } catch (error) {
-        console.error(`Failed to append ${eventType} stream event:`, error);
+
+      pendingTurnEvents.push({ eventType, payload });
+
+      if (options?.urgent || pendingTurnEvents.length >= TURN_EVENT_BATCH_SIZE) {
+        await flushTurnEventsNow();
+        return;
+      }
+
+      if (!turnEventsFlushTimer) {
+        turnEventsFlushTimer = setTimeout(() => {
+          turnEventsFlushTimer = null;
+          void queueTurnEventFlush();
+        }, TURN_EVENT_FLUSH_MS);
       }
     };
     if (turnRunId) {
       await emitTurnEvent("run_started", {
         chatId,
         turnRunId,
-      });
+      }, { urgent: true });
     }
     debugChatStream("run-started", {
       chatId,
@@ -338,14 +380,16 @@ async function chatHandler(request: NextRequest) {
 
     const modelMessages = await convertToModelMessages(contextMessages);
 
-    const useLighterModel = await decideOnLighterModel(contextMessages, {
+    const modelRoutingStartedAtMs = Date.now();
+    const routingDecision = await decideOnLighterModel(contextMessages, {
       userId: user.id,
       chatId,
     });
+    const modelRoutingDurationMs = Date.now() - modelRoutingStartedAtMs;
 
     const [model, modelId] = await Promise.all([
-      getAIModel(useLighterModel),
-      getAIModelId(useLighterModel),
+      getAIModel(routingDecision.useLighterModel),
+      getAIModelId(routingDecision.useLighterModel),
     ]);
     const promptableSiteAssets = toSiteAssetPromptDescriptors(
       await getSiteAssetsByChatId(chatId, user.id)
@@ -385,6 +429,20 @@ async function chatHandler(request: NextRequest) {
       revisionNumber: number;
       revisionId: number;
     } | null = null;
+    const generationStartedAtMs = Date.now();
+    let finalTimingsLogged = false;
+    const logFinalTimings = (status: "completed" | "failed", errorMessage?: string) => {
+      if (finalTimingsLogged) return;
+      finalTimingsLogged = true;
+      const nowMs = Date.now();
+      const modelRoutingSeconds = (modelRoutingDurationMs / 1000).toFixed(2);
+      const generationSeconds = ((nowMs - generationStartedAtMs) / 1000).toFixed(2);
+      const totalSeconds = ((nowMs - requestStartedAtMs) / 1000).toFixed(2);
+      const errorSuffix = errorMessage ? ` error="${errorMessage.replace(/\s+/g, " ").slice(0, 200)}"` : "";
+      console.log(
+        `[chat-timing] status=${status} model_decision_s=${modelRoutingSeconds} generation_s=${generationSeconds} total_s=${totalSeconds}${errorSuffix}`
+      );
+    };
 
     const lastUserText =
       (lastMessage?.role === "user" && Array.isArray(lastMessage.parts)
@@ -397,13 +455,32 @@ async function chatHandler(request: NextRequest) {
           : "") || "";
           
     // Langfuse
-    updateActiveObservation({ input: lastUserText.trim() || undefined, metadata: { model: modelId } });
+    updateActiveObservation({
+      input: lastUserText.trim() || undefined,
+      metadata: {
+        model: modelId,
+        modelRouting: {
+          routerModelId: routingDecision.routerModelId,
+          routerProvider: routingDecision.routerProvider,
+          usedFallbackModel: routingDecision.usedFallbackModel,
+          choseLighterModel: routingDecision.useLighterModel,
+        },
+      },
+    });
     updateActiveTrace({
       name: "chat-message",
       sessionId: chatId,
       userId: String(user.id),
       input: lastUserText.trim() || undefined,
-      metadata: { model: modelId },
+      metadata: {
+        model: modelId,
+        modelRouting: {
+          routerModelId: routingDecision.routerModelId,
+          routerProvider: routingDecision.routerProvider,
+          usedFallbackModel: routingDecision.usedFallbackModel,
+          choseLighterModel: routingDecision.useLighterModel,
+        },
+      },
     });
 
     const flushLiveTextDelta = async () => {
@@ -486,10 +563,7 @@ async function chatHandler(request: NextRequest) {
           }
 
           // Prevent tool payload JSON (args/input) from leaking into assistant text stream.
-          if (
-            !isAssistantTextDeltaEventType(eventType) ||
-            isNonAssistantOrToolChunkType(eventType)
-          ) {
+          if (isNonAssistantOrToolChunkType(eventType)) {
             debugChatStream("chunk-skipped-non-assistant-text", {
               chatId,
               turnRunId: turnRunId ?? null,
@@ -730,7 +804,7 @@ async function chatHandler(request: NextRequest) {
             chatId,
             turnRunId,
             hasAssistantText: Boolean(finalText),
-          });
+          }, { urgent: true });
         }
         updateActiveObservation({ output: finalText || undefined });
         updateActiveTrace({ output: finalText || undefined });
@@ -743,6 +817,7 @@ async function chatHandler(request: NextRequest) {
             userId: user.id,
           });
         }
+        logFinalTimings("completed");
       },
       onError: async (error) => {
         if (liveTextFlushTimer) {
@@ -767,11 +842,12 @@ async function chatHandler(request: NextRequest) {
             chatId,
             turnRunId,
             error: errMsg,
-          });
+          }, { urgent: true });
         }
         updateActiveObservation({ output: errMsg, level: "ERROR" });
         updateActiveTrace({ output: errMsg });
         trace.getActiveSpan()?.end();
+        logFinalTimings("failed", errMsg);
       },
     });
 
@@ -792,9 +868,16 @@ async function chatHandler(request: NextRequest) {
 const decideOnLighterModel = async (
   messages: Array<Omit<UIMessage, "id">>,
   context?: { userId?: number; chatId?: string }
-): Promise<boolean> => {
+): Promise<ModelRoutingDecision> => {
+  const noRouterDecision: ModelRoutingDecision = {
+    useLighterModel: false,
+    routerModelId: null,
+    routerProvider: process.env.AI_MODEL_PROVIDER ?? null,
+    usedFallbackModel: false,
+  };
+
   if (!messages || !Array.isArray(messages) || messages.length === 0) {
-    return false;
+    return noRouterDecision;
   }
 
   const hasAssistantMessages = messages.some(
@@ -805,7 +888,7 @@ const decideOnLighterModel = async (
   if (Array.isArray(lastMessage?.parts)) {
     const hasFileParts = lastMessage.parts.some((p: any) => p?.type === "file");
     if (hasFileParts) {
-      return false;
+      return noRouterDecision;
     }
   }
 
@@ -819,11 +902,10 @@ const decideOnLighterModel = async (
     userQuestion = lastMessage.content;
   }
 
-  let useLighterModel = false;
   if (hasAssistantMessages && userQuestion.trim()) {
-    useLighterModel = await shouldUseLighterModel(userQuestion.trim(), context);
+    return shouldUseLighterModel(userQuestion.trim(), context);
   }
-  return useLighterModel;
+  return noRouterDecision;
 }
 
 export const POST = observe(chatHandler, {

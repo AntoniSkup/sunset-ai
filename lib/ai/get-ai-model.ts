@@ -9,7 +9,7 @@ import type { LanguageModel } from "ai";
  * Switch models via env vars:
  *   AI_MODEL_PROVIDER=google|openai|anthropic
  *   AI_MODEL_NAME=gemini-3-pro-preview (main) or gpt-5.2 or claude-sonnet-4-6
- *   AI_LIGHTER_MODEL_NAME=gemini-3-flash-preview (fast) or gpt-4o-mini or claude-3-5-haiku-20241022
+ *   AI_LIGHTER_MODEL_NAME=gemini-3-flash-preview (fast) or gpt-4o-mini or claude-haiku-4.5
  *
  * AI Gateway mode (optional):
  *   AI_USE_GATEWAY=true - Route requests through Vercel AI Gateway instead of direct providers
@@ -27,7 +27,7 @@ const DEFAULT_MODELS = {
   },
   anthropic: {
     main: "claude-sonnet-4-6",
-    lighter: "claude-3-5-haiku-20241022",
+    lighter: "claude-haiku-4.5",
   },
 } as const;
 
@@ -64,6 +64,11 @@ export async function getAIModel(useLighterModel: boolean = false): Promise<Lang
   if (modelProvider === "openai") {
     const { openai } = await import("@ai-sdk/openai");
     return openai(useLighterModel ? lighterModelName : modelName) as LanguageModel;
+  }
+
+  if (modelProvider === "anthropic") {
+    const { anthropic } = await import("@ai-sdk/anthropic");
+    return anthropic(useLighterModel ? lighterModelName : modelName) as LanguageModel;
   }
 
   throw new Error(`Unsupported AI model provider: ${modelProvider}`);

@@ -913,6 +913,31 @@ export async function appendChatStreamEvent(data: {
   return row;
 }
 
+export async function appendChatStreamEvents(data: {
+  chatId: number;
+  runId: string;
+  events: Array<{
+    eventType: string;
+    payload: Record<string, unknown>;
+  }>;
+}) {
+  if (!Array.isArray(data.events) || data.events.length === 0) {
+    return [];
+  }
+
+  return db
+    .insert(chatStreamEvents)
+    .values(
+      data.events.map((event) => ({
+        chatId: data.chatId,
+        runId: data.runId,
+        eventType: event.eventType,
+        payload: event.payload,
+      }))
+    )
+    .returning();
+}
+
 export async function getChatStreamEventsAfter(data: {
   chatId: number;
   afterEventId?: number;
