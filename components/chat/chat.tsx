@@ -802,8 +802,6 @@ function ChatInner({
       });
     };
 
-    const flushQueuedAssistantText = () => {};
-
     const finalizeTerminalEventIfReady = () => {
       if (!terminalEventPending) return;
 
@@ -843,12 +841,6 @@ function ChatInner({
           message: err,
         },
       ]);
-    };
-
-    const enqueueAssistantText = (deltaText: string) => {
-      const text = String(deltaText || "");
-      if (!text) return;
-      upsertAssistantText(text);
     };
 
     const appendAssistantPart = (part: any) => {
@@ -963,11 +955,10 @@ function ChatInner({
       }
       if (eventType === "text_delta") {
         setStatus("streaming");
-        enqueueAssistantText(String(payload.text ?? ""));
+        upsertAssistantText(String(payload.text ?? ""));
         return;
       }
       if (eventType === "tool_call") {
-        flushQueuedAssistantText();
         const toolCallId = String(payload.toolCallId ?? "");
         const toolName = String(payload.toolName ?? "unknown");
         const destination =
@@ -982,7 +973,6 @@ function ChatInner({
         return;
       }
       if (eventType === "tool_result") {
-        flushQueuedAssistantText();
         const toolCallId = String(payload.toolCallId ?? "");
         const toolName = String(payload.toolName ?? "unknown");
         const result = payload.result ?? null;

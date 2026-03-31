@@ -27,8 +27,6 @@ import { streamText, convertToModelMessages, stepCountIs } from "ai";
 import type { UIMessage } from "ai";
 import { createSectionTool, createSiteTool } from "@/lib/code-generation/generate-code";
 import { getAIModel, getAIModelId } from "@/lib/ai/get-ai-model";
-import { shouldUseLighterModel } from "@/lib/ai/should-use-lighter-model";
-import type { ModelRoutingDecision } from "@/lib/ai/should-use-lighter-model";
 import { buildChatSystemPrompt } from "@/prompts/chat-system-prompt";
 import { captureLandingPageScreenshot } from "@/lib/screenshots/capture";
 import { langfuseSpanProcessor } from "@/instrumentation";
@@ -380,20 +378,11 @@ async function chatHandler(request: NextRequest) {
 
     const modelMessages = await convertToModelMessages(contextMessages);
 
-    const modelRoutingStartedAtMs = Date.now();
-    const routingDecision = await decideOnLighterModel(contextMessages, {
-      userId: user.id,
-      chatId,
-    });
-    const modelRoutingDurationMs = Date.now() - modelRoutingStartedAtMs;
-
     const [model, modelId] = await Promise.all([
-      getAIModel(routingDecision.useLighterModel),
-      getAIModelId(routingDecision.useLighterModel),
+      getAIModel(),
+      getAIModelId(),
     ]);
-    console.log(
-      `[chat-model] tier=${routingDecision.useLighterModel ? "lightweight" : "flagship"} model=${modelId}`
-    );
+    console.log(`[chat-model] model=${modelId}`);
     const promptableSiteAssets = toSiteAssetPromptDescriptors(
       await getSiteAssetsByChatId(chatId, user.id)
     );
@@ -438,12 +427,11 @@ async function chatHandler(request: NextRequest) {
       if (finalTimingsLogged) return;
       finalTimingsLogged = true;
       const nowMs = Date.now();
-      const modelRoutingSeconds = (modelRoutingDurationMs / 1000).toFixed(2);
       const generationSeconds = ((nowMs - generationStartedAtMs) / 1000).toFixed(2);
       const totalSeconds = ((nowMs - requestStartedAtMs) / 1000).toFixed(2);
       const errorSuffix = errorMessage ? ` error="${errorMessage.replace(/\s+/g, " ").slice(0, 200)}"` : "";
       console.log(
-        `[chat-timing] status=${status} model_decision_s=${modelRoutingSeconds} generation_s=${generationSeconds} total_s=${totalSeconds}${errorSuffix}`
+        `[chat-timing] status=${status} generation_s=${generationSeconds} total_s=${totalSeconds}${errorSuffix}`
       );
     };
 
@@ -462,12 +450,6 @@ async function chatHandler(request: NextRequest) {
       input: lastUserText.trim() || undefined,
       metadata: {
         model: modelId,
-        modelRouting: {
-          routerModelId: routingDecision.routerModelId,
-          routerProvider: routingDecision.routerProvider,
-          usedFallbackModel: routingDecision.usedFallbackModel,
-          choseLighterModel: routingDecision.useLighterModel,
-        },
       },
     });
     updateActiveTrace({
@@ -477,12 +459,6 @@ async function chatHandler(request: NextRequest) {
       input: lastUserText.trim() || undefined,
       metadata: {
         model: modelId,
-        modelRouting: {
-          routerModelId: routingDecision.routerModelId,
-          routerProvider: routingDecision.routerProvider,
-          usedFallbackModel: routingDecision.usedFallbackModel,
-          choseLighterModel: routingDecision.useLighterModel,
-        },
       },
     });
 
@@ -866,49 +842,6 @@ async function chatHandler(request: NextRequest) {
       { status: 500 }
     );
   }
-}
-
-const decideOnLighterModel = async (
-  messages: Array<Omit<UIMessage, "id">>,
-  context?: { userId?: number; chatId?: string }
-): Promise<ModelRoutingDecision> => {
-  const noRouterDecision: ModelRoutingDecision = {
-    useLighterModel: false,
-    routerModelId: null,
-    routerProvider: process.env.AI_MODEL_PROVIDER ?? null,
-    usedFallbackModel: false,
-  };
-
-  if (!messages || !Array.isArray(messages) || messages.length === 0) {
-    return noRouterDecision;
-  }
-
-  const hasAssistantMessages = messages.some(
-    (msg: any) => msg?.role === "assistant"
-  );
-
-  const lastMessage = messages[messages.length - 1] as any;
-  if (Array.isArray(lastMessage?.parts)) {
-    const hasFileParts = lastMessage.parts.some((p: any) => p?.type === "file");
-    if (hasFileParts) {
-      return noRouterDecision;
-    }
-  }
-
-  let userQuestion = "";
-  if (lastMessage?.role === "user" && Array.isArray(lastMessage.parts)) {
-    userQuestion = lastMessage.parts
-      .filter((p: any) => p?.type === "text")
-      .map((p: any) => p.text)
-      .join("");
-  } else if (lastMessage?.role === "user" && typeof lastMessage.content === "string") {
-    userQuestion = lastMessage.content;
-  }
-
-  if (hasAssistantMessages && userQuestion.trim()) {
-    return shouldUseLighterModel(userQuestion.trim(), context);
-  }
-  return noRouterDecision;
 }
 
 export const POST = observe(chatHandler, {

@@ -214,5 +214,3 @@ export async function readStreamEventsAfter(
 export function isStreamBusDebugEnabled(): boolean {
   return STREAM_BUS_DEBUG_ENABLED;
 }
-
-export { shouldUseRedisStreamBus };
