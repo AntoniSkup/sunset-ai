@@ -172,7 +172,19 @@ function buildRenderTokens(message: UIMessage): RenderToken[] {
     }
   }
 
-  return tokens;
+  // Merge adjacent text tokens so streaming appears as one continuous response
+  // instead of segmented "parts" when multiple text parts are present.
+  const merged: RenderToken[] = [];
+  for (const token of tokens) {
+    const last = merged[merged.length - 1];
+    if (token.type === "text" && last?.type === "text") {
+      last.text += token.text;
+      continue;
+    }
+    merged.push(token);
+  }
+
+  return merged;
 }
 
 export const MessageItem = React.memo(function MessageItem({

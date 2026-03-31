@@ -41,6 +41,7 @@
     "@types/node": "^22.15.18",
     "@types/react": "19.1.4",
     "@types/react-dom": "19.1.5",
+    "@upstash/redis": "^1.37.0",
     "@vercel/blob": "^2.2.0",
     "@xyflow/react": "^12.10.0",
     "ai": "^6.0.3",

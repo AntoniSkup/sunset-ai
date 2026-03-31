@@ -98,7 +98,17 @@ export const runChatTurnTask = task({
       }
 
       // Ensure the stream fully completes before chaining the next queue item.
-      await response.text();
+      // Drain incrementally to avoid buffering large generations into memory.
+      if (response.body) {
+        const reader = response.body.getReader();
+        while (true) {
+          const { done } = await reader.read();
+          if (done) break;
+        }
+      } else {
+        // Some runtimes expose no stream reader; this still waits for completion.
+        await response.arrayBuffer();
+      }
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Unknown trigger execution error";

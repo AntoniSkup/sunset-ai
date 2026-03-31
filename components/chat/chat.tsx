@@ -19,6 +19,8 @@ const billingFetcher = (url: string) => fetch(url).then((res) => res.json());
 const MIN_CREDITS_TO_SEND = 0.5;
 const CHAT_PENDING_DEBUG_ENABLED =
   process.env.NEXT_PUBLIC_CHAT_DEBUG_PENDING === "1";
+const CHAT_STREAM_CLIENT_DEBUG_ENABLED =
+  process.env.NEXT_PUBLIC_CHAT_DEBUG_STREAM === "1";
 
 function debugPendingFlow(message: string, payload?: Record<string, unknown>) {
   if (!CHAT_PENDING_DEBUG_ENABLED) return;
@@ -27,6 +29,15 @@ function debugPendingFlow(message: string, payload?: Record<string, unknown>) {
     return;
   }
   console.log(`[chat-pending-debug] ${message}`);
+}
+
+function debugChatStreamClient(message: string, payload?: Record<string, unknown>) {
+  if (!CHAT_STREAM_CLIENT_DEBUG_ENABLED) return;
+  if (payload) {
+    console.log(`[chat-stream-client] ${message}`, payload);
+    return;
+  }
+  console.log(`[chat-stream-client] ${message}`);
 }
 
 type PendingAttachment = {
@@ -161,9 +172,8 @@ function ChatInner({
   >([]);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [isUploadingAttachments, setIsUploadingAttachments] = useState(false);
-  const [uploadToast, setUploadToast] = useState<UploadProgressToastState | null>(
-    null
-  );
+  const [uploadToast, setUploadToast] =
+    useState<UploadProgressToastState | null>(null);
   const insertTextFromGlobalKey = useCallback((text: string) => {
     setInput((prev) => prev + text);
   }, []);
@@ -246,6 +256,7 @@ function ChatInner({
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimerRef = useRef<number | null>(null);
   const streamInitializedRef = useRef(false);
+  const streamConnectionIdRef = useRef(0);
   const toolErrorKeysRef = useRef<Set<string>>(new Set());
   const loadMessages = useCallback(async () => {
     if (!chatId) return;
@@ -747,6 +758,8 @@ function ChatInner({
     if (!chatId) return;
 
     let cancelled = false;
+    let terminalEventPending: null | "completed" | "failed" = null;
+    let pendingFailureMessage: string | null = null;
     streamInitializedRef.current = false;
     lastEventIdRef.current = 0;
 
@@ -787,6 +800,55 @@ function ChatInner({
         next[idx] = message;
         return next;
       });
+    };
+
+    const flushQueuedAssistantText = () => {};
+
+    const finalizeTerminalEventIfReady = () => {
+      if (!terminalEventPending) return;
+
+      const terminalType = terminalEventPending;
+      terminalEventPending = null;
+
+      if (terminalType === "completed") {
+        const pendingPreview = pendingPreviewUpdateRef.current;
+        if (
+          pendingPreview &&
+          chatId &&
+          lastPreviewVersionIdRef.current !== pendingPreview.versionId
+        ) {
+          lastPreviewVersionIdRef.current = pendingPreview.versionId;
+          updatePreviewPanel(
+            pendingPreview.versionId,
+            pendingPreview.versionNumber,
+            chatId
+          );
+        }
+        pendingPreviewUpdateRef.current = null;
+        setStatus("ready");
+        activeAssistantMessageIdRef.current = null;
+        void loadMessages();
+        return;
+      }
+
+      pendingPreviewUpdateRef.current = null;
+      setStatus("ready");
+      activeAssistantMessageIdRef.current = null;
+      const err = pendingFailureMessage || "Generation failed";
+      pendingFailureMessage = null;
+      setErrorMessages((prev) => [
+        ...prev,
+        {
+          id: `error-${Date.now()}-${Math.random()}`,
+          message: err,
+        },
+      ]);
+    };
+
+    const enqueueAssistantText = (deltaText: string) => {
+      const text = String(deltaText || "");
+      if (!text) return;
+      upsertAssistantText(text);
     };
 
     const appendAssistantPart = (part: any) => {
@@ -901,10 +963,11 @@ function ChatInner({
       }
       if (eventType === "text_delta") {
         setStatus("streaming");
-        upsertAssistantText(String(payload.text ?? ""));
+        enqueueAssistantText(String(payload.text ?? ""));
         return;
       }
       if (eventType === "tool_call") {
+        flushQueuedAssistantText();
         const toolCallId = String(payload.toolCallId ?? "");
         const toolName = String(payload.toolName ?? "unknown");
         const destination =
@@ -919,6 +982,7 @@ function ChatInner({
         return;
       }
       if (eventType === "tool_result") {
+        flushQueuedAssistantText();
         const toolCallId = String(payload.toolCallId ?? "");
         const toolName = String(payload.toolName ?? "unknown");
         const result = payload.result ?? null;
@@ -967,45 +1031,33 @@ function ChatInner({
         return;
       }
       if (eventType === "run_completed") {
-        const pendingPreview = pendingPreviewUpdateRef.current;
-        if (
-          pendingPreview &&
-          chatId &&
-          lastPreviewVersionIdRef.current !== pendingPreview.versionId
-        ) {
-          lastPreviewVersionIdRef.current = pendingPreview.versionId;
-          updatePreviewPanel(
-            pendingPreview.versionId,
-            pendingPreview.versionNumber,
-            chatId
-          );
-        }
-        pendingPreviewUpdateRef.current = null;
-        setStatus("ready");
-        activeAssistantMessageIdRef.current = null;
-        void loadMessages();
+        terminalEventPending = "completed";
+        finalizeTerminalEventIfReady();
         return;
       }
       if (eventType === "run_failed") {
-        pendingPreviewUpdateRef.current = null;
-        setStatus("ready");
-        activeAssistantMessageIdRef.current = null;
-        const err = String(payload.error ?? "Generation failed");
-        setErrorMessages((prev) => [
-          ...prev,
-          {
-            id: `error-${Date.now()}-${Math.random()}`,
-            message: err,
-          },
-        ]);
+        pendingFailureMessage = String(payload.error ?? "Generation failed");
+        terminalEventPending = "failed";
+        finalizeTerminalEventIfReady();
       }
     };
 
     const connect = (afterEventId: number) => {
+      streamConnectionIdRef.current += 1;
+      const connectionId = streamConnectionIdRef.current;
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
       const source = new EventSource(
         `/api/chats/${encodeURIComponent(chatId)}/stream?afterEventId=${afterEventId}`
       );
       eventSourceRef.current = source;
+      debugChatStreamClient("connect", {
+        chatId,
+        afterEventId,
+        connectionId,
+      });
 
       const eventTypes = [
         "run_enqueued",
@@ -1019,8 +1071,15 @@ function ChatInner({
       ];
 
       const listener = (event: MessageEvent) => {
+        if (connectionId !== streamConnectionIdRef.current) return;
         try {
           const envelope = JSON.parse(event.data) as StreamEnvelope;
+          debugChatStreamClient("envelope", {
+            chatId,
+            connectionId,
+            eventId: envelope.id,
+            eventType: envelope.eventType,
+          });
           handleEnvelope(envelope);
         } catch {
           // ignore malformed event
@@ -1031,7 +1090,23 @@ function ChatInner({
         source.addEventListener(eventType, listener as EventListener);
       }
 
+      source.onopen = () => {
+        if (connectionId !== streamConnectionIdRef.current) return;
+        debugChatStreamClient("open", {
+          chatId,
+          connectionId,
+          afterEventId,
+        });
+      };
+
       source.onerror = () => {
+        if (connectionId !== streamConnectionIdRef.current) return;
+        debugChatStreamClient("error", {
+          chatId,
+          connectionId,
+          afterEventId: lastEventIdRef.current,
+          readyState: source.readyState,
+        });
         source.close();
         if (cancelled) return;
         reconnectTimerRef.current = window.setTimeout(() => {

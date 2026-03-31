@@ -16,7 +16,6 @@ import {
   getSiteAssetsByChatId,
   updateChatByPublicId,
   generateChatName,
-  appendChatStreamEvents,
   markChatTurnRunSucceeded,
   markChatTurnRunFailed,
 } from "@/lib/db/queries";
@@ -42,10 +41,11 @@ import {
   buildSiteAssetPromptContext,
   toSiteAssetPromptDescriptors,
 } from "@/lib/site-assets/prompt-manifest";
+import { publishStreamEvents } from "@/lib/chat/stream-bus";
 
 const BUILDER_TOOLS = new Set(["create_site", "create_section"]);
-const TEXT_DELTA_FLUSH_MS = 35;
-const TEXT_DELTA_FLUSH_CHARS = 8;
+const TEXT_DELTA_FLUSH_MS = 40;
+const TEXT_DELTA_FLUSH_CHARS = 10;
 const TURN_EVENT_FLUSH_MS = 120;
 const TURN_EVENT_BATCH_SIZE = 24;
 
@@ -247,7 +247,7 @@ async function chatHandler(request: NextRequest) {
       while (pendingTurnEvents.length > 0) {
         const events = pendingTurnEvents.splice(0, TURN_EVENT_BATCH_SIZE);
         try {
-          await appendChatStreamEvents({
+          await publishStreamEvents({
             chatId: chat.id,
             runId: turnRunId,
             events,
@@ -391,6 +391,9 @@ async function chatHandler(request: NextRequest) {
       getAIModel(routingDecision.useLighterModel),
       getAIModelId(routingDecision.useLighterModel),
     ]);
+    console.log(
+      `[chat-model] tier=${routingDecision.useLighterModel ? "lightweight" : "flagship"} model=${modelId}`
+    );
     const promptableSiteAssets = toSiteAssetPromptDescriptors(
       await getSiteAssetsByChatId(chatId, user.id)
     );

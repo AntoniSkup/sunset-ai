@@ -1,4 +1,5 @@
 import type { LanguageModel } from "ai";
+import { modelRoutingSystemPrompt } from "@/prompts/model-routing-prompt";
 
 const ANTHROPIC_LIGHTER_DEFAULT = "claude-haiku-4.5";
 
@@ -89,22 +90,7 @@ export async function shouldUseLighterModel(
               }
             : undefined,
         },
-        system: `You are a routing assistant. Analyze the user's question and determine if it's a simple change request that can be answered with a lighter, faster model.
-
-      Simple questions include:
-      - Small, straightforward code changes (e.g., "make it blue", "change the font", "add a button")
-      - Simple modifications to existing code
-      - Clear, unambiguous requests
-
-      Complex questions that require the advanced model include:
-      - Architecture or design decisions
-      - Multi-file refactoring
-      - Debugging unclear issues
-      - Security-related questions
-      - Performance optimization
-      - Questions requiring deep reasoning or context
-
-      Respond with ONLY "true" or "false" (lowercase, no quotes, no explanation). Default to "false" if uncertain.`,
+        system: modelRoutingSystemPrompt,
         prompt: userQuestion,
       });
 
