@@ -31,7 +31,10 @@ function debugPendingFlow(message: string, payload?: Record<string, unknown>) {
   console.log(`[chat-pending-debug] ${message}`);
 }
 
-function debugChatStreamClient(message: string, payload?: Record<string, unknown>) {
+function debugChatStreamClient(
+  message: string,
+  payload?: Record<string, unknown>
+) {
   if (!CHAT_STREAM_CLIENT_DEBUG_ENABLED) return;
   if (payload) {
     console.log(`[chat-stream-client] ${message}`, payload);

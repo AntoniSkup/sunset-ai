@@ -9,8 +9,8 @@ import {
 } from "@/lib/chat/stream-bus";
 
 export const dynamic = "force-dynamic";
-const SSE_POLL_INTERVAL_BASE_MS = 300;
-const SSE_POLL_INTERVAL_MAX_MS = 700;
+const SSE_POLL_INTERVAL_BASE_MS = 100;
+const SSE_POLL_INTERVAL_MAX_MS = 500;
 const SSE_HEARTBEAT_INTERVAL_MS = 15000;
 const SSE_ERROR_RETRY_BASE_MS = 500;
 const SSE_ERROR_RETRY_MAX_MS = 3000;

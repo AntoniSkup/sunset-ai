@@ -42,9 +42,9 @@ import {
 import { publishStreamEvents } from "@/lib/chat/stream-bus";
 
 const BUILDER_TOOLS = new Set(["create_site", "create_section"]);
-const TEXT_DELTA_FLUSH_MS = 40;
-const TEXT_DELTA_FLUSH_CHARS = 10;
-const TURN_EVENT_FLUSH_MS = 120;
+const TEXT_DELTA_FLUSH_MS = 30;
+const TEXT_DELTA_FLUSH_CHARS = 8;
+const TURN_EVENT_FLUSH_MS = 60;
 const TURN_EVENT_BATCH_SIZE = 24;
 
 const CHAT_STREAM_DEBUG_ENABLED = process.env.DEBUG_CHAT_STREAM === "1";
