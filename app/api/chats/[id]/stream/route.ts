@@ -15,6 +15,8 @@ const SSE_HEARTBEAT_INTERVAL_MS = 15000;
 const SSE_ERROR_RETRY_BASE_MS = 500;
 const SSE_ERROR_RETRY_MAX_MS = 3000;
 const STREAM_SSE_DEBUG_ENABLED = isStreamBusDebugEnabled();
+const STREAM_DIAGNOSTICS_ENABLED =
+  process.env.DEBUG_STREAM_DIAGNOSTICS === "1";
 
 function debugStreamSse(message: string, payload?: Record<string, unknown>) {
   if (!STREAM_SSE_DEBUG_ENABLED) return;
@@ -23,6 +25,18 @@ function debugStreamSse(message: string, payload?: Record<string, unknown>) {
     return;
   }
   console.log(`[stream-sse] ${message}`);
+}
+
+function debugStreamDiagnostics(
+  message: string,
+  payload?: Record<string, unknown>
+) {
+  if (!STREAM_DIAGNOSTICS_ENABLED) return;
+  if (payload) {
+    console.log(`[stream-diag] ${message}`, payload);
+    return;
+  }
+  console.log(`[stream-diag] ${message}`);
 }
 
 function sseFrame(params: {
@@ -35,6 +49,13 @@ function sseFrame(params: {
   if (params.event) lines.push(`event: ${params.event}`);
   lines.push(`data: ${JSON.stringify(params.data)}`);
   return `${lines.join("\n")}\n\n`;
+}
+
+function isRedisStreamReadTimeoutError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    error.message.startsWith("Redis stream op timed out after ")
+  );
 }
 
 export async function GET(
@@ -101,23 +122,37 @@ export async function GET(
         let pollIntervalMs = SSE_POLL_INTERVAL_BASE_MS;
         let lastHeartbeatAtMs = 0;
         let idlePolls = 0;
+        let receivedEventsCount = 0;
+        let pollsCount = 0;
         while (!closed) {
           try {
+            pollsCount += 1;
             const beforeReadId = afterEventId;
             const events = await readStreamEventsAfter({
               chatId: chat.id,
-              afterEventId,
+              afterLogicalEventId: afterEventId,
               limit: 100,
             });
             consecutiveReadErrors = 0;
             if (events.length > 0) {
               idlePolls = 0;
+              receivedEventsCount += events.length;
               debugStreamSse("poll-events", {
                 chatId: chat.id,
                 requestedAfterEventId: beforeReadId,
                 returned: events.length,
-                firstId: events[0]?.id ?? null,
-                lastId: events[events.length - 1]?.id ?? null,
+                firstLogicalEventId: events[0]?.logicalEventId ?? null,
+                lastLogicalEventId: events[events.length - 1]?.logicalEventId ?? null,
+              });
+              debugStreamDiagnostics("sse-events", {
+                chatId: chat.id,
+                beforeReadId,
+                returned: events.length,
+                firstLogicalEventId: events[0]?.logicalEventId ?? null,
+                lastLogicalEventId:
+                  events[events.length - 1]?.logicalEventId ?? null,
+                receivedEventsCount,
+                pollsCount,
               });
             } else {
               idlePolls += 1;
@@ -128,19 +163,26 @@ export async function GET(
                   pollIntervalMs,
                   idlePolls,
                 });
+                debugStreamDiagnostics("sse-idle", {
+                  chatId: chat.id,
+                  afterEventId,
+                  idlePolls,
+                  pollsCount,
+                  consecutiveReadErrors,
+                });
               }
             }
 
             for (const event of events) {
               if (closed) break;
-              afterEventId = event.id;
+              afterEventId = event.logicalEventId;
               controller.enqueue(
                 encoder.encode(
                   sseFrame({
-                    id: event.id,
+                    id: event.logicalEventId,
                     event: event.eventType,
                     data: {
-                      id: event.id,
+                      logicalEventId: event.logicalEventId,
                       chatId: event.chatId,
                       runId: event.runId,
                       eventType: event.eventType,
@@ -182,14 +224,39 @@ export async function GET(
               SSE_ERROR_RETRY_MAX_MS,
               SSE_ERROR_RETRY_BASE_MS * Math.max(1, consecutiveReadErrors)
             );
-            console.error("Chat SSE loop read failed:", error);
+            const errorMessage =
+              error instanceof Error ? error.message : String(error);
+            if (isRedisStreamReadTimeoutError(error)) {
+              debugStreamSse("poll-timeout", {
+                chatId: chat.id,
+                afterEventId,
+                consecutiveReadErrors,
+                retryDelayMs,
+                error: errorMessage,
+              });
+              debugStreamDiagnostics("sse-timeout", {
+                chatId: chat.id,
+                afterEventId,
+                consecutiveReadErrors,
+                retryDelayMs,
+                error: errorMessage,
+              });
+            } else {
+              console.error("Chat SSE loop read failed:", error);
+              debugStreamDiagnostics("sse-error", {
+                chatId: chat.id,
+                afterEventId,
+                consecutiveReadErrors,
+                retryDelayMs,
+                error: errorMessage,
+              });
+            }
             debugStreamSse("poll-error", {
               chatId: chat.id,
               afterEventId,
               consecutiveReadErrors,
               retryDelayMs,
-              error:
-                error instanceof Error ? error.message : String(error),
+              error: errorMessage,
             });
             if (closed || request.signal.aborted) {
               close();

@@ -1,12 +1,14 @@
 export type StreamEventInput = {
-  id?: number;
+  dbId?: number;
+  logicalEventId?: number;
   eventType: string;
   payload: Record<string, unknown>;
   createdAt?: Date | string;
 };
 
 export type StreamEventEnvelope = {
-  id: number;
+  dbId: number;
+  logicalEventId: number;
   chatId: number;
   runId: string;
   eventType: string;
@@ -22,7 +24,7 @@ export type PublishEventsParams = {
 
 export type ReadEventsAfterParams = {
   chatId: number;
-  afterEventId: number;
+  afterLogicalEventId: number;
   limit: number;
 };
 

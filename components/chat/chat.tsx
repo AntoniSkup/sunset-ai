@@ -53,7 +53,7 @@ type PendingAttachment = {
 };
 
 type StreamEnvelope = {
-  id: number;
+  logicalEventId: number;
   chatId: number;
   runId: string;
   eventType: string;
@@ -940,8 +940,8 @@ function ChatInner({
     };
 
     const handleEnvelope = (envelope: StreamEnvelope) => {
-      if (envelope.id <= lastEventIdRef.current) return;
-      lastEventIdRef.current = envelope.id;
+      if (envelope.logicalEventId <= lastEventIdRef.current) return;
+      lastEventIdRef.current = envelope.logicalEventId;
 
       const payload = envelope.payload ?? {};
       const eventType = envelope.eventType;
@@ -1067,7 +1067,7 @@ function ChatInner({
           debugChatStreamClient("envelope", {
             chatId,
             connectionId,
-            eventId: envelope.id,
+            eventId: envelope.logicalEventId,
             eventType: envelope.eventType,
           });
           handleEnvelope(envelope);
@@ -1112,7 +1112,7 @@ function ChatInner({
             `/api/chats/${encodeURIComponent(chatId)}/turn-runs?latest=1`
           );
           const data = await res.json().catch(() => null);
-          const latestId = Number(data?.event?.id ?? 0);
+          const latestId = Number(data?.event?.logicalEventId ?? 0);
           if (Number.isFinite(latestId) && latestId > 0) {
             lastEventIdRef.current = latestId;
           }

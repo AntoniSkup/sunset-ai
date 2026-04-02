@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { nanoid } from "nanoid";
 import {
-  appendChatStreamEvent,
   enqueueChatTurnRun,
   getChatByPublicId,
   getChatTurnRunById,
   getRunningChatTurnRun,
   getUser,
 } from "@/lib/db/queries";
+import { publishStreamEvents } from "@/lib/chat/stream-bus";
 import { triggerChatTurnTask } from "@/lib/chat/trigger-chat-turn-task";
 
 export async function GET(
@@ -94,16 +94,20 @@ export async function POST(
     payload: sourceRun.payload ?? {},
   });
 
-  await appendChatStreamEvent({
+  await publishStreamEvents({
     chatId: chat.id,
     runId: retryRun.id,
-    eventType: "run_enqueued",
-    payload: {
-      runId: retryRun.id,
-      sequence: retryRun.sequence,
-      retryOf: sourceRun.id,
-      status: retryRun.status,
-    },
+    events: [
+      {
+        eventType: "run_enqueued",
+        payload: {
+          runId: retryRun.id,
+          sequence: retryRun.sequence,
+          retryOf: sourceRun.id,
+          status: retryRun.status,
+        },
+      },
+    ],
   });
 
   const processingEnabled = process.env.ENABLE_TRIGGER_CHAT_QUEUE === "1";

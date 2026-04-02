@@ -379,6 +379,14 @@ export const chatTurnRuns = pgTable(
   })
 );
 
+export const chatStreamCursors = pgTable("chat_stream_cursors", {
+  chatId: integer("chat_id")
+    .primaryKey()
+    .references(() => chats.id),
+  lastLogicalEventId: integer("last_logical_event_id").notNull().default(0),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
 export const chatStreamEvents = pgTable(
   "chat_stream_events",
   {
@@ -389,19 +397,23 @@ export const chatStreamEvents = pgTable(
     runId: uuid("run_id")
       .notNull()
       .references(() => chatTurnRuns.id),
+    logicalEventId: integer("logical_event_id").notNull(),
     eventType: varchar("event_type", { length: 40 }).notNull(),
     payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
   (table) => ({
-    chatIdIdIdx: index("chat_stream_events_chat_id_id_idx").on(
+    chatIdLogicalEventIdIdx: index("chat_stream_events_chat_id_logical_event_id_idx").on(
       table.chatId,
-      table.id
+      table.logicalEventId
     ),
-    runIdIdIdx: index("chat_stream_events_run_id_id_idx").on(
+    runIdLogicalEventIdIdx: index("chat_stream_events_run_id_logical_event_id_idx").on(
       table.runId,
-      table.id
+      table.logicalEventId
     ),
+    chatIdLogicalEventIdUniqueIdx: uniqueIndex(
+      "chat_stream_events_chat_id_logical_event_id_unique_idx"
+    ).on(table.chatId, table.logicalEventId),
   })
 );
 
@@ -445,6 +457,10 @@ export const chatsRelations = relations(chats, ({ one, many }) => ({
     fields: [chats.userId],
     references: [users.id],
   }),
+  streamCursor: one(chatStreamCursors, {
+    fields: [chats.id],
+    references: [chatStreamCursors.chatId],
+  }),
   messages: many(chatMessages),
   toolCalls: many(chatToolCalls),
   turnRuns: many(chatTurnRuns),
@@ -478,6 +494,16 @@ export const chatTurnRunsRelations = relations(chatTurnRuns, ({ one, many }) => 
   streamEvents: many(chatStreamEvents),
 }));
 
+export const chatStreamCursorsRelations = relations(
+  chatStreamCursors,
+  ({ one }) => ({
+    chat: one(chats, {
+      fields: [chatStreamCursors.chatId],
+      references: [chats.id],
+    }),
+  })
+);
+
 export const chatStreamEventsRelations = relations(chatStreamEvents, ({ one }) => ({
   chat: one(chats, {
     fields: [chatStreamEvents.chatId],
@@ -508,6 +534,8 @@ export type ChatToolCall = typeof chatToolCalls.$inferSelect;
 export type NewChatToolCall = typeof chatToolCalls.$inferInsert;
 export type ChatTurnRun = typeof chatTurnRuns.$inferSelect;
 export type NewChatTurnRun = typeof chatTurnRuns.$inferInsert;
+export type ChatStreamCursor = typeof chatStreamCursors.$inferSelect;
+export type NewChatStreamCursor = typeof chatStreamCursors.$inferInsert;
 export type ChatStreamEvent = typeof chatStreamEvents.$inferSelect;
 export type NewChatStreamEvent = typeof chatStreamEvents.$inferInsert;
 export type SiteAsset = typeof siteAssets.$inferSelect;

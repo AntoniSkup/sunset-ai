@@ -15,6 +15,21 @@ export type DebitResult = {
   amount: number;
 };
 
+function asCreditNumber(value: unknown, fieldName: string): number {
+  const parsed =
+    typeof value === "number"
+      ? value
+      : typeof value === "string"
+        ? Number(value)
+        : NaN;
+
+  if (!Number.isFinite(parsed)) {
+    throw new Error(`Invalid credit numeric for ${fieldName}: ${String(value)}`);
+  }
+
+  return parsed;
+}
+
 export class InsufficientCreditsError extends Error {
   constructor(
     public readonly accountId: number,
@@ -69,7 +84,9 @@ export async function debitCredits(
         return {
           success: true as const,
           ledgerEntryId: existing[0].id,
-          amount: Math.abs(existing[0].creditsDelta),
+          amount: Math.abs(
+            asCreditNumber(existing[0].creditsDelta, "creditLedgerEntries.creditsDelta")
+          ),
         };
       }
     }
@@ -84,7 +101,10 @@ export async function debitCredits(
       throw new Error("Wallet not found");
     }
 
-    const balance = Number(lockedWallet.balanceCached);
+    const balance = asCreditNumber(
+      lockedWallet.balanceCached,
+      "creditWallets.balanceCached"
+    );
     if (balance < amount) {
       throw new InsufficientCreditsError(
         accountId,
@@ -113,7 +133,10 @@ export async function debitCredits(
 
     for (const grant of grants) {
       if (remaining <= 0) break;
-      const use = Math.min(Number(grant.creditsRemaining), remaining);
+      const use = Math.min(
+        asCreditNumber(grant.creditsRemaining, "creditGrants.creditsRemaining"),
+        remaining
+      );
       allocations.push({ grantId: grant.id, creditsUsed: use });
       remaining -= use;
     }
@@ -154,7 +177,9 @@ export async function debitCredits(
       await tx
         .update(creditGrants)
         .set({
-          creditsRemaining: Number(grant.creditsRemaining) - alloc.creditsUsed,
+          creditsRemaining:
+            asCreditNumber(grant.creditsRemaining, "creditGrants.creditsRemaining") -
+            asCreditNumber(alloc.creditsUsed, "creditDebitAllocations.creditsUsed"),
         })
         .where(eq(creditGrants.id, alloc.grantId));
       if (
@@ -173,7 +198,9 @@ export async function debitCredits(
     await tx
       .update(creditWallets)
       .set({
-        balanceCached: Number(lockedWallet.balanceCached) - amount,
+        balanceCached:
+          asCreditNumber(lockedWallet.balanceCached, "creditWallets.balanceCached") -
+          amount,
         updatedAt: new Date(),
       })
       .where(eq(creditWallets.id, wallet.id));
@@ -214,7 +241,11 @@ export async function refundCreditsForUsageEvent(
     if (debitEntries.length === 0) return null;
 
     const amount = debitEntries.reduce((sum, entry) => {
-      return entry.creditsDelta < 0 ? sum + Math.abs(entry.creditsDelta) : sum;
+      const creditsDelta = asCreditNumber(
+        entry.creditsDelta,
+        "creditLedgerEntries.creditsDelta"
+      );
+      return creditsDelta < 0 ? sum + Math.abs(creditsDelta) : sum;
     }, 0);
     if (amount <= 0) return null;
 
@@ -255,7 +286,15 @@ export async function refundCreditsForUsageEvent(
         await tx
           .update(creditGrants)
           .set({
-            creditsRemaining: Number(grant.creditsRemaining) + alloc.creditsUsed,
+            creditsRemaining:
+              asCreditNumber(
+                grant.creditsRemaining,
+                "creditGrants.creditsRemaining"
+              ) +
+              asCreditNumber(
+                alloc.creditsUsed,
+                "creditDebitAllocations.creditsUsed"
+              ),
           })
           .where(eq(creditGrants.id, alloc.grantId));
         if (
@@ -291,7 +330,9 @@ export async function refundCreditsForUsageEvent(
       await tx
         .update(creditWallets)
         .set({
-          balanceCached: Number(currentWallet.balanceCached) + amount,
+          balanceCached:
+            asCreditNumber(currentWallet.balanceCached, "creditWallets.balanceCached") +
+            amount,
           updatedAt: new Date(),
         })
         .where(eq(creditWallets.id, wallet.id));

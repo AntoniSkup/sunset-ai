@@ -13,6 +13,7 @@ import {
   chatMessages,
   chatToolCalls,
   chatTurnRuns,
+  chatStreamCursors,
   chatStreamEvents,
   siteAssets,
   publishedSites,
@@ -23,31 +24,56 @@ import { verifyToken } from "@/lib/auth/session";
 import { generateText } from "ai";
 import { getAIModel } from "@/lib/ai/get-ai-model";
 import { buildChatNamePrompt } from "@/prompts/chat-name-prompt";
+
+function buildFallbackChatName(userQuery: string): string {
+  const cleaned = userQuery
+    .replace(/\s+/g, " ")
+    .replace(/^["'\s]+|["'\s]+$/g, "")
+    .trim();
+
+  if (!cleaned) {
+    return "New Project";
+  }
+
+  return cleaned.slice(0, 60);
+}
+
 export async function generateChatName(
   userQuery: string,
   context?: { userId?: number; chatId?: string }
 ): Promise<string> {
-  const model = await getAIModel(true);
-  const { text } = await generateText({
-    model,
-    prompt: buildChatNamePrompt(userQuery),
-    experimental_telemetry: {
-      isEnabled: true,
-      functionId: "generate-chat-name",
-      metadata: context
-        ? {
-          ...(context.userId != null && { userId: context.userId }),
-          ...(context.chatId != null && { chatId: context.chatId }),
-        }
-        : undefined,
-    },
-  });
-  let cleaned = text.trim();
-  if ((cleaned.startsWith('"') && cleaned.endsWith('"')) ||
-    (cleaned.startsWith("'") && cleaned.endsWith("'"))) {
-    cleaned = cleaned.slice(1, -1).trim();
+  try {
+    const model = await getAIModel(true);
+    const { text } = await generateText({
+      model,
+      prompt: buildChatNamePrompt(userQuery),
+      experimental_telemetry: {
+        isEnabled: true,
+        functionId: "generate-chat-name",
+        metadata: context
+          ? {
+              ...(context.userId != null && { userId: context.userId }),
+              ...(context.chatId != null && { chatId: context.chatId }),
+            }
+          : undefined,
+      },
+    });
+    let cleaned = text.trim();
+    if (
+      (cleaned.startsWith('"') && cleaned.endsWith('"')) ||
+      (cleaned.startsWith("'") && cleaned.endsWith("'"))
+    ) {
+      cleaned = cleaned.slice(1, -1).trim();
+    }
+    return cleaned.slice(0, 60) || buildFallbackChatName(userQuery);
+  } catch (error) {
+    console.warn("Chat title generation failed, using fallback title:", {
+      userId: context?.userId ?? null,
+      chatId: context?.chatId ?? null,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return buildFallbackChatName(userQuery);
   }
-  return cleaned.slice(0, 60) || "New Project";
 }
 
 export async function getUser() {
@@ -900,17 +926,13 @@ export async function appendChatStreamEvent(data: {
   eventType: string;
   payload: Record<string, unknown>;
 }) {
-  const [row] = await db
-    .insert(chatStreamEvents)
-    .values({
-      chatId: data.chatId,
-      runId: data.runId,
-      eventType: data.eventType,
-      payload: data.payload,
-    })
-    .returning();
+  const rows = await appendChatStreamEvents({
+    chatId: data.chatId,
+    runId: data.runId,
+    events: [{ eventType: data.eventType, payload: data.payload }],
+  });
 
-  return row;
+  return rows[0] ?? null;
 }
 
 export async function appendChatStreamEvents(data: {
@@ -925,17 +947,53 @@ export async function appendChatStreamEvents(data: {
     return [];
   }
 
-  return db
-    .insert(chatStreamEvents)
-    .values(
-      data.events.map((event) => ({
+  return db.transaction(async (tx) => {
+    await tx
+      .insert(chatStreamCursors)
+      .values({
         chatId: data.chatId,
-        runId: data.runId,
-        eventType: event.eventType,
-        payload: event.payload,
-      }))
-    )
-    .returning();
+        lastLogicalEventId: 0,
+        updatedAt: new Date(),
+      })
+      .onConflictDoNothing({ target: chatStreamCursors.chatId });
+
+    const [cursor] = await tx
+      .select()
+      .from(chatStreamCursors)
+      .where(eq(chatStreamCursors.chatId, data.chatId))
+      .for("update")
+      .limit(1);
+
+    if (!cursor) {
+      throw new Error(`Chat stream cursor not found for chat ${data.chatId}`);
+    }
+
+    const nextLogicalEventId = Number(cursor.lastLogicalEventId) + 1;
+    const finalLogicalEventId = nextLogicalEventId + data.events.length - 1;
+
+    await tx
+      .update(chatStreamCursors)
+      .set({
+        lastLogicalEventId: finalLogicalEventId,
+        updatedAt: new Date(),
+      })
+      .where(eq(chatStreamCursors.chatId, data.chatId));
+
+    const rows = await tx
+      .insert(chatStreamEvents)
+      .values(
+        data.events.map((event, index) => ({
+          chatId: data.chatId,
+          runId: data.runId,
+          logicalEventId: nextLogicalEventId + index,
+          eventType: event.eventType,
+          payload: event.payload,
+        }))
+      )
+      .returning();
+
+    return rows.sort((a, b) => a.logicalEventId - b.logicalEventId);
+  });
 }
 
 export async function getChatStreamEventsAfter(data: {
@@ -946,14 +1004,14 @@ export async function getChatStreamEventsAfter(data: {
   const limit = Math.min(data.limit ?? 100, 500);
   const conditions = [eq(chatStreamEvents.chatId, data.chatId)];
   if (typeof data.afterEventId === "number" && Number.isFinite(data.afterEventId)) {
-    conditions.push(gt(chatStreamEvents.id, data.afterEventId));
+    conditions.push(gt(chatStreamEvents.logicalEventId, data.afterEventId));
   }
 
   return db
     .select()
     .from(chatStreamEvents)
     .where(and(...conditions))
-    .orderBy(asc(chatStreamEvents.id))
+    .orderBy(asc(chatStreamEvents.logicalEventId))
     .limit(limit);
 }
 
@@ -962,7 +1020,7 @@ export async function getLatestChatStreamEvent(chatId: number) {
     .select()
     .from(chatStreamEvents)
     .where(eq(chatStreamEvents.chatId, chatId))
-    .orderBy(desc(chatStreamEvents.id))
+    .orderBy(desc(chatStreamEvents.logicalEventId))
     .limit(1);
 
   return rows[0] ?? null;

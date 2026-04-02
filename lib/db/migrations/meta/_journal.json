@@ -120,6 +120,13 @@
       "when": 1774274148902,
       "tag": "0016_swift_speedball",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1775065482376,
+      "tag": "0017_curvy_magdalene",
+      "breakpoints": true
     }
   ]
 }

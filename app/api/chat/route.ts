@@ -48,6 +48,8 @@ const TURN_EVENT_FLUSH_MS = 120;
 const TURN_EVENT_BATCH_SIZE = 24;
 
 const CHAT_STREAM_DEBUG_ENABLED = process.env.DEBUG_CHAT_STREAM === "1";
+const STREAM_DIAGNOSTICS_ENABLED =
+  process.env.DEBUG_STREAM_DIAGNOSTICS === "1";
 
 function debugChatStream(message: string, payload?: Record<string, unknown>) {
   if (!CHAT_STREAM_DEBUG_ENABLED) return;
@@ -56,6 +58,18 @@ function debugChatStream(message: string, payload?: Record<string, unknown>) {
     return;
   }
   console.log(`[chat-stream-debug] ${message}`);
+}
+
+function debugStreamDiagnostics(
+  message: string,
+  payload?: Record<string, unknown>
+) {
+  if (!STREAM_DIAGNOSTICS_ENABLED) return;
+  if (payload) {
+    console.log(`[stream-diag] ${message}`, payload);
+    return;
+  }
+  console.log(`[stream-diag] ${message}`);
 }
 
 function getToolTitle(toolName: string): string {
@@ -238,22 +252,53 @@ async function chatHandler(request: NextRequest) {
     }> = [];
     let turnEventsFlushTimer: ReturnType<typeof setTimeout> | null = null;
     let turnEventsFlushChain: Promise<void> = Promise.resolve();
+    let emittedTurnEventsCount = 0;
+    let publishedTurnEventsCount = 0;
+    let flushAttemptsCount = 0;
 
     const flushPendingTurnEvents = async () => {
       if (!turnRunId || pendingTurnEvents.length === 0) return;
+      flushAttemptsCount += 1;
+      const queuedBeforeFlush = pendingTurnEvents.length;
 
       while (pendingTurnEvents.length > 0) {
         const events = pendingTurnEvents.splice(0, TURN_EVENT_BATCH_SIZE);
         try {
-          await publishStreamEvents({
+          const published = await publishStreamEvents({
             chatId: chat.id,
             runId: turnRunId,
             events,
           });
+          publishedTurnEventsCount += published.length;
+          debugStreamDiagnostics("publish-batch-ok", {
+            chatId,
+            turnRunId,
+            batchSize: events.length,
+            publishedCount: published.length,
+            firstLogicalEventId: published[0]?.logicalEventId ?? null,
+            lastLogicalEventId:
+              published[published.length - 1]?.logicalEventId ?? null,
+            queuedRemaining: pendingTurnEvents.length,
+          });
         } catch (error) {
           console.error("Failed to append stream event batch:", error);
+          debugStreamDiagnostics("publish-batch-failed", {
+            chatId,
+            turnRunId,
+            batchSize: events.length,
+            queuedRemaining: pendingTurnEvents.length,
+            error: error instanceof Error ? error.message : String(error),
+          });
         }
       }
+      debugStreamDiagnostics("flush-complete", {
+        chatId,
+        turnRunId,
+        queuedBeforeFlush,
+        emittedTurnEventsCount,
+        publishedTurnEventsCount,
+        flushAttemptsCount,
+      });
     };
 
     const queueTurnEventFlush = () => {
@@ -283,6 +328,15 @@ async function chatHandler(request: NextRequest) {
       if (!turnRunId) return;
 
       pendingTurnEvents.push({ eventType, payload });
+      emittedTurnEventsCount += 1;
+      debugStreamDiagnostics("event-enqueued", {
+        chatId,
+        turnRunId,
+        eventType,
+        urgent: Boolean(options?.urgent),
+        queueDepth: pendingTurnEvents.length,
+        emittedTurnEventsCount,
+      });
 
       if (options?.urgent || pendingTurnEvents.length >= TURN_EVENT_BATCH_SIZE) {
         await flushTurnEventsNow();
@@ -796,6 +850,14 @@ async function chatHandler(request: NextRequest) {
             userId: user.id,
           });
         }
+        debugStreamDiagnostics("run-finished", {
+          chatId,
+          turnRunId: turnRunId ?? null,
+          emittedTurnEventsCount,
+          publishedTurnEventsCount,
+          flushAttemptsCount,
+          finalTextLength: finalText.length,
+        });
         logFinalTimings("completed");
       },
       onError: async (error) => {
@@ -826,6 +888,14 @@ async function chatHandler(request: NextRequest) {
         updateActiveObservation({ output: errMsg, level: "ERROR" });
         updateActiveTrace({ output: errMsg });
         trace.getActiveSpan()?.end();
+        debugStreamDiagnostics("run-failed", {
+          chatId,
+          turnRunId: turnRunId ?? null,
+          emittedTurnEventsCount,
+          publishedTurnEventsCount,
+          flushAttemptsCount,
+          error: errMsg,
+        });
         logFinalTimings("failed", errMsg);
       },
     });

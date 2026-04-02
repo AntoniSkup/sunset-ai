@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { nanoid } from "nanoid";
 import {
-  appendChatStreamEvent,
   createChatMessage,
   enqueueChatTurnRun,
   getChatByPublicId,
@@ -14,6 +13,7 @@ import {
   updateChatByPublicId,
   getUser,
 } from "@/lib/db/queries";
+import { publishStreamEvents } from "@/lib/chat/stream-bus";
 import { triggerChatTurnTask } from "@/lib/chat/trigger-chat-turn-task";
 import {
   extractTextFromMessageParts,
@@ -105,15 +105,19 @@ export async function POST(
     payload: payloadObj,
   });
 
-  await appendChatStreamEvent({
+  await publishStreamEvents({
     chatId: chat.id,
     runId: run.id,
-    eventType: "run_enqueued",
-    payload: {
-      runId: run.id,
-      sequence: run.sequence,
-      status: run.status,
-    },
+    events: [
+      {
+        eventType: "run_enqueued",
+        payload: {
+          runId: run.id,
+          sequence: run.sequence,
+          status: run.status,
+        },
+      },
+    ],
   });
 
   // Trigger processing if there isn't already an active run for this chat.

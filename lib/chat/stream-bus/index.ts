@@ -70,6 +70,13 @@ function markRedisTemporarilyUnavailable() {
   markRedisWriteUnavailable();
 }
 
+function isRedisTimeoutError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    error.message.startsWith("Redis stream op timed out after ")
+  );
+}
+
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   let timeoutId: ReturnType<typeof setTimeout> | null = null;
   const timeout = new Promise<never>((_, reject) => {
@@ -88,31 +95,45 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T
 export async function publishStreamEvents(
   params: PublishEventsParams
 ): Promise<StreamEventEnvelope[]> {
-  if (!shouldUseRedisStreamBus() || isRedisWriteTemporarilyUnavailable()) {
+  const dbEvents = await dbStreamBusAdapter.publishEvents(params);
+  const redisEnabled = shouldUseRedisStreamBus();
+  const redisWriteUnavailable = isRedisWriteTemporarilyUnavailable();
+
+  if (!redisEnabled || redisWriteUnavailable) {
+    if (!STREAM_BUS_DB_FALLBACK) {
+      const reason = !redisEnabled
+        ? "redis-disabled-or-unconfigured"
+        : "redis-write-temporarily-unavailable";
+      console.error("[stream-bus] strict:publish-blocked", {
+        chatId: params.chatId,
+        runId: params.runId,
+        reason,
+        fallbackEnabled: STREAM_BUS_DB_FALLBACK,
+      });
+      throw new Error(
+        !redisEnabled
+          ? "Redis stream bus is not configured or disabled while DB fallback is disabled"
+          : "Redis stream write temporarily unavailable while DB fallback is disabled"
+      );
+    }
     debugStreamBus("publish:db-direct", {
       chatId: params.chatId,
       runId: params.runId,
       events: params.events.length,
-      redisTemporarilyUnavailable: isRedisWriteTemporarilyUnavailable(),
+      firstLogicalEventId: dbEvents[0]?.logicalEventId ?? null,
+      lastLogicalEventId: dbEvents[dbEvents.length - 1]?.logicalEventId ?? null,
+      redisTemporarilyUnavailable: redisWriteUnavailable,
     });
-    return dbStreamBusAdapter.publishEvents(params);
-  }
-
-  let dbMirroredEvents: StreamEventEnvelope[] | null = null;
-  if (STREAM_BUS_DB_FALLBACK) {
-    try {
-      dbMirroredEvents = await dbStreamBusAdapter.publishEvents(params);
-    } catch (error) {
-      console.error("DB mirror publish failed for stream bus:", error);
-    }
+    return dbEvents;
   }
 
   const redisPublishParams =
-    dbMirroredEvents && dbMirroredEvents.length === params.events.length
+    dbEvents.length === params.events.length
       ? {
           ...params,
-          events: dbMirroredEvents.map((event) => ({
-            id: event.id,
+          events: dbEvents.map((event) => ({
+            dbId: event.dbId,
+            logicalEventId: event.logicalEventId,
             eventType: event.eventType,
             payload: event.payload,
             createdAt: event.createdAt,
@@ -129,42 +150,64 @@ export async function publishStreamEvents(
       chatId: params.chatId,
       runId: params.runId,
       events: params.events.length,
-      firstId: events[0]?.id ?? null,
-      lastId: events[events.length - 1]?.id ?? null,
-      mirroredToDb: STREAM_BUS_DB_FALLBACK,
+      firstLogicalEventId: events[0]?.logicalEventId ?? null,
+      lastLogicalEventId: events[events.length - 1]?.logicalEventId ?? null,
     });
-    if (dbMirroredEvents) {
-      return dbMirroredEvents;
-    }
-    return events;
+    return dbEvents;
   } catch (error) {
     markRedisTemporarilyUnavailable();
-    if (!STREAM_BUS_DB_FALLBACK) throw error;
-    console.error("Redis stream publish failed, falling back to DB:", error);
+    if (!STREAM_BUS_DB_FALLBACK) {
+      console.error("[stream-bus] strict:publish-failed", {
+        chatId: params.chatId,
+        runId: params.runId,
+        timeout: isRedisTimeoutError(error),
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+    console.error("Redis stream publish failed after DB commit:", error);
     debugStreamBus("publish:db-fallback", {
       chatId: params.chatId,
       runId: params.runId,
       events: params.events.length,
+      firstLogicalEventId: dbEvents[0]?.logicalEventId ?? null,
+      lastLogicalEventId: dbEvents[dbEvents.length - 1]?.logicalEventId ?? null,
     });
-    if (dbMirroredEvents) {
-      return dbMirroredEvents;
-    }
-    return dbStreamBusAdapter.publishEvents(params);
+    return dbEvents;
   }
 }
 
 export async function readStreamEventsAfter(
   params: ReadEventsAfterParams
 ): Promise<StreamEventEnvelope[]> {
-  const redisTemporarilyUnavailable =
-    isRedisReadTemporarilyUnavailable() || isRedisWriteTemporarilyUnavailable();
-  if (!shouldUseRedisStreamBus() || redisTemporarilyUnavailable) {
+  const redisTemporarilyUnavailable = isRedisReadTemporarilyUnavailable();
+  const redisEnabled = shouldUseRedisStreamBus();
+  if (!redisEnabled || redisTemporarilyUnavailable) {
+    if (!STREAM_BUS_DB_FALLBACK) {
+      const reason = !redisEnabled
+        ? "redis-disabled-or-unconfigured"
+        : "redis-read-temporarily-unavailable";
+      console.error("[stream-bus] strict:read-blocked", {
+        chatId: params.chatId,
+        afterLogicalEventId: params.afterLogicalEventId,
+        limit: params.limit,
+        reason,
+        fallbackEnabled: STREAM_BUS_DB_FALLBACK,
+      });
+      throw new Error(
+        !redisEnabled
+          ? "Redis stream bus is not configured or disabled while DB fallback is disabled"
+          : "Redis stream temporarily unavailable while DB fallback is disabled"
+      );
+    }
     const events = await dbStreamBusAdapter.readEventsAfter(params);
     debugStreamBus("read:db-direct", {
       chatId: params.chatId,
-      afterEventId: params.afterEventId,
+      afterLogicalEventId: params.afterLogicalEventId,
       limit: params.limit,
       returned: events.length,
+      firstLogicalEventId: events[0]?.logicalEventId ?? null,
+      lastLogicalEventId: events[events.length - 1]?.logicalEventId ?? null,
       redisTemporarilyUnavailable,
     });
     return events;
@@ -180,32 +223,57 @@ export async function readStreamEventsAfter(
       if (dbEvents.length > 0) {
         debugStreamBus("read:db-on-empty-redis", {
           chatId: params.chatId,
-          afterEventId: params.afterEventId,
+          afterLogicalEventId: params.afterLogicalEventId,
           limit: params.limit,
           returned: dbEvents.length,
+          firstLogicalEventId: dbEvents[0]?.logicalEventId ?? null,
+          lastLogicalEventId: dbEvents[dbEvents.length - 1]?.logicalEventId ?? null,
         });
         return dbEvents;
       }
     }
     debugStreamBus("read:redis", {
       chatId: params.chatId,
-      afterEventId: params.afterEventId,
+      afterLogicalEventId: params.afterLogicalEventId,
       limit: params.limit,
       returned: events.length,
-      firstId: events[0]?.id ?? null,
-      lastId: events[events.length - 1]?.id ?? null,
+      firstLogicalEventId: events[0]?.logicalEventId ?? null,
+      lastLogicalEventId: events[events.length - 1]?.logicalEventId ?? null,
     });
     return events;
   } catch (error) {
-    markRedisTemporarilyUnavailable();
-    if (!STREAM_BUS_DB_FALLBACK) throw error;
-    console.error("Redis stream read failed, falling back to DB:", error);
+    // Only enter read cooldown for transient infra failures.
+    if (isRedisTimeoutError(error)) {
+      markRedisReadUnavailable();
+    }
+    if (!STREAM_BUS_DB_FALLBACK) {
+      console.error("[stream-bus] strict:read-failed", {
+        chatId: params.chatId,
+        afterLogicalEventId: params.afterLogicalEventId,
+        limit: params.limit,
+        timeout: isRedisTimeoutError(error),
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+    if (isRedisTimeoutError(error)) {
+      debugStreamBus("read:db-fallback-timeout", {
+        chatId: params.chatId,
+        afterLogicalEventId: params.afterLogicalEventId,
+        limit: params.limit,
+        timeoutMs: REDIS_STREAM_READ_TIMEOUT_MS,
+      });
+    } else {
+      console.error("Redis stream read failed, falling back to DB:", error);
+    }
     const events = await dbStreamBusAdapter.readEventsAfter(params);
     debugStreamBus("read:db-fallback", {
       chatId: params.chatId,
-      afterEventId: params.afterEventId,
+      afterLogicalEventId: params.afterLogicalEventId,
       limit: params.limit,
       returned: events.length,
+      firstLogicalEventId: events[0]?.logicalEventId ?? null,
+      lastLogicalEventId: events[events.length - 1]?.logicalEventId ?? null,
     });
     return events;
   }

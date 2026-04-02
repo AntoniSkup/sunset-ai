@@ -1,11 +1,11 @@
 import { logger, task } from "@trigger.dev/sdk/v3";
 import {
-  appendChatStreamEvent,
   attachTriggerRunIdToChatTurnRun,
   claimNextPendingChatTurnRun,
   getChatTurnRunById,
   markChatTurnRunFailed,
 } from "@/lib/db/queries";
+import { publishStreamEvents } from "@/lib/chat/stream-bus";
 import { triggerChatTurnTask } from "@/lib/chat/trigger-chat-turn-task";
 
 export const runChatTurnTask = task({
@@ -116,14 +116,18 @@ export const runChatTurnTask = task({
         runId: claimed.id,
         errorMessage: message,
       });
-      await appendChatStreamEvent({
+      await publishStreamEvents({
         chatId: claimed.chatId,
         runId: claimed.id,
-        eventType: "run_failed",
-        payload: {
-          runId: claimed.id,
-          error: message,
-        },
+        events: [
+          {
+            eventType: "run_failed",
+            payload: {
+              runId: claimed.id,
+              error: message,
+            },
+          },
+        ],
       });
       throw error;
     } finally {
