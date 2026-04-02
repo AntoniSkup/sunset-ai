@@ -419,7 +419,7 @@ async function chatHandler(request: NextRequest) {
     }
 
     const persistedContext = await getChatMessagesByPublicId(chatId, user.id);
-    const contextMessages: Array<Omit<UIMessage, "id">> =
+    const contextMessages: Array<Omit<UIMessage, "id">  > =
       persistedContext?.messages?.length
         ? persistedContext.messages.map((m) => {
             const parts = sanitizePersistedMessageParts(m.parts);
