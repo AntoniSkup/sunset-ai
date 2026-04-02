@@ -17,31 +17,6 @@ import type { BillingApiResponse } from "@/app/api/billing/route";
 
 const billingFetcher = (url: string) => fetch(url).then((res) => res.json());
 const MIN_CREDITS_TO_SEND = 0.5;
-const CHAT_PENDING_DEBUG_ENABLED =
-  process.env.NEXT_PUBLIC_CHAT_DEBUG_PENDING === "1";
-const CHAT_STREAM_CLIENT_DEBUG_ENABLED =
-  process.env.NEXT_PUBLIC_CHAT_DEBUG_STREAM === "1";
-
-function debugPendingFlow(message: string, payload?: Record<string, unknown>) {
-  if (!CHAT_PENDING_DEBUG_ENABLED) return;
-  if (payload) {
-    console.log(`[chat-pending-debug] ${message}`, payload);
-    return;
-  }
-  console.log(`[chat-pending-debug] ${message}`);
-}
-
-function debugChatStreamClient(
-  message: string,
-  payload?: Record<string, unknown>
-) {
-  if (!CHAT_STREAM_CLIENT_DEBUG_ENABLED) return;
-  if (payload) {
-    console.log(`[chat-stream-client] ${message}`, payload);
-    return;
-  }
-  console.log(`[chat-stream-client] ${message}`);
-}
 
 type PendingAttachment = {
   localId: string;
@@ -82,11 +57,6 @@ function ChatWithHistory({ chatId }: { chatId: string }) {
     () => {
       const pending = usePendingMessageStore.getState().pendingMessage;
       pendingForMountRef.current = pending != null && pending.chatId === chatId;
-      debugPendingFlow("ChatWithHistory initial pending snapshot", {
-        chatId,
-        pendingChatId: pending?.chatId ?? null,
-        hasPending: Boolean(pending),
-      });
       return pendingForMountRef.current ? [] : null;
     }
   );
@@ -95,12 +65,6 @@ function ChatWithHistory({ chatId }: { chatId: string }) {
   useEffect(() => {
     let cancelled = false;
     const hasPendingForThisChat = pendingForMountRef.current;
-    debugPendingFlow("ChatWithHistory effect start", {
-      chatId,
-      pendingChatId:
-        usePendingMessageStore.getState().pendingMessage?.chatId ?? null,
-      hasPendingForThisChat,
-    });
     setInitialMessages(hasPendingForThisChat ? [] : null);
     setLoadError(null);
 
@@ -115,22 +79,12 @@ function ChatWithHistory({ chatId }: { chatId: string }) {
         }
         const data = await res.json();
         if (!cancelled) {
-          debugPendingFlow("ChatWithHistory fetched history", {
-            chatId,
-            fetchedMessages: Array.isArray(data?.messages)
-              ? data.messages.length
-              : 0,
-          });
           setInitialMessages(
             Array.isArray(data?.messages) ? data.messages : []
           );
         }
       } catch (e) {
         if (!cancelled) {
-          debugPendingFlow("ChatWithHistory fetch failed", {
-            chatId,
-            error: e instanceof Error ? e.message : String(e),
-          });
           setLoadError(e instanceof Error ? e.message : "Failed to load chat");
           setInitialMessages([]);
         }
@@ -317,14 +271,6 @@ function ChatInner({
   const enqueueTurnRun = useCallback(
     async (parts: UIMessage["parts"]) => {
       if (!chatId || parts.length === 0) return;
-      debugPendingFlow("enqueueTurnRun called", {
-        chatId,
-        partsCount: parts.length,
-        textChars: parts
-          .filter((p) => p.type === "text")
-          .map((p) => (p as { type: "text"; text: string }).text)
-          .join("").length,
-      });
 
       const userMessageId = `local-user-${Date.now()}-${Math.random()
         .toString(36)
@@ -384,18 +330,10 @@ function ChatInner({
           },
         ]);
         setStatus("ready");
-        debugPendingFlow("enqueueTurnRun failed", {
-          chatId,
-          status: response.status,
-          error: errMsg,
-        });
         return;
       }
 
       await response.json().catch(() => null);
-      debugPendingFlow("enqueueTurnRun accepted", {
-        chatId,
-      });
       setStatus("streaming");
     },
     [chatId]
@@ -412,14 +350,6 @@ function ChatInner({
       const alreadyConsumedInSession =
         typeof window !== "undefined" &&
         window.sessionStorage.getItem(consumedStorageKey) === "1";
-      debugPendingFlow("pending consume effect candidate", {
-        chatId,
-        pendingId: pendingMessage.id,
-        pendingChatId: pendingMessage.chatId,
-        currentMessages: messages.length,
-        status,
-        alreadyConsumedInSession,
-      });
       if (
         consumedPendingIdsRef.current.has(pendingMessage.id) ||
         alreadyConsumedInSession
@@ -434,10 +364,6 @@ function ChatInner({
         }
         setPendingMessage(null);
         setShowCreditsLimitModal(true);
-        debugPendingFlow("pending blocked by credits", {
-          chatId,
-          pendingId: pendingMessage.id,
-        });
         return;
       }
 
@@ -468,11 +394,6 @@ function ChatInner({
       }
       if (parts.length === 0) return;
       lastUserMessagePartsRef.current = parts;
-      debugPendingFlow("pending consumed -> enqueue", {
-        chatId,
-        pendingId: pendingMessage.id,
-        partsCount: parts.length,
-      });
       void enqueueTurnRun(parts);
     }
   }, [
@@ -1046,11 +967,6 @@ function ChatInner({
         `/api/chats/${encodeURIComponent(chatId)}/stream?afterEventId=${afterEventId}`
       );
       eventSourceRef.current = source;
-      debugChatStreamClient("connect", {
-        chatId,
-        afterEventId,
-        connectionId,
-      });
 
       const eventTypes = [
         "run_enqueued",
@@ -1067,12 +983,6 @@ function ChatInner({
         if (connectionId !== streamConnectionIdRef.current) return;
         try {
           const envelope = JSON.parse(event.data) as StreamEnvelope;
-          debugChatStreamClient("envelope", {
-            chatId,
-            connectionId,
-            eventId: envelope.logicalEventId,
-            eventType: envelope.eventType,
-          });
           handleEnvelope(envelope);
         } catch {
           // ignore malformed event
@@ -1085,21 +995,10 @@ function ChatInner({
 
       source.onopen = () => {
         if (connectionId !== streamConnectionIdRef.current) return;
-        debugChatStreamClient("open", {
-          chatId,
-          connectionId,
-          afterEventId,
-        });
       };
 
       source.onerror = () => {
         if (connectionId !== streamConnectionIdRef.current) return;
-        debugChatStreamClient("error", {
-          chatId,
-          connectionId,
-          afterEventId: lastEventIdRef.current,
-          readyState: source.readyState,
-        });
         source.close();
         if (cancelled) return;
         reconnectTimerRef.current = window.setTimeout(() => {

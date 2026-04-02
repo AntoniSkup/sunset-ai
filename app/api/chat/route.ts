@@ -47,31 +47,6 @@ const TEXT_DELTA_FLUSH_CHARS = 8;
 const TURN_EVENT_FLUSH_MS = 60;
 const TURN_EVENT_BATCH_SIZE = 24;
 
-const CHAT_STREAM_DEBUG_ENABLED = process.env.DEBUG_CHAT_STREAM === "1";
-const STREAM_DIAGNOSTICS_ENABLED =
-  process.env.DEBUG_STREAM_DIAGNOSTICS === "1";
-
-function debugChatStream(message: string, payload?: Record<string, unknown>) {
-  if (!CHAT_STREAM_DEBUG_ENABLED) return;
-  if (payload) {
-    console.log(`[chat-stream-debug] ${message}`, payload);
-    return;
-  }
-  console.log(`[chat-stream-debug] ${message}`);
-}
-
-function debugStreamDiagnostics(
-  message: string,
-  payload?: Record<string, unknown>
-) {
-  if (!STREAM_DIAGNOSTICS_ENABLED) return;
-  if (payload) {
-    console.log(`[stream-diag] ${message}`, payload);
-    return;
-  }
-  console.log(`[stream-diag] ${message}`);
-}
-
 function getToolTitle(toolName: string): string {
   if (toolName === "create_site") {
     return "Site layout";
@@ -200,7 +175,6 @@ function buildOrderedAssistantContent(segments: ContentSegment[]): string {
 
 async function chatHandler(request: NextRequest) {
   try {
-    const requestStartedAtMs = Date.now();
     const body = await request.json();
     const { messages, chatId, turnRunId } = body as {
       messages?: Array<Omit<UIMessage, "id">>;
@@ -252,53 +226,21 @@ async function chatHandler(request: NextRequest) {
     }> = [];
     let turnEventsFlushTimer: ReturnType<typeof setTimeout> | null = null;
     let turnEventsFlushChain: Promise<void> = Promise.resolve();
-    let emittedTurnEventsCount = 0;
-    let publishedTurnEventsCount = 0;
-    let flushAttemptsCount = 0;
 
     const flushPendingTurnEvents = async () => {
       if (!turnRunId || pendingTurnEvents.length === 0) return;
-      flushAttemptsCount += 1;
-      const queuedBeforeFlush = pendingTurnEvents.length;
 
       while (pendingTurnEvents.length > 0) {
         const events = pendingTurnEvents.splice(0, TURN_EVENT_BATCH_SIZE);
         try {
-          const published = await publishStreamEvents({
+          await publishStreamEvents({
             chatId: chat.id,
             runId: turnRunId,
             events,
           });
-          publishedTurnEventsCount += published.length;
-          debugStreamDiagnostics("publish-batch-ok", {
-            chatId,
-            turnRunId,
-            batchSize: events.length,
-            publishedCount: published.length,
-            firstLogicalEventId: published[0]?.logicalEventId ?? null,
-            lastLogicalEventId:
-              published[published.length - 1]?.logicalEventId ?? null,
-            queuedRemaining: pendingTurnEvents.length,
-          });
         } catch (error) {
-          console.error("Failed to append stream event batch:", error);
-          debugStreamDiagnostics("publish-batch-failed", {
-            chatId,
-            turnRunId,
-            batchSize: events.length,
-            queuedRemaining: pendingTurnEvents.length,
-            error: error instanceof Error ? error.message : String(error),
-          });
         }
       }
-      debugStreamDiagnostics("flush-complete", {
-        chatId,
-        turnRunId,
-        queuedBeforeFlush,
-        emittedTurnEventsCount,
-        publishedTurnEventsCount,
-        flushAttemptsCount,
-      });
     };
 
     const queueTurnEventFlush = () => {
@@ -306,9 +248,7 @@ async function chatHandler(request: NextRequest) {
         .then(async () => {
           await flushPendingTurnEvents();
         })
-        .catch((error) => {
-          console.error("Failed to flush queued stream events:", error);
-        });
+        .catch(() => {});
       return turnEventsFlushChain;
     };
 
@@ -328,15 +268,6 @@ async function chatHandler(request: NextRequest) {
       if (!turnRunId) return;
 
       pendingTurnEvents.push({ eventType, payload });
-      emittedTurnEventsCount += 1;
-      debugStreamDiagnostics("event-enqueued", {
-        chatId,
-        turnRunId,
-        eventType,
-        urgent: Boolean(options?.urgent),
-        queueDepth: pendingTurnEvents.length,
-        emittedTurnEventsCount,
-      });
 
       if (options?.urgent || pendingTurnEvents.length >= TURN_EVENT_BATCH_SIZE) {
         await flushTurnEventsNow();
@@ -356,13 +287,6 @@ async function chatHandler(request: NextRequest) {
         turnRunId,
       }, { urgent: true });
     }
-    debugChatStream("run-started", {
-      chatId,
-      turnRunId: turnRunId ?? null,
-      userId: user.id,
-      messageCount: messages.length,
-      internalCall: isInternalJobCall,
-    });
 
     const account = await getOrCreateAccountForUser(user.id);
     await ensureDailyCreditsForAccount(account.id);
@@ -436,7 +360,6 @@ async function chatHandler(request: NextRequest) {
       getAIModel(),
       getAIModelId(),
     ]);
-    console.log(`[chat-model] model=${modelId}`);
     const promptableSiteAssets = toSiteAssetPromptDescriptors(
       await getSiteAssetsByChatId(chatId, user.id)
     );
@@ -475,19 +398,6 @@ async function chatHandler(request: NextRequest) {
       revisionNumber: number;
       revisionId: number;
     } | null = null;
-    const generationStartedAtMs = Date.now();
-    let finalTimingsLogged = false;
-    const logFinalTimings = (status: "completed" | "failed", errorMessage?: string) => {
-      if (finalTimingsLogged) return;
-      finalTimingsLogged = true;
-      const nowMs = Date.now();
-      const generationSeconds = ((nowMs - generationStartedAtMs) / 1000).toFixed(2);
-      const totalSeconds = ((nowMs - requestStartedAtMs) / 1000).toFixed(2);
-      const errorSuffix = errorMessage ? ` error="${errorMessage.replace(/\s+/g, " ").slice(0, 200)}"` : "";
-      console.log(
-        `[chat-timing] status=${status} generation_s=${generationSeconds} total_s=${totalSeconds}${errorSuffix}`
-      );
-    };
 
     const lastUserText =
       (lastMessage?.role === "user" && Array.isArray(lastMessage.parts)
@@ -521,13 +431,6 @@ async function chatHandler(request: NextRequest) {
       const chunk = liveTextBuffer;
       liveTextBuffer = "";
       emittedAssistantChars += chunk.length;
-      debugChatStream("emit-text-delta", {
-        chatId,
-        turnRunId: turnRunId ?? null,
-        chunkLength: chunk.length,
-        emittedAssistantChars,
-        chunkPreview: chunk.slice(0, 120),
-      });
       await emitTurnEvent("text_delta", { text: chunk });
     };
 
@@ -584,24 +487,11 @@ async function chatHandler(request: NextRequest) {
                 toolName,
                 destination,
               });
-              debugChatStream("tool-call-emitted-from-chunk", {
-                chatId,
-                turnRunId: turnRunId ?? null,
-                eventType,
-                toolCallId,
-                toolName,
-                destination,
-              });
             }
           }
 
           // Prevent tool payload JSON (args/input) from leaking into assistant text stream.
           if (isNonAssistantOrToolChunkType(eventType)) {
-            debugChatStream("chunk-skipped-non-assistant-text", {
-              chatId,
-              turnRunId: turnRunId ?? null,
-              eventType,
-            });
             return;
           }
           const textDelta =
@@ -616,25 +506,8 @@ async function chatHandler(request: NextRequest) {
             null;
 
           if (!textDelta) {
-            debugChatStream("chunk-without-text-delta", {
-              chatId,
-              turnRunId: turnRunId ?? null,
-              eventType,
-              evtKeys: evt && typeof evt === "object" ? Object.keys(evt).slice(0, 12) : [],
-              chunkKeys:
-                evt?.chunk && typeof evt.chunk === "object"
-                  ? Object.keys(evt.chunk).slice(0, 12)
-                  : [],
-            });
             return;
           }
-          debugChatStream("chunk-text-delta", {
-            chatId,
-            turnRunId: turnRunId ?? null,
-            eventType,
-            deltaLength: textDelta.length,
-            deltaPreview: textDelta.slice(0, 120),
-          });
           liveTextBuffer += textDelta;
 
           if (liveTextBuffer.length >= TEXT_DELTA_FLUSH_CHARS) {
@@ -717,16 +590,6 @@ async function chatHandler(request: NextRequest) {
               }
             }
           }
-          debugChatStream("step-finish-summary", {
-            chatId,
-            turnRunId: turnRunId ?? null,
-            stepNumber,
-            stepTextPartsCount: stepTextParts.length,
-            stepTextTotalLength: stepTextParts.reduce((sum, t) => sum + t.length, 0),
-            contentPartsCount: content.length,
-            staticResultsCount: staticResults.length,
-          });
-
           // Fallback for providers/paths where onChunk doesn't emit text deltas:
           // emit only the assistant suffix that wasn't emitted yet.
           if (stepTextParts.length > 0) {
@@ -748,14 +611,6 @@ async function chatHandler(request: NextRequest) {
               const fallbackDelta = aggregated.slice(emittedAssistantChars);
               if (fallbackDelta) {
                 emittedAssistantChars += fallbackDelta.length;
-                debugChatStream("fallback-step-delta", {
-                  chatId,
-                  turnRunId: turnRunId ?? null,
-                  stepNumber,
-                  fallbackLength: fallbackDelta.length,
-                  emittedAssistantChars,
-                  fallbackPreview: fallbackDelta.slice(0, 120),
-                });
                 await emitTurnEvent("text_delta", { text: fallbackDelta });
               }
             }
@@ -803,14 +658,6 @@ async function chatHandler(request: NextRequest) {
         await flushLiveTextDelta();
 
         const finalText = buildOrderedAssistantContent(contentSegments);
-        debugChatStream("run-finish", {
-          chatId,
-          turnRunId: turnRunId ?? null,
-          contentSegments: contentSegments.length,
-          finalTextLength: finalText.length,
-          emittedAssistantChars,
-          finalTextPreview: finalText.slice(0, 160),
-        });
         if (finalText) {
           try {
             await createChatMessage({
@@ -850,15 +697,6 @@ async function chatHandler(request: NextRequest) {
             userId: user.id,
           });
         }
-        debugStreamDiagnostics("run-finished", {
-          chatId,
-          turnRunId: turnRunId ?? null,
-          emittedTurnEventsCount,
-          publishedTurnEventsCount,
-          flushAttemptsCount,
-          finalTextLength: finalText.length,
-        });
-        logFinalTimings("completed");
       },
       onError: async (error) => {
         if (liveTextFlushTimer) {
@@ -868,11 +706,6 @@ async function chatHandler(request: NextRequest) {
         await flushLiveTextDelta();
 
         const errMsg = error instanceof Error ? error.message : String(error);
-        debugChatStream("run-error", {
-          chatId,
-          turnRunId: turnRunId ?? null,
-          error: errMsg,
-        });
         await billingSession.markFailed(errMsg);
         if (turnRunId) {
           await markChatTurnRunFailed({
@@ -888,15 +721,6 @@ async function chatHandler(request: NextRequest) {
         updateActiveObservation({ output: errMsg, level: "ERROR" });
         updateActiveTrace({ output: errMsg });
         trace.getActiveSpan()?.end();
-        debugStreamDiagnostics("run-failed", {
-          chatId,
-          turnRunId: turnRunId ?? null,
-          emittedTurnEventsCount,
-          publishedTurnEventsCount,
-          flushAttemptsCount,
-          error: errMsg,
-        });
-        logFinalTimings("failed", errMsg);
       },
     });
 
