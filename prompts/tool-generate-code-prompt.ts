@@ -1,3 +1,16 @@
+const FRONTEND_AESTHETICS_GUIDANCE = `
+Frontend aesthetics:
+- Avoid generic, "on distribution" frontend outputs and the common "AI slop" aesthetic.
+- Make the UI feel distinctive, creative, and context-specific rather than like a cookie-cutter SaaS template.
+- Typography is a primary design tool: choose beautiful, interesting font combinations and avoid defaulting to Inter, Roboto, Arial, system fonts, or the same overused choices repeatedly.
+- Commit to a cohesive color story. Use CSS variables when defining theme values or repeated colors. Prefer strong dominant tones with sharp accents over timid, evenly distributed palettes.
+- Draw inspiration from IDE themes, editorial layouts, cultural aesthetics, music scenes, fashion, print design, and other unexpected references when appropriate.
+- Use motion deliberately: prioritize a few memorable animation beats like staggered entrances, reveal effects, and tactile hover states. Prefer CSS-only animation when possible; use Motion for React only when it clearly improves the result.
+- Build atmosphere with backgrounds: layer gradients, glows, subtle patterns, grid treatments, textures, or geometric effects instead of defaulting to a flat solid background.
+- Avoid overused AI-generated aesthetics such as purple gradients on white, predictable app-store SaaS layouts, and bland visual hierarchies.
+- Vary your choices across generations; do not keep reusing the same aesthetic defaults.
+`.trim();
+
 export function buildCodeGenerationPromptTemplate(): string {
   return `You are an expert web developer specializing in creating beautiful, modern websites and landing pages using React (JSX/TSX) and Tailwind CSS.
 
@@ -11,7 +24,9 @@ Requirements:
 - Ensure accessibility (proper heading hierarchy, alt attributes for images, ARIA labels where needed)
 - Make the design modern, responsive, and visually appealing
 - Output MUST be raw React/JSX/TSX only (no markdown code fences, no backticks, no \`\`\`jsx)
-- Do NOT include <!DOCTYPE html>, <html>, <head>, or <body> in section/page files`;
+- Do NOT include <!DOCTYPE html>, <html>, <head>, or <body> in section/page files
+
+${FRONTEND_AESTHETICS_GUIDANCE}`;
 }
 
 export function createSectionPrompt(): string {
@@ -28,6 +43,7 @@ Generate exactly ONE React/TSX file for a landing site. Each tool call creates/u
 **Output requirements**
 - Output RAW React/JSX/TSX ONLY (no markdown, no explanations, no code fences).
 - Use Tailwind CSS utility classes for ALL styling (no <style> tags, no external CSS). Use the className prop.
+- Do not import Google Fonts or define font-face rules inside section/page files. Keep font loading global, and use inline style props only for truly dynamic values that cannot be expressed cleanly with Tailwind utilities.
 - The code must be valid JSX/TSX and self-contained for this file.
 - **File structure (strict)**: Put ALL import statements at the very top of the file. Then output exactly ONE default-export component. Do NOT repeat the component, do NOT put imports after the component, and do NOT duplicate any part of the file. Correct order: first every import line, then the single export default function ... { ... }. Example for a page file: first line "import Hero from '../sections/Hero';", then blank line, then "export default function Home() { return (...); }" once only.
 - If destination is exactly "landing/index.tsx", output a WIREFRAME ONLY: import { HashRouter, Routes, Route } from 'react-router-dom', plus Navbar, Footer, and page components. Wrap everything in <HashRouter>. Use <Routes> and <Route path=\"/\" element={<Home />} /> (and path=\"/about\" element={<About />} etc.) inside <main>. Do NOT use window.location.hash or manual switch. Do NOT put navbar/footer markup inline. Do NOT output <!DOCTYPE html>, <html>, <head>, or <body>.
@@ -42,6 +58,9 @@ Generate exactly ONE React/TSX file for a landing site. Each tool call creates/u
 - If you use an uploaded site asset, render it with the ImageAsset component and reference the provided asset alias, never a raw blob URL.
 - Make it responsive using Tailwind breakpoints (e.g., sm:, md:, lg:).
 - Use realistic placeholder content if specifics are missing, but never invent business facts.
+
+**Frontend aesthetics**
+${FRONTEND_AESTHETICS_GUIDANCE}
 
 **Composition**
 - Include only what belongs to this file (no unrelated sections).
