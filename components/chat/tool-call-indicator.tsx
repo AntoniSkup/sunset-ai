@@ -4,9 +4,9 @@ import React from "react";
 import {
   ArrowPathIcon,
   CodeBracketSquareIcon,
+  ShieldCheckIcon,
 } from "@heroicons/react/24/outline";
 import { cn } from "@/lib/utils";
-import { CheckCircle2 } from "lucide-react";
 import { CheckCircleIcon  } from '@heroicons/react/24/solid';
 
 interface ToolCallIndicatorProps {
@@ -22,12 +22,19 @@ export function ToolCallIndicator({
   isComplete,
   className,
 }: ToolCallIndicatorProps) {
+  const isValidationTool =
+    toolName === "validate_completeness" ||
+    toolName === "validate_ui_consistency";
   const file =
     fileName ||
     (toolName === "create_site"
       ? "landing/index.html"
       : toolName === "create_section"
         ? "landing/sections/section.html"
+        : toolName === "validate_completeness"
+          ? "site completeness"
+          : toolName === "validate_ui_consistency"
+            ? "ui consistency"
         : "file");
 
   return (
@@ -40,15 +47,27 @@ export function ToolCallIndicator({
       {isComplete ? (
         <>
           <CheckCircleIcon  className="h-4 w-4 text-[#f87c07] " strokeWidth={1.5} />
-          <span className="text-sm text-black">Wrote</span>
-          <CodeBracketSquareIcon className="h-4 w-4" />
+          <span className="text-sm text-black">
+            {isValidationTool ? "Checked" : "Wrote"}
+          </span>
+          {isValidationTool ? (
+            <ShieldCheckIcon className="h-4 w-4" />
+          ) : (
+            <CodeBracketSquareIcon className="h-4 w-4" />
+          )}
           <span className="font-mono text-xs">{file}</span>
         </>
       ) : (
         <>
           <ArrowPathIcon className="h-4 w-4 animate-spin" />
-          <span className="text-sm text-black">Writing</span>
-          <CodeBracketSquareIcon className="h-4 w-4" />
+          <span className="text-sm text-black">
+            {isValidationTool ? "Checking" : "Writing"}
+          </span>
+          {isValidationTool ? (
+            <ShieldCheckIcon className="h-4 w-4" />
+          ) : (
+            <CodeBracketSquareIcon className="h-4 w-4" />
+          )}
           <span className="font-mono text-xs">{file}</span>
         </>
       )}

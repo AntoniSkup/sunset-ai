@@ -25,7 +25,12 @@ import { InsufficientCreditsError } from "@/lib/credits/debit";
 import { createMessageBillingSession } from "@/lib/credits/message-billing";
 import { streamText, convertToModelMessages, stepCountIs } from "ai";
 import type { UIMessage } from "ai";
-import { createSectionTool, createSiteTool } from "@/lib/code-generation/generate-code";
+import {
+  createSectionTool,
+  createSiteTool,
+  createValidateCompletenessTool,
+  createValidateUiConsistencyTool,
+} from "@/lib/code-generation/generate-code";
 import { getAIModel, getAIModelId } from "@/lib/ai/get-ai-model";
 import { buildChatSystemPrompt } from "@/prompts/chat-system-prompt";
 import { captureLandingPageScreenshot } from "@/lib/screenshots/capture";
@@ -41,7 +46,12 @@ import {
 } from "@/lib/site-assets/prompt-manifest";
 import { publishStreamEvents } from "@/lib/chat/stream-bus";
 
-const BUILDER_TOOLS = new Set(["create_site", "create_section"]);
+const BUILDER_TOOLS = new Set([
+  "create_site",
+  "create_section",
+  "validate_completeness",
+  "validate_ui_consistency",
+]);
 const TEXT_DELTA_FLUSH_MS = 30;
 const TEXT_DELTA_FLUSH_CHARS = 8;
 const TURN_EVENT_FLUSH_MS = 60;
@@ -53,6 +63,12 @@ function getToolTitle(toolName: string): string {
   }
   if (toolName === "create_section") {
     return "Section layout";
+  }
+  if (toolName === "validate_completeness") {
+    return "Completeness check";
+  }
+  if (toolName === "validate_ui_consistency") {
+    return "UI consistency check";
   }
   return toolName || "tool";
 }
@@ -377,10 +393,22 @@ async function chatHandler(request: NextRequest) {
       user.id,
       billingSession.ensureChargedForAction
     );
+    const validateCompletenessToolCall = createValidateCompletenessTool(
+      chatId,
+      user.id,
+      billingSession.ensureChargedForAction
+    );
+    const validateUiConsistencyToolCall = createValidateUiConsistencyTool(
+      chatId,
+      user.id,
+      billingSession.ensureChargedForAction
+    );
 
     const tools = {
       create_site: createSiteToolCall,
       create_section: createSectionToolCall,
+      validate_completeness: validateCompletenessToolCall,
+      validate_ui_consistency: validateUiConsistencyToolCall,
     };
 
     const lastMessage = contextMessages[contextMessages.length - 1] as any;
@@ -482,6 +510,17 @@ async function chatHandler(request: NextRequest) {
               emittedToolCallMeta.set(toolCallId, {
                 hasDestination: Boolean(destination),
               });
+              if (
+                toolName === "validate_completeness" ||
+                toolName === "validate_ui_consistency"
+              ) {
+                console.log("[chat-route] validator tool_call detected (chunk)", {
+                  toolName,
+                  toolCallId,
+                  chatId,
+                  turnRunId: turnRunId ?? null,
+                });
+              }
               await emitTurnEvent("tool_call", {
                 toolCallId,
                 toolName,
@@ -546,6 +585,17 @@ async function chatHandler(request: NextRequest) {
                 (part as any).toolName ?? (part as any).name ?? "unknown";
               const toolCallId =
                 (part as any).toolCallId ?? (part as any).id ?? null;
+              if (
+                toolName === "validate_completeness" ||
+                toolName === "validate_ui_consistency"
+              ) {
+                console.log("[chat-route] validator tool_call persisted", {
+                  toolName,
+                  toolCallId,
+                  chatId,
+                  stepNumber,
+                });
+              }
               const callPayload = {
                 toolCallId,
                 toolName,
@@ -634,6 +684,23 @@ async function chatHandler(request: NextRequest) {
               stepNumber,
               result: res,
             });
+            if (
+              toolName === "validate_completeness" ||
+              toolName === "validate_ui_consistency"
+            ) {
+              console.log("[chat-route] validator tool_result emitted", {
+                toolName,
+                toolCallId,
+                chatId,
+                stepNumber,
+                success:
+                  (res as any)?.success ?? (res as any)?.output?.success ?? null,
+                status:
+                  (res as any)?.status ??
+                  (res as any)?.output?.status ??
+                  null,
+              });
+            }
 
             if (BUILDER_TOOLS.has(toolName)) {
               const output = (res as any).output ?? (res as any).result ?? res;

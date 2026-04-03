@@ -32,6 +32,10 @@ import {
   buildSiteAssetPromptContext,
   toSiteAssetPromptDescriptors,
 } from "@/lib/site-assets/prompt-manifest";
+import {
+  validateCompleteness,
+  validateUiConsistency,
+} from "@/lib/code-generation/validation";
 
 function normalizeDestinationPath(input: string): string | null {
   if (!input) return null;
@@ -489,6 +493,24 @@ const createSectionSchema = z.object({
     .describe("True when modifying existing destination; false when creating new"),
 });
 
+const validateCompletenessSchema = z.object({
+  siteSpec: z
+    .string()
+    .optional()
+    .describe(
+      "Optional concise statement of what the site should include (pages, sections, key requirements). Used by LLM semantic completeness validation."
+    ),
+});
+
+const validateUiConsistencySchema = z.object({
+  includeScreenshot: z
+    .boolean()
+    .optional()
+    .describe(
+      "Set true to enable optional screenshot-assisted checks when enabled by server config."
+    ),
+});
+
 const createSiteToolExecute = async (
   { userRequest }: z.infer<typeof createSiteSchema>,
   chatId: string,
@@ -560,6 +582,46 @@ const createSectionToolExecute = async (
   };
 };
 
+const validateCompletenessToolExecute = async (
+  input: z.infer<typeof validateCompletenessSchema>,
+  chatId: string,
+  _userId: number,
+  ensureChargedForAction?: EnsureChargedForAction
+): Promise<any> => {
+  if (!chatId) {
+    return { success: false, error: "Chat ID is required" };
+  }
+  console.log("[tool] validate_completeness called", {
+    chatId,
+    hasSiteSpec: Boolean(input?.siteSpec?.trim()),
+  });
+  if (ensureChargedForAction) {
+    await ensureChargedForAction("validate_site_completeness");
+  }
+  return validateCompleteness({
+    chatId,
+    siteSpec: input?.siteSpec,
+  });
+};
+
+const validateUiConsistencyToolExecute = async (
+  input: z.infer<typeof validateUiConsistencySchema>,
+  chatId: string,
+  _userId: number,
+  ensureChargedForAction?: EnsureChargedForAction
+): Promise<any> => {
+  if (!chatId) {
+    return { success: false, error: "Chat ID is required" };
+  }
+  if (ensureChargedForAction) {
+    await ensureChargedForAction("validate_site_ui");
+  }
+  return validateUiConsistency({
+    chatId,
+    includeScreenshot: Boolean(input?.includeScreenshot),
+  });
+};
+
 
 // export function createGenerateLandingPageTool(chatId: string) {
 //   return tool({
@@ -604,6 +666,46 @@ export function createSectionTool(
     inputSchema: createSectionSchema,
     execute: async (input: z.infer<typeof createSectionSchema>) => {
       return createSectionToolExecute(
+        input,
+        chatId,
+        userId,
+        ensureChargedForAction
+      );
+    },
+  } as any);
+}
+
+export function createValidateCompletenessTool(
+  chatId: string,
+  userId: number,
+  ensureChargedForAction?: EnsureChargedForAction
+) {
+  return tool({
+    description:
+      "Validate generated landing site completeness after all files are created. Uses deterministic checks plus an LLM semantic review to detect missing files, unresolved imports, missing requested sections/pages, and composition gaps.",
+    inputSchema: validateCompletenessSchema,
+    execute: async (input: z.infer<typeof validateCompletenessSchema>) => {
+      return validateCompletenessToolExecute(
+        input,
+        chatId,
+        userId,
+        ensureChargedForAction
+      );
+    },
+  } as any);
+}
+
+export function createValidateUiConsistencyTool(
+  chatId: string,
+  userId: number,
+  ensureChargedForAction?: EnsureChargedForAction
+) {
+  return tool({
+    description:
+      "Validate landing page UI consistency and detect visual/code oddities after completeness passes. Can optionally include screenshot-assisted checks.",
+    inputSchema: validateUiConsistencySchema,
+    execute: async (input: z.infer<typeof validateUiConsistencySchema>) => {
+      return validateUiConsistencyToolExecute(
         input,
         chatId,
         userId,

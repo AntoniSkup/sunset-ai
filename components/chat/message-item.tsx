@@ -11,6 +11,11 @@ import {
 } from "@/components/ai-elements/message";
 import { ErrorMessage } from "./error-message";
 import { ToolCallIndicator } from "./tool-call-indicator";
+import { CompletenessToolCallIndicator } from "./completeness-tool-call-indicator";
+import {
+  ValidationReportCard,
+  type ValidationReportPayload,
+} from "./validation-report-card";
 
 interface MessageItemProps {
   message: UIMessage;
@@ -26,7 +31,21 @@ type RenderToken =
       toolName: string;
       isComplete: boolean;
       destination?: string;
+    }
+  | {
+      type: "validation-report";
+      toolCallId: string;
+      toolName: string;
+      report: ValidationReportPayload;
+      isPending: boolean;
     };
+
+function isValidationTool(toolName: string): boolean {
+  return (
+    toolName === "validate_completeness" ||
+    toolName === "validate_ui_consistency"
+  );
+}
 
 function unescapeAttr(value: string): string {
   return value
@@ -97,6 +116,8 @@ function getFileParts(message: UIMessage): FileUIPart[] {
 function getDefaultFileNameForTool(toolName: string): string {
   if (toolName === "create_site") return "landing/index.html";
   if (toolName === "create_section") return "landing/sections/section.html";
+  if (toolName === "validate_completeness") return "site completeness";
+  if (toolName === "validate_ui_consistency") return "ui consistency";
   return "file.html";
 }
 
@@ -130,6 +151,22 @@ function buildRenderTokens(message: UIMessage): RenderToken[] {
     if (partType === "tool-call") {
       const toolCallId = String(part?.toolCallId || "");
       const toolName = String(part?.toolName || "unknown");
+      if (isValidationTool(toolName)) {
+        tokens.push({
+          type: "validation-report",
+          toolCallId,
+          toolName,
+          report: {
+            reportType:
+              toolName === "validate_completeness"
+                ? "completeness"
+                : "ui_consistency",
+            summary: "Running validation...",
+          },
+          isPending: true,
+        });
+        continue;
+      }
       const destination =
         typeof part?.args?.destination === "string"
           ? String(part.args.destination)
@@ -147,6 +184,16 @@ function buildRenderTokens(message: UIMessage): RenderToken[] {
     }
 
     if (partType === "tool-result") {
+      const toolName = String(part?.toolName || "unknown");
+      if (isValidationTool(toolName)) {
+        tokens.push({
+          type: "validation-report",
+          toolCallId: String(part?.toolCallId || ""),
+          toolName,
+          report: (part?.result ?? {}) as ValidationReportPayload,
+          isPending: false,
+        });
+      }
       continue;
     }
 
@@ -154,6 +201,34 @@ function buildRenderTokens(message: UIMessage): RenderToken[] {
       const toolName = partType.replace("tool-", "");
       const toolCallId = String(part?.toolCallId || "");
       const hasResult = part?.result != null || part?.output != null;
+      if (isValidationTool(toolName) && hasResult) {
+        tokens.push({
+          type: "validation-report",
+          toolCallId,
+          toolName,
+          report: (part?.result ??
+            part?.output ??
+            {}) as ValidationReportPayload,
+          isPending: false,
+        });
+        continue;
+      }
+      if (isValidationTool(toolName) && !hasResult) {
+        tokens.push({
+          type: "validation-report",
+          toolCallId,
+          toolName,
+          report: {
+            reportType:
+              toolName === "validate_completeness"
+                ? "completeness"
+                : "ui_consistency",
+            summary: "Running validation...",
+          },
+          isPending: true,
+        });
+        continue;
+      }
       const destination =
         typeof part?.args?.destination === "string"
           ? String(part.args.destination)
@@ -184,7 +259,25 @@ function buildRenderTokens(message: UIMessage): RenderToken[] {
     merged.push(token);
   }
 
-  return merged;
+  // Collapse validator pending/result into one visible card per tool call.
+  const collapsed: RenderToken[] = [];
+  const validationIndexByCallId = new Map<string, number>();
+  for (const token of merged) {
+    if (token.type !== "validation-report") {
+      collapsed.push(token);
+      continue;
+    }
+    const key = token.toolCallId || `${token.toolName}-anon`;
+    const existingIdx = validationIndexByCallId.get(key);
+    if (existingIdx == null) {
+      validationIndexByCallId.set(key, collapsed.length);
+      collapsed.push(token);
+      continue;
+    }
+    collapsed[existingIdx] = token;
+  }
+
+  return collapsed;
 }
 
 export const MessageItem = React.memo(function MessageItem({
@@ -221,6 +314,23 @@ export const MessageItem = React.memo(function MessageItem({
                     <MessageResponse key={`t-${idx}`}>{t.text}</MessageResponse>
                   );
                 case "tool-marker":
+                  if (isValidationTool(t.toolName)) {
+                    return (
+                      <div key={`m-${t.id || idx}`} className="my-2">
+                        <ValidationReportCard
+                          toolName={t.toolName}
+                          report={{
+                            reportType:
+                              t.toolName === "validate_completeness"
+                                ? "completeness"
+                                : "ui_consistency",
+                            summary: t.title,
+                          }}
+                          isPending={false}
+                        />
+                      </div>
+                    );
+                  }
                   return (
                     <div key={`m-${t.id || idx}`} className="my-1">
                       <ToolCallIndicator
@@ -243,6 +353,26 @@ export const MessageItem = React.memo(function MessageItem({
                     </div>
                   );
                 }
+                case "validation-report":
+                  if (
+                    t.isPending &&
+                    t.toolName === "validate_completeness"
+                  ) {
+                    return (
+                      <div key={`v-${t.toolCallId || idx}`} className="my-2">
+                        <CompletenessToolCallIndicator />
+                      </div>
+                    );
+                  }
+                  return (
+                    <div key={`v-${t.toolCallId || idx}`} className="my-2">
+                      <ValidationReportCard
+                        toolName={t.toolName}
+                        report={t.report}
+                        isPending={t.isPending}
+                      />
+                    </div>
+                  );
                 default:
                   return ((_: never) => null)(t);
               }

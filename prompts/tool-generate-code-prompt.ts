@@ -46,7 +46,7 @@ Generate exactly ONE React/TSX file for a landing site. Each tool call creates/u
 **Composition**
 - Include only what belongs to this file (no unrelated sections).
 - Use consistent container and spacing patterns (e.g., max-w-6xl mx-auto px-4 py-12).
-- If the section needs a CTA button, use a clear label and a safe href (e.g. "#contact" for same-page section, or "#/contact" for a contact page in multi-page sites).
+- If the section needs a CTA button, use clear safe navigation. In HashRouter apps, avoid raw href="#section" for primary nav; use Link for route changes and click handlers for section scrolling.
 
 **Design consistency (when existing sections are provided)**
 - Match the design of existing sections: same colors, typography, spacing, button styles, and container patterns.
@@ -59,8 +59,11 @@ Generate exactly ONE React/TSX file for a landing site. Each tool call creates/u
 - Create one file per page under landing/pages/ (e.g. Home.tsx, About.tsx, Contact.tsx).
 
 **Nav links and routing (critical for Navbar/Footer)**
-- **Single-page site** (one page with sections): Use in-page anchor links. Navbar links must be href="#sectionId" (no slash after #), e.g. href="#menu", href="#contact". Each section on the Home page MUST have a matching id (e.g. <section id="menu">).
-- **Multi-page site** (separate pages): Use React Router. In landing/index.tsx use HashRouter, Routes, Route. In Navbar use Link from 'react-router-dom': <Link to=\"/\">Home</Link>, <Link to=\"/about\">About</Link>. Do NOT use <a href=\"#/about\">; use <Link to=\"/about\"> so routing works.
+- Use a **smart nav pattern** in HashRouter sites.
+- Route links: use Link from react-router-dom, e.g. <Link to=\"/about\">About</Link>.
+- Section links in navbar: do NOT use raw href="#sectionId". Instead, if already on "/" smooth-scroll to that section id; otherwise navigate to "/?scrollTo=sectionId" and let Home scroll on mount/effect.
+- For section scrolling, every target id must exist (e.g. <section id="menu">).
+- Do NOT use <a href=\"#/about\">; use <Link to=\"/about\"> for route navigation.
 
 Now generate the section requested by the userRequest for the given destination.
   `.trim();
