@@ -44,6 +44,7 @@ Generate exactly ONE React/TSX file for a landing site. Each tool call creates/u
 - Output RAW React/JSX/TSX ONLY (no markdown, no explanations, no code fences).
 - Use Tailwind CSS utility classes for ALL styling (no <style> tags, no external CSS). Use the className prop.
 - Do not import Google Fonts or define font-face rules inside section/page files. Keep font loading global, and use inline style props only for truly dynamic values that cannot be expressed cleanly with Tailwind utilities.
+- For real imagery, render only resolved site assets with ImageAsset aliases. Never invent raw image URLs, placeholder CDN URLs, or direct stock-provider URLs in the generated TSX.
 - The code must be valid JSX/TSX and self-contained for this file.
 - **File structure (strict)**: Put ALL import statements at the very top of the file. Then output exactly ONE default-export component. Do NOT repeat the component, do NOT put imports after the component, and do NOT duplicate any part of the file. Correct order: first every import line, then the single export default function ... { ... }. Example for a page file: first line "import Hero from '../sections/Hero';", then blank line, then "export default function Home() { return (...); }" once only.
 - If destination is exactly "landing/index.tsx", output a WIREFRAME ONLY: import { HashRouter, Routes, Route } from 'react-router-dom', plus Navbar, Footer, and page components. Wrap everything in <HashRouter>. Use <Routes> and <Route path=\"/\" element={<Home />} /> (and path=\"/about\" element={<About />} etc.) inside <main>. Do NOT use window.location.hash or manual switch. Do NOT put navbar/footer markup inline. Do NOT output <!DOCTYPE html>, <html>, <head>, or <body>.
@@ -58,6 +59,8 @@ Generate exactly ONE React/TSX file for a landing site. Each tool call creates/u
 - If you use an uploaded site asset, render it with the ImageAsset component and reference the provided asset alias, never a raw blob URL.
 - Make it responsive using Tailwind breakpoints (e.g., sm:, md:, lg:).
 - Use realistic placeholder content if specifics are missing, but never invent business facts.
+- Prefer image-forward sections when suitable. Most landing pages should use strong imagery not only in the hero, but also in several supporting sections where visuals improve clarity, mood, or perceived quality.
+- Within reason, default to including one or more meaningful images in major sections unless the section is clearly better as text-only (for example simple nav, footer, or compact legal/utility content).
 
 **Frontend aesthetics**
 ${FRONTEND_AESTHETICS_GUIDANCE}
@@ -66,6 +69,8 @@ ${FRONTEND_AESTHETICS_GUIDANCE}
 - Include only what belongs to this file (no unrelated sections).
 - Use consistent container and spacing patterns (e.g., max-w-6xl mx-auto px-4 py-12).
 - If the section needs a CTA button, use clear safe navigation. In HashRouter apps, avoid raw href="#section" for primary nav; use Link for route changes and click handlers for section scrolling.
+- If image assets are available for this section, use them prominently and thoughtfully. Prefer uploaded user assets when provided; otherwise use the resolved stock asset aliases already available in context.
+- Do not treat imagery as a one-off accent. If the section can credibly support visuals, prefer a richer composition with photos, product shots, portraits, or supporting images so the page feels visually dense in a polished way.
 
 **Design consistency (when existing sections are provided)**
 - Match the design of existing sections: same colors, typography, spacing, button styles, and container patterns.
@@ -89,7 +94,7 @@ Now generate the section requested by the userRequest for the given destination.
 }
 
 export function buildModificationContext(previousCodeVersion: string): string {
-  return `\nThis is a modification request. The previous code version is:\n\n${previousCodeVersion}\n\nPlease modify ONLY the parts requested by the user while preserving the rest of the structure and content.`;
+  return `\nThis is a modification request. The previous code version is:\n\n${previousCodeVersion}\n\nPlease modify ONLY the parts requested by the user while preserving the rest of the structure and content. Do not introduce <style> tags while fixing verification issues; use Tailwind utilities and inline style props only for truly dynamic values.`;
 }
 
 export function buildExistingSectionsContext(

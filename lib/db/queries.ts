@@ -530,6 +530,15 @@ export async function createSiteAsset(data: {
   userId: number;
   alias: string;
   blobUrl: string;
+  sourceType?: string;
+  provider?: string | null;
+  providerAssetId?: string | null;
+  providerPageUrl?: string | null;
+  searchQuery?: string | null;
+  slotKey?: string | null;
+  attributionText?: string | null;
+  attributionUrl?: string | null;
+  tags?: string[] | null;
   intent: string;
   status: string;
   mimeType: string;
@@ -547,6 +556,15 @@ export async function createSiteAsset(data: {
       userId: data.userId,
       alias: data.alias,
       blobUrl: data.blobUrl,
+      sourceType: data.sourceType ?? "upload",
+      provider: data.provider ?? null,
+      providerAssetId: data.providerAssetId ?? null,
+      providerPageUrl: data.providerPageUrl ?? null,
+      searchQuery: data.searchQuery ?? null,
+      slotKey: data.slotKey ?? null,
+      attributionText: data.attributionText ?? null,
+      attributionUrl: data.attributionUrl ?? null,
+      tags: data.tags ?? null,
       intent: data.intent,
       status: data.status,
       mimeType: data.mimeType,

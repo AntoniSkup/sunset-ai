@@ -27,9 +27,9 @@ import { streamText, convertToModelMessages, stepCountIs } from "ai";
 import type { UIMessage } from "ai";
 import {
   createSectionTool,
+  createResolveImageSlotsTool,
   createSiteTool,
   createValidateCompletenessTool,
-  createValidateUiConsistencyTool,
 } from "@/lib/code-generation/generate-code";
 import { getAIModel, getAIModelId } from "@/lib/ai/get-ai-model";
 import { buildChatSystemPrompt } from "@/prompts/chat-system-prompt";
@@ -49,8 +49,8 @@ import { publishStreamEvents } from "@/lib/chat/stream-bus";
 const BUILDER_TOOLS = new Set([
   "create_site",
   "create_section",
+  "resolve_image_slots",
   "validate_completeness",
-  "validate_ui_consistency",
 ]);
 const TEXT_DELTA_FLUSH_MS = 30;
 const TEXT_DELTA_FLUSH_CHARS = 8;
@@ -64,11 +64,11 @@ function getToolTitle(toolName: string): string {
   if (toolName === "create_section") {
     return "Section layout";
   }
+  if (toolName === "resolve_image_slots") {
+    return "Image library";
+  }
   if (toolName === "validate_completeness") {
     return "Completeness check";
-  }
-  if (toolName === "validate_ui_consistency") {
-    return "UI consistency check";
   }
   return toolName || "tool";
 }
@@ -398,17 +398,16 @@ async function chatHandler(request: NextRequest) {
       user.id,
       billingSession.ensureChargedForAction
     );
-    const validateUiConsistencyToolCall = createValidateUiConsistencyTool(
+    const resolveImageSlotsToolCall = createResolveImageSlotsTool(
       chatId,
       user.id,
       billingSession.ensureChargedForAction
     );
-
     const tools = {
       create_site: createSiteToolCall,
       create_section: createSectionToolCall,
+      resolve_image_slots: resolveImageSlotsToolCall,
       validate_completeness: validateCompletenessToolCall,
-      validate_ui_consistency: validateUiConsistencyToolCall,
     };
 
     const lastMessage = contextMessages[contextMessages.length - 1] as any;
@@ -510,10 +509,7 @@ async function chatHandler(request: NextRequest) {
               emittedToolCallMeta.set(toolCallId, {
                 hasDestination: Boolean(destination),
               });
-              if (
-                toolName === "validate_completeness" ||
-                toolName === "validate_ui_consistency"
-              ) {
+              if (toolName === "validate_completeness") {
                 console.log("[chat-route] validator tool_call detected (chunk)", {
                   toolName,
                   toolCallId,
@@ -585,10 +581,7 @@ async function chatHandler(request: NextRequest) {
                 (part as any).toolName ?? (part as any).name ?? "unknown";
               const toolCallId =
                 (part as any).toolCallId ?? (part as any).id ?? null;
-              if (
-                toolName === "validate_completeness" ||
-                toolName === "validate_ui_consistency"
-              ) {
+              if (toolName === "validate_completeness") {
                 console.log("[chat-route] validator tool_call persisted", {
                   toolName,
                   toolCallId,
@@ -684,10 +677,7 @@ async function chatHandler(request: NextRequest) {
               stepNumber,
               result: res,
             });
-            if (
-              toolName === "validate_completeness" ||
-              toolName === "validate_ui_consistency"
-            ) {
+            if (toolName === "validate_completeness") {
               console.log("[chat-route] validator tool_result emitted", {
                 toolName,
                 toolCallId,

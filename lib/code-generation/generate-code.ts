@@ -36,6 +36,7 @@ import {
   validateCompleteness,
   validateUiConsistency,
 } from "@/lib/code-generation/validation";
+import { resolveImageSlots } from "@/lib/site-assets/resolve-image-slots";
 
 function normalizeDestinationPath(input: string): string | null {
   if (!input) return null;
@@ -511,6 +512,48 @@ const validateUiConsistencySchema = z.object({
     ),
 });
 
+const resolveImageSlotsSchema = z.object({
+  pageGoal: z
+    .string()
+    .min(1, "Page goal is required")
+    .describe("What this page is trying to achieve for the user or business."),
+  brandStyle: z
+    .string()
+    .optional()
+    .describe("Optional concise art-direction guidance for the imagery."),
+  slots: z
+    .array(
+      z.object({
+        slotKey: z
+          .string()
+          .min(1, "slotKey is required")
+          .describe("Stable image slot identifier like hero, feature-1, gallery-2."),
+        purpose: z
+          .string()
+          .min(1, "purpose is required")
+          .describe("What the image should communicate in the layout."),
+        query: z
+          .string()
+          .min(1, "query is required")
+          .describe("Concrete stock-search query to use for this slot."),
+        orientation: z
+          .enum(["landscape", "portrait", "square"])
+          .optional()
+          .describe("Preferred image orientation for the slot."),
+        count: z
+          .number()
+          .int()
+          .min(1)
+          .max(3)
+          .optional()
+          .describe("How many candidate images to search for internally."),
+      })
+    )
+    .min(1)
+    .max(6)
+    .describe("Batched image slots to resolve before section generation."),
+});
+
 const createSiteToolExecute = async (
   { userRequest }: z.infer<typeof createSiteSchema>,
   chatId: string,
@@ -622,6 +665,35 @@ const validateUiConsistencyToolExecute = async (
   });
 };
 
+const resolveImageSlotsToolExecute = async (
+  input: z.infer<typeof resolveImageSlotsSchema>,
+  chatId: string,
+  userId: number,
+  ensureChargedForAction?: EnsureChargedForAction
+): Promise<any> => {
+  if (!chatId) {
+    return { success: false, error: "Chat ID is required" };
+  }
+  if (ensureChargedForAction) {
+    await ensureChargedForAction("resolve_site_images");
+  }
+
+  const result = await resolveImageSlots({
+    chatId,
+    userId,
+    pageGoal: input.pageGoal,
+    brandStyle: input.brandStyle,
+    slots: input.slots,
+  });
+
+  return {
+    success: true,
+    chatId,
+    resolved: result.resolved,
+    unresolved: result.unresolved,
+  };
+};
+
 
 // export function createGenerateLandingPageTool(chatId: string) {
 //   return tool({
@@ -706,6 +778,26 @@ export function createValidateUiConsistencyTool(
     inputSchema: validateUiConsistencySchema,
     execute: async (input: z.infer<typeof validateUiConsistencySchema>) => {
       return validateUiConsistencyToolExecute(
+        input,
+        chatId,
+        userId,
+        ensureChargedForAction
+      );
+    },
+  } as any);
+}
+
+export function createResolveImageSlotsTool(
+  chatId: string,
+  userId: number,
+  ensureChargedForAction?: EnsureChargedForAction
+) {
+  return tool({
+    description:
+      "Resolve a batch of landing-page image slots using uploaded assets first and stock images second. Use this before generating image-heavy sections so the page can render stable aliased assets via ImageAsset.",
+    inputSchema: resolveImageSlotsSchema,
+    execute: async (input: z.infer<typeof resolveImageSlotsSchema>) => {
+      return resolveImageSlotsToolExecute(
         input,
         chatId,
         userId,

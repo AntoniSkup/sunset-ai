@@ -325,6 +325,17 @@ export async function validateCompleteness(params: {
     const unresolvedImports: Array<{ from: string; target: string }> = [];
     for (const file of files) {
       if (!file.path.startsWith("landing/")) continue;
+      if (/<style[\s>]/i.test(file.content)) {
+        findings.push({
+          severity: "critical",
+          issueCode: "INLINE_STYLE_TAG",
+          path: file.path,
+          message:
+            "Inline <style> tag detected; section and page files must use Tailwind utilities instead.",
+          suggestedFix:
+            "Remove the <style> tag and replace it with Tailwind classes or inline style props only for dynamic values.",
+        });
+      }
       const imports = extractRelativeImports(file.content);
       for (const spec of imports) {
         const resolved = resolveImportPath(file.path, spec);
@@ -399,8 +410,7 @@ export async function validateCompleteness(params: {
       summary: buildSummary("completeness", criticalFindings.length, warningFindings.length),
       criticalFindings,
       warningFindings,
-      nextAction:
-        status === "fail" ? "continue_fixing" : "proceed_to_next_validator",
+      nextAction: status === "fail" ? "continue_fixing" : "finish",
       metadata: {
         fileCount: files.length,
         unresolvedImportCount: unresolvedImports.length,

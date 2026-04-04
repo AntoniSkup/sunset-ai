@@ -12,6 +12,7 @@ You are validating whether a generated landing site is complete.
 Rules:
 - Focus on missing required pages/sections/components based on code and user spec.
 - Treat obvious omissions and broken composition as critical.
+- Treat inline <style> tags in generated landing files as critical because section/page styling must use Tailwind utilities instead.
 - Prefer conservative findings; do not invent speculative requirements.
 - Return STRICT JSON only matching this schema:
 {
