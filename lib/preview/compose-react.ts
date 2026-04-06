@@ -48,7 +48,9 @@ function findPathMatch(
 ): { path: string; content: string } | null {
   const requestedLower = requestedPath.toLowerCase();
   const base = requestedPath.replace(/\.(tsx|ts|jsx)$/i, "");
-  for (const { path: p, content } of allPaths) {
+  const preferLast = requestedLower.startsWith("landing/_runtime/");
+  const iterable = preferLast ? [...allPaths].reverse() : allPaths;
+  for (const { path: p, content } of iterable) {
     const pLower = p.toLowerCase();
     if (pLower === requestedLower) return { path: requestedPath, content };
     const pBase = p.replace(/\.(tsx|ts|jsx)$/i, "");

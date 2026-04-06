@@ -11,6 +11,20 @@ Frontend aesthetics:
 - Vary your choices across generations; do not keep reusing the same aesthetic defaults.
 `.trim();
 
+const LANDING_PAGE_ART_DIRECTION_GUIDANCE = `
+Art direction process:
+- Before writing code, silently decide on a clear design thesis for the page or section. The design thesis should define the emotional tone, conversion goal, and visual point of view in one sentence.
+- Silently choose a reference world that gives the design a distinct voice, such as editorial magazine, luxury product campaign, underground music scene, museum catalog, cinematic tech noir, premium wellness brand, or modern industrial brochure.
+- Silently define a signature motif and reuse it across the composition. Examples include a repeated framing device, a distinctive border treatment, a recurring glow/gradient language, a specific image crop system, a diagonal or offset grid, or a typography treatment that appears in multiple places.
+- Silently choose a typography strategy, palette logic, layout rhythm, motion style, and image direction that all feel like they belong to the same art-directed system.
+- Treat originality as a requirement, not a preference. Do not default to the usual startup hero + three feature cards + testimonial strip + CTA stack unless the brief clearly demands it.
+- Include at least one section or compositional beat that feels unexpected, memorable, or visually ownable for the brand.
+- Use contrast in scale, density, alignment, and pacing so the page does not feel uniformly templated from top to bottom.
+- No more than two consecutive major sections should share the same layout pattern.
+- Every major section should have a specific job in the conversion story and a composition that supports that job, rather than reusing the same heading + paragraph + cards structure.
+- Before finalizing, silently review the result for template-like patterns or overused landing-page tropes and upgrade weak areas to something more distinctive.
+`.trim();
+
 export function buildCodeGenerationPromptTemplate(): string {
   return `You are an expert web developer specializing in creating beautiful, modern websites and landing pages using React (JSX/TSX) and Tailwind CSS.
 
@@ -26,7 +40,9 @@ Requirements:
 - Output MUST be raw React/JSX/TSX only (no markdown code fences, no backticks, no \`\`\`jsx)
 - Do NOT include <!DOCTYPE html>, <html>, <head>, or <body> in section/page files
 
-${FRONTEND_AESTHETICS_GUIDANCE}`;
+${FRONTEND_AESTHETICS_GUIDANCE}
+
+${LANDING_PAGE_ART_DIRECTION_GUIDANCE}`;
 }
 
 export function createSectionPrompt(): string {
@@ -47,10 +63,11 @@ Generate exactly ONE React/TSX file for a landing site. Each tool call creates/u
 - When the section uses meaningful animation, import from 'motion/react' and implement the main entrances, reveals, staggers, or hover choreography with motion components/variants. Do not rely on custom CSS animation or Tailwind 'animate-*' classes for the primary animated experience.
 - For real imagery, render only resolved site assets with ImageAsset aliases. Never invent raw image URLs, placeholder CDN URLs, or direct stock-provider URLs in the generated TSX.
 - When site assets are provided in context, copy the alias exactly as given in the manifest. Never rewrite "hero.jpg" into something like "hero-warm-and-cozy.jpg".
+- Never create or modify files under landing/_runtime/. Those runtime helpers are reserved and provided by the system.
 - Do not create custom inline SVG artwork, decorative SVG backgrounds, or hand-written SVG illustrations unless the user explicitly requests SVG-based graphics.
 - The code must be valid JSX/TSX and self-contained for this file.
 - **File structure (strict)**: Put ALL import statements at the very top of the file. Then output exactly ONE default-export component. Do NOT repeat the component, do NOT put imports after the component, and do NOT duplicate any part of the file. Correct order: first every import line, then the single export default function ... { ... }. Example for a page file: first line "import Hero from '../sections/Hero';", then blank line, then "export default function Home() { return (...); }" once only.
-- If destination is exactly "landing/index.tsx", output a WIREFRAME ONLY: import { HashRouter, Routes, Route } from 'react-router-dom', plus Navbar, Footer, and page components. Wrap everything in <HashRouter>. Use <Routes> and <Route path=\"/\" element={<Home />} /> (and path=\"/about\" element={<About />} etc.) inside <main>. Do NOT use window.location.hash or manual switch. Do NOT put navbar/footer markup inline. Do NOT output <!DOCTYPE html>, <html>, <head>, or <body>.
+- If destination is exactly "landing/index.tsx", output a WIREFRAME ONLY: import { HashRouter, Routes, Route } from 'react-router-dom', plus Navbar, Footer, and only the page components that are actually part of the current site plan. Wrap everything in <HashRouter>. Use <Routes> and include only the real planned routes, e.g. just <Route path=\"/\" element={<Home />} /> for a single-page site. Do NOT import or route to About/Contact/etc. unless those page files are meant to exist. Do NOT use window.location.hash or manual switch. Do NOT put navbar/footer markup inline. Do NOT output <!DOCTYPE html>, <html>, <head>, or <body>.
 - If destination is under "landing/pages/", output a single default-export React component (e.g. export default function Home() { ... }). Import section components from '../sections/...' and render them. Do NOT include document structure.
 - If destination is under "landing/sections/", output a single default-export React component (e.g. export default function Hero() { ... }). Do NOT include document structure or import other landing sections unless needed.
 - Do NOT include scripts or useEffect for non-routing logic unless explicitly requested.
@@ -68,9 +85,16 @@ Generate exactly ONE React/TSX file for a landing site. Each tool call creates/u
 **Frontend aesthetics**
 ${FRONTEND_AESTHETICS_GUIDANCE}
 
+**Art direction**
+${LANDING_PAGE_ART_DIRECTION_GUIDANCE}
+
 **Composition**
 - Include only what belongs to this file (no unrelated sections).
 - Use consistent container and spacing patterns (e.g., max-w-6xl mx-auto px-4 py-12).
+- Start from a strong visual thesis, not a safe default layout.
+- Build at least one memorable compositional move into the file when appropriate: an asymmetric arrangement, layered image/text overlap, editorial framing, a distinctive card system, a surprising transition, or another brand-appropriate device.
+- Avoid making every section a centered stack of heading, paragraph, and uniform cards.
+- Vary section rhythm and alignment so the overall page feels authored rather than assembled from repeated blocks.
 - If the section needs a CTA button, use clear safe navigation. In HashRouter apps, avoid raw href="#section" for primary nav; use Link for route changes and click handlers for section scrolling.
 - If image assets are available for this section, use them prominently and thoughtfully. Prefer uploaded user assets when provided; otherwise use the resolved stock asset aliases already available in context.
 - Treat asset aliases as strict IDs, not descriptive suggestions. Use the exact alias from context for the matching slot.
@@ -84,7 +108,7 @@ ${FRONTEND_AESTHETICS_GUIDANCE}
 
 **Multi-page sites**
 - For the entry (landing/index.tsx), use React Router: import { HashRouter, Routes, Route } from 'react-router-dom'. Wrap the app in <HashRouter>, put <Routes> and <Route path=\"/\" element={<Home />} /> etc. inside <main>. Do not use window.location.hash.
-- Create landing/sections/Navbar.tsx and Footer.tsx. In Navbar use React Router's Link: import { Link } from 'react-router-dom'; use <Link to=\"/\">Home</Link>, <Link to=\"/about\">About</Link> (path with leading slash, no #). This makes navigation work in the preview.
+- Create landing/sections/Navbar.tsx and Footer.tsx. In Navbar use React Router's Link for real existing pages only: import { Link } from 'react-router-dom'; use links like <Link to=\"/\">Home</Link> and add About/Contact links only when those pages actually exist in the current site plan.
 - Create one file per page under landing/pages/ (e.g. Home.tsx, About.tsx, Contact.tsx).
 
 **Nav links and routing (critical for Navbar/Footer)**

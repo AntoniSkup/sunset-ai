@@ -4,6 +4,10 @@ import { generateText } from "ai";
 import { getAIModel } from "@/lib/ai/get-ai-model";
 import { z } from "zod";
 import { buildCompletenessValidationPrompt } from "@/prompts/tool-validate-completeness-prompt";
+import {
+  IMAGE_ASSET_COMPONENT_PATH,
+  IMAGE_ASSET_MAP_PATH,
+} from "@/lib/site-assets/conventions";
 
 export type ValidationSeverity = "critical" | "warning";
 
@@ -367,7 +371,11 @@ export async function validateCompleteness(params: {
       });
     }
 
-    const allPaths = new Set(files.map((f) => f.path.toLowerCase()));
+    const allPaths = new Set([
+      ...files.map((f) => f.path.toLowerCase()),
+      IMAGE_ASSET_COMPONENT_PATH.toLowerCase(),
+      IMAGE_ASSET_MAP_PATH.toLowerCase(),
+    ]);
     const unresolvedImports: Array<{ from: string; target: string }> = [];
     for (const file of files) {
       if (!file.path.startsWith("landing/")) continue;

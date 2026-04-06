@@ -57,6 +57,56 @@ const TEXT_DELTA_FLUSH_CHARS = 8;
 const TURN_EVENT_FLUSH_MS = 60;
 const TURN_EVENT_BATCH_SIZE = 24;
 
+function normalizeErrorMessage(
+  value: unknown,
+  fallback = "Internal server error"
+): string {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed || trimmed === "[object Object]") return fallback;
+    return trimmed;
+  }
+
+  if (value instanceof Error) {
+    const message = value.message?.trim();
+    if (message && message !== "[object Object]") {
+      return message;
+    }
+
+    const maybeCause = (value as Error & { cause?: unknown }).cause;
+    if (maybeCause !== undefined) {
+      return normalizeErrorMessage(maybeCause, fallback);
+    }
+
+    return fallback;
+  }
+
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    const direct =
+      (typeof record.message === "string" && record.message.trim()) ||
+      (typeof record.error === "string" && record.error.trim()) ||
+      (typeof record.summary === "string" && record.summary.trim()) ||
+      "";
+    if (direct && direct !== "[object Object]") return direct;
+
+    const code =
+      typeof record.code === "string" && record.code.trim()
+        ? record.code.trim()
+        : "";
+    if (code) return `${fallback} (${code})`;
+
+    try {
+      const serialized = JSON.stringify(record);
+      return serialized && serialized !== "{}" ? serialized : fallback;
+    } catch {
+      return fallback;
+    }
+  }
+
+  return fallback;
+}
+
 function getToolTitle(toolName: string): string {
   if (toolName === "create_site") {
     return "Site layout";
@@ -762,7 +812,7 @@ async function chatHandler(request: NextRequest) {
         }
         await flushLiveTextDelta();
 
-        const errMsg = error instanceof Error ? error.message : String(error);
+        const errMsg = normalizeErrorMessage(error, "Generation failed");
         await billingSession.markFailed(errMsg);
         if (turnRunId) {
           await markChatTurnRunFailed({
@@ -786,8 +836,7 @@ async function chatHandler(request: NextRequest) {
     return result.toUIMessageStreamResponse();
   } catch (error) {
     console.error("Chat API error:", error);
-    const errorMessage =
-      error instanceof Error ? error.message : "Internal server error";
+    const errorMessage = normalizeErrorMessage(error, "Internal server error");
     return NextResponse.json(
       { error: errorMessage, code: "AI_SERVICE_ERROR" },
       { status: 500 }

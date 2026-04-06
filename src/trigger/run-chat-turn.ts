@@ -8,6 +8,56 @@ import {
 import { publishStreamEvents } from "@/lib/chat/stream-bus";
 import { triggerChatTurnTask } from "@/lib/chat/trigger-chat-turn-task";
 
+function normalizeErrorMessage(
+  value: unknown,
+  fallback = "Unknown trigger execution error"
+): string {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed || trimmed === "[object Object]") return fallback;
+    return trimmed;
+  }
+
+  if (value instanceof Error) {
+    const message = value.message?.trim();
+    if (message && message !== "[object Object]") {
+      return message;
+    }
+
+    const maybeCause = (value as Error & { cause?: unknown }).cause;
+    if (maybeCause !== undefined) {
+      return normalizeErrorMessage(maybeCause, fallback);
+    }
+
+    return fallback;
+  }
+
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    const direct =
+      (typeof record.message === "string" && record.message.trim()) ||
+      (typeof record.error === "string" && record.error.trim()) ||
+      (typeof record.summary === "string" && record.summary.trim()) ||
+      "";
+    if (direct && direct !== "[object Object]") return direct;
+
+    const code =
+      typeof record.code === "string" && record.code.trim()
+        ? record.code.trim()
+        : "";
+    if (code) return `${fallback} (${code})`;
+
+    try {
+      const serialized = JSON.stringify(record);
+      return serialized && serialized !== "{}" ? serialized : fallback;
+    } catch {
+      return fallback;
+    }
+  }
+
+  return fallback;
+}
+
 export const runChatTurnTask = task({
   id: "run-chat-turn",
   maxDuration: 900,
@@ -110,8 +160,10 @@ export const runChatTurnTask = task({
         await response.arrayBuffer();
       }
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Unknown trigger execution error";
+      const message = normalizeErrorMessage(
+        error,
+        "Unknown trigger execution error"
+      );
       await markChatTurnRunFailed({
         runId: claimed.id,
         errorMessage: message,

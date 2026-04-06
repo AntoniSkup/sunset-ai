@@ -39,6 +39,49 @@ type StreamEnvelope = {
   createdAt: string;
 };
 
+function normalizeErrorMessage(
+  value: unknown,
+  fallback = "Generation failed"
+): string {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed || trimmed === "[object Object]") {
+      return fallback;
+    }
+    return trimmed;
+  }
+
+  if (value instanceof Error) {
+    return value.message || fallback;
+  }
+
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    const direct =
+      (typeof record.message === "string" && record.message.trim()) ||
+      (typeof record.error === "string" && record.error.trim()) ||
+      (typeof record.summary === "string" && record.summary.trim()) ||
+      "";
+    if (direct) return direct;
+
+    const code =
+      typeof record.code === "string" && record.code.trim()
+        ? record.code.trim()
+        : "";
+    if (code) {
+      return `${fallback} (${code})`;
+    }
+
+    try {
+      return JSON.stringify(record);
+    } catch {
+      return fallback;
+    }
+  }
+
+  return fallback;
+}
+
 interface ChatProps {
   chatId?: string;
 }
@@ -319,8 +362,10 @@ function ChatInner({
 
       if (!response.ok) {
         const data = await response.json().catch(() => null);
-        const errMsg =
-          data?.error || `Failed to queue generation (${response.status})`;
+        const errMsg = normalizeErrorMessage(
+          data?.error ?? data,
+          `Failed to queue generation (${response.status})`
+        );
         setErrorMessages((prev) => [
           ...prev,
           {
@@ -756,7 +801,10 @@ function ChatInner({
       pendingPreviewUpdateRef.current = null;
       setStatus("ready");
       activeAssistantMessageIdRef.current = null;
-      const err = pendingFailureMessage || "Generation failed";
+      const err = normalizeErrorMessage(
+        pendingFailureMessage,
+        "Generation failed"
+      );
       pendingFailureMessage = null;
       setErrorMessages((prev) => [
         ...prev,
@@ -950,7 +998,10 @@ function ChatInner({
         return;
       }
       if (eventType === "run_failed") {
-        pendingFailureMessage = String(payload.error ?? "Generation failed");
+        pendingFailureMessage = normalizeErrorMessage(
+          payload.error,
+          "Generation failed"
+        );
         terminalEventPending = "failed";
         finalizeTerminalEventIfReady();
       }

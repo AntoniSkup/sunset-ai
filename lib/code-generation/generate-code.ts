@@ -52,6 +52,7 @@ function normalizeDestinationPath(input: string): string | null {
   if (p.split("/").some((seg) => seg === ".." || seg === "")) return null;
   const lower = p.toLowerCase();
   if (!lower.endsWith(".html") && !lower.endsWith(".tsx")) return null;
+  if (lower.startsWith("landing/_runtime/")) return null;
   return p;
 }
 
@@ -588,7 +589,7 @@ const createSiteToolExecute = async (
     destination: "landing/index.tsx",
     userRequest:
       userRequest +
-      "\n\nCreate the entry React component for the site (landing/index.tsx) as a WIREFRAME ONLY.\n\nHard requirements:\n- Use React Router: import { HashRouter, Routes, Route } from 'react-router-dom'. Wrap the whole app in <HashRouter>. Put page content inside <Routes> and <Route path=\"/\" element={<Home />} /> (and Route path=\"/about\" element={<About />} etc.).\n- Import and render ONLY: Navbar from './sections/Navbar', Footer from './sections/Footer', and page components from './pages/...'. Structure: <HashRouter><div><Navbar /><main><Routes><Route path=\"/\" element={<Home />} /><Route path=\"/about\" element={<About />} />...</Routes></main><Footer /></div></HashRouter>.\n- Do NOT use window.location.hash or manual switch; use HashRouter and Routes only.\n- Do NOT output <!DOCTYPE html>, <html>, <head>, or <body>; the app wraps your component.\n- Use Tailwind utility classes (className).",
+      "\n\nCreate the entry React component for the site (landing/index.tsx) as a WIREFRAME ONLY.\n\nHard requirements:\n- Use React Router: import { HashRouter, Routes, Route } from 'react-router-dom'. Wrap the whole app in <HashRouter>.\n- Put page content inside <Routes>. Only create Route entries for pages that are actually part of the current site plan. If only Home exists, include only <Route path=\"/\" element={<Home />} />.\n- Import and render ONLY: Navbar from './sections/Navbar', Footer from './sections/Footer', and the page components that really exist under './pages/...'. Do not import About, Contact, or any other page unless that page is part of the current site plan.\n- Structure: <HashRouter><div><Navbar /><main><Routes>...</Routes></main><Footer /></div></HashRouter>.\n- Do NOT use window.location.hash or manual switch; use HashRouter and Routes only.\n- Do NOT output <!DOCTYPE html>, <html>, <head>, or <body>; the app wraps your component.\n- Use Tailwind utility classes (className).",
     isModification: false,
     ensureChargedForAction,
   });
