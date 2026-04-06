@@ -38,6 +38,8 @@ import {
 } from "@/lib/code-generation/validation";
 import { resolveImageSlots } from "@/lib/site-assets/resolve-image-slots";
 
+const DEBUG_SITE_IMAGES = process.env.DEBUG_SITE_IMAGES === "1";
+
 function normalizeDestinationPath(input: string): string | null {
   if (!input) return null;
   let p = String(input).trim();
@@ -309,6 +311,20 @@ async function generateAndSaveSingleFile(params: {
       await getSiteAssetsByChatId(params.chatId, params.userId)
     );
     const siteAssetContext = buildSiteAssetPromptContext(promptableSiteAssets);
+    if (DEBUG_SITE_IMAGES) {
+      console.log("[site-images] codegen assets", {
+        chatId: params.chatId,
+        destination: normalizedDestination,
+        assetCount: promptableSiteAssets.length,
+        assets: promptableSiteAssets.map((asset) => ({
+          alias: asset.alias,
+          sourceType: asset.sourceType ?? "upload",
+          slotKey: asset.slotKey ?? null,
+          intent: asset.intent,
+          label: asset.label ?? null,
+        })),
+      });
+    }
 
     const executeGeneration =
       async (): Promise<GenerateAndSaveSingleFileResult> => {
@@ -535,7 +551,9 @@ const resolveImageSlotsSchema = z.object({
         query: z
           .string()
           .min(1, "query is required")
-          .describe("Concrete stock-search query to use for this slot."),
+          .describe(
+            "Short targeted stock-search query for this single image slot. Use 2-6 concrete keywords, not full sentences or the entire page brief."
+          ),
         orientation: z
           .enum(["landscape", "portrait", "square"])
           .optional()

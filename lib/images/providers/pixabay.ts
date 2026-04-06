@@ -20,12 +20,25 @@ interface PixabayResponse {
   hits?: PixabayHit[];
 }
 
+const DEBUG_SITE_IMAGES = process.env.DEBUG_SITE_IMAGES === "1";
+const PIXABAY_MIN_PER_PAGE = 3;
+const PIXABAY_MAX_PER_PAGE = 200;
+
 function mapOrientation(
   orientation?: ImageSearchOrientation
 ): "horizontal" | "vertical" | undefined {
   if (orientation === "landscape") return "horizontal";
   if (orientation === "portrait") return "vertical";
   return undefined;
+}
+
+function debugPixabayLog(message: string, payload?: Record<string, unknown>) {
+  if (!DEBUG_SITE_IMAGES) return;
+  if (payload) {
+    console.log(`[pixabay] ${message}`, payload);
+    return;
+  }
+  console.log(`[pixabay] ${message}`);
 }
 
 function toTagList(tags?: string): string[] {
@@ -47,18 +60,29 @@ export async function searchPixabayImages(
   if (!query) {
     return [];
   }
+  const perPage = Math.min(
+    Math.max(params.count ?? 6, PIXABAY_MIN_PER_PAGE),
+    PIXABAY_MAX_PER_PAGE
+  );
 
   const url = new URL("https://pixabay.com/api/");
   url.searchParams.set("key", apiKey);
   url.searchParams.set("q", query);
   url.searchParams.set("image_type", "photo");
   url.searchParams.set("safesearch", "true");
-  url.searchParams.set("per_page", String(Math.min(Math.max(params.count ?? 6, 1), 10)));
+  url.searchParams.set("per_page", String(perPage));
 
   const orientation = mapOrientation(params.orientation);
   if (orientation) {
     url.searchParams.set("orientation", orientation);
   }
+
+  debugPixabayLog("request", {
+    query,
+    orientation: orientation ?? null,
+    perPage,
+    url: url.toString().replace(apiKey, "***"),
+  });
 
   const response = await fetch(url.toString(), {
     method: "GET",
@@ -69,11 +93,27 @@ export async function searchPixabayImages(
   });
 
   if (!response.ok) {
-    throw new Error(`Pixabay search failed with status ${response.status}`);
+    const responseText = await response.text().catch(() => "");
+    debugPixabayLog("response error", {
+      status: response.status,
+      statusText: response.statusText,
+      body: responseText || null,
+    });
+    throw new Error(
+      `Pixabay search failed with status ${response.status}${responseText ? `: ${responseText}` : ""}`
+    );
   }
 
   const payload = (await response.json()) as PixabayResponse;
   const hits = Array.isArray(payload.hits) ? payload.hits : [];
+  debugPixabayLog("response success", {
+    totalHits: hits.length,
+    sample: hits.slice(0, 3).map((hit) => ({
+      id: hit.id,
+      pageURL: hit.pageURL,
+      tags: hit.tags ?? "",
+    })),
+  });
 
   return hits
     .map((hit): NormalizedImageCandidate | null => {

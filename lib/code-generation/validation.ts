@@ -33,6 +33,12 @@ const MAX_SITE_SNAPSHOT_CHARS = 60_000;
 
 const IMPORT_RE =
   /import\s+(?:\*\s+as\s+\w+|\{[^}]*\}|\w+)\s+from\s+['"]([^'"]+)['"]|import\s+['"]([^'"]+)['"]/g;
+const MOTION_REACT_IMPORT_RE = /from\s+["']motion\/react["']/;
+const MOTION_ELEMENT_RE = /<motion\.[A-Za-z][\w]*/g;
+const ANIMATE_PRESENCE_RE = /<AnimatePresence\b/g;
+const TAILWIND_ANIMATION_RE = /\banimate-[\w:-]+/g;
+const ARBITRARY_ANIMATION_RE = /\[animation:[^\]]+\]/g;
+const INLINE_ANIMATION_STYLE_RE = /\banimation\s*:/g;
 
 function normalizePath(input: string): string {
   return input.replace(/\\/g, "/").replace(/\/{2,}/g, "/");
@@ -109,6 +115,46 @@ function detectRouteElements(indexContent: string): string[] {
     routeElements.push(match[1]);
   }
   return routeElements;
+}
+
+function countMatches(input: string, pattern: RegExp): number {
+  return input.match(pattern)?.length ?? 0;
+}
+
+function analyzeAnimationStrategy(files: SiteFile[]) {
+  const landingFiles = files.filter((file) => file.path.startsWith("landing/"));
+  let motionImportCount = 0;
+  let motionUsageCount = 0;
+  let cssAnimationCount = 0;
+  const cssAnimationFiles: string[] = [];
+
+  for (const file of landingFiles) {
+    const hasMotionImport = MOTION_REACT_IMPORT_RE.test(file.content);
+    const fileMotionUsageCount =
+      countMatches(file.content, MOTION_ELEMENT_RE) +
+      countMatches(file.content, ANIMATE_PRESENCE_RE);
+    const fileCssAnimationCount =
+      countMatches(file.content, TAILWIND_ANIMATION_RE) +
+      countMatches(file.content, ARBITRARY_ANIMATION_RE) +
+      countMatches(file.content, INLINE_ANIMATION_STYLE_RE);
+
+    if (hasMotionImport) {
+      motionImportCount += 1;
+    }
+    motionUsageCount += fileMotionUsageCount;
+    cssAnimationCount += fileCssAnimationCount;
+
+    if (fileCssAnimationCount > 0) {
+      cssAnimationFiles.push(file.path);
+    }
+  }
+
+  return {
+    motionImportCount,
+    motionUsageCount,
+    cssAnimationCount,
+    cssAnimationFiles,
+  };
 }
 
 function buildSiteSnapshot(files: SiteFile[]): string {
@@ -355,6 +401,36 @@ export async function validateCompleteness(params: {
       });
     }
 
+    const animationStrategy = analyzeAnimationStrategy(files);
+    if (
+      animationStrategy.cssAnimationCount > 0 &&
+      animationStrategy.motionUsageCount === 0
+    ) {
+      findings.push({
+        severity: "critical",
+        issueCode: "CSS_ANIMATION_WITHOUT_MOTION",
+        message:
+          "Landing site uses CSS/Tailwind animation but does not use Motion for React. Primary animation should use `motion/react`, with CSS animation reserved for fallback effects only.",
+        path: animationStrategy.cssAnimationFiles[0],
+        suggestedFix:
+          "Refactor animated landing sections to import from `motion/react` and implement reveals, entrances, and staggered motion there. Keep CSS animation only for minimal fallback or tiny ambient loops.",
+      });
+    } else if (
+      animationStrategy.motionUsageCount > 0 &&
+      animationStrategy.cssAnimationCount >
+        animationStrategy.motionUsageCount * 2
+    ) {
+      findings.push({
+        severity: "warning",
+        issueCode: "CSS_ANIMATION_OUTWEIGHS_MOTION",
+        message:
+          "Landing site appears to rely more on CSS/Tailwind animation than Motion for React. The builder should use `motion/react` for most notable animation and keep CSS animation as fallback.",
+        path: animationStrategy.cssAnimationFiles[0],
+        suggestedFix:
+          "Move the main animated choreography to `motion/react` and keep CSS animation limited to secondary fallback effects.",
+      });
+    }
+
     if (indexFile) {
       if (!/HashRouter/.test(indexFile.content)) {
         findings.push({
@@ -414,6 +490,7 @@ export async function validateCompleteness(params: {
       metadata: {
         fileCount: files.length,
         unresolvedImportCount: unresolvedImports.length,
+        animationStrategy,
         llmCompleteness: llmResult.ok
           ? {
               status: llmResult.status,
@@ -650,6 +727,34 @@ export async function validateUiConsistency(params: {
       }
     }
 
+    const animationStrategy = analyzeAnimationStrategy(files);
+    if (
+      animationStrategy.cssAnimationCount > 0 &&
+      animationStrategy.motionUsageCount === 0
+    ) {
+      findings.push({
+        severity: "critical",
+        issueCode: "CSS_ANIMATION_WITHOUT_MOTION",
+        message:
+          "Animated landing files use CSS/Tailwind animation but never import Motion for React. Primary animation should use `motion/react`.",
+        path: animationStrategy.cssAnimationFiles[0],
+        suggestedFix:
+          "Refactor the animated sections to use `motion/react` for reveals, entrances, and staggered interactions. Keep CSS animation only as a simple fallback.",
+      });
+    } else if (
+      animationStrategy.motionUsageCount > 0 &&
+      animationStrategy.cssAnimationCount >
+        animationStrategy.motionUsageCount * 2
+    ) {
+      findings.push({
+        severity: "warning",
+        issueCode: "CSS_ANIMATION_OUTWEIGHS_MOTION",
+        message:
+          "CSS/Tailwind animation appears to outweigh Motion for React in landing files. Prefer `motion/react` for most notable animated behavior.",
+        path: animationStrategy.cssAnimationFiles[0],
+      });
+    }
+
     if (totalClassAttr > 0 && totalClassNameAttr === 0) {
       findings.push({
         severity: "critical",
@@ -698,6 +803,7 @@ export async function validateUiConsistency(params: {
       metadata: {
         fileCount: files.length,
         screenshotAssisted: includeScreenshot,
+        animationStrategy,
       },
     };
   } catch (error) {

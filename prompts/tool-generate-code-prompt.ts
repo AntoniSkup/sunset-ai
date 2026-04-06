@@ -5,7 +5,7 @@ Frontend aesthetics:
 - Typography is a primary design tool: choose beautiful, interesting font combinations and avoid defaulting to Inter, Roboto, Arial, system fonts, or the same overused choices repeatedly.
 - Commit to a cohesive color story. Use CSS variables when defining theme values or repeated colors. Prefer strong dominant tones with sharp accents over timid, evenly distributed palettes.
 - Draw inspiration from IDE themes, editorial layouts, cultural aesthetics, music scenes, fashion, print design, and other unexpected references when appropriate.
-- Use motion deliberately: prioritize a few memorable animation beats like staggered entrances, reveal effects, and tactile hover states. Prefer CSS-only animation when possible; use Motion for React only when it clearly improves the result.
+- Use motion deliberately: prioritize a few memorable animation beats like staggered entrances, reveal effects, scroll-triggered entrances, and tactile hover states. Default to Motion for React via 'motion/react' for primary animation work. Use CSS/Tailwind animation only as a fallback for tiny ambient loops or very simple effects that do not warrant Motion.
 - Build atmosphere with backgrounds: layer gradients, glows, subtle patterns, grid treatments, textures, or geometric effects instead of defaulting to a flat solid background.
 - Avoid overused AI-generated aesthetics such as purple gradients on white, predictable app-store SaaS layouts, and bland visual hierarchies.
 - Vary your choices across generations; do not keep reusing the same aesthetic defaults.
@@ -44,7 +44,10 @@ Generate exactly ONE React/TSX file for a landing site. Each tool call creates/u
 - Output RAW React/JSX/TSX ONLY (no markdown, no explanations, no code fences).
 - Use Tailwind CSS utility classes for ALL styling (no <style> tags, no external CSS). Use the className prop.
 - Do not import Google Fonts or define font-face rules inside section/page files. Keep font loading global, and use inline style props only for truly dynamic values that cannot be expressed cleanly with Tailwind utilities.
+- When the section uses meaningful animation, import from 'motion/react' and implement the main entrances, reveals, staggers, or hover choreography with motion components/variants. Do not rely on custom CSS animation or Tailwind 'animate-*' classes for the primary animated experience.
 - For real imagery, render only resolved site assets with ImageAsset aliases. Never invent raw image URLs, placeholder CDN URLs, or direct stock-provider URLs in the generated TSX.
+- When site assets are provided in context, copy the alias exactly as given in the manifest. Never rewrite "hero.jpg" into something like "hero-warm-and-cozy.jpg".
+- Do not create custom inline SVG artwork, decorative SVG backgrounds, or hand-written SVG illustrations unless the user explicitly requests SVG-based graphics.
 - The code must be valid JSX/TSX and self-contained for this file.
 - **File structure (strict)**: Put ALL import statements at the very top of the file. Then output exactly ONE default-export component. Do NOT repeat the component, do NOT put imports after the component, and do NOT duplicate any part of the file. Correct order: first every import line, then the single export default function ... { ... }. Example for a page file: first line "import Hero from '../sections/Hero';", then blank line, then "export default function Home() { return (...); }" once only.
 - If destination is exactly "landing/index.tsx", output a WIREFRAME ONLY: import { HashRouter, Routes, Route } from 'react-router-dom', plus Navbar, Footer, and page components. Wrap everything in <HashRouter>. Use <Routes> and <Route path=\"/\" element={<Home />} /> (and path=\"/about\" element={<About />} etc.) inside <main>. Do NOT use window.location.hash or manual switch. Do NOT put navbar/footer markup inline. Do NOT output <!DOCTYPE html>, <html>, <head>, or <body>.
@@ -70,7 +73,9 @@ ${FRONTEND_AESTHETICS_GUIDANCE}
 - Use consistent container and spacing patterns (e.g., max-w-6xl mx-auto px-4 py-12).
 - If the section needs a CTA button, use clear safe navigation. In HashRouter apps, avoid raw href="#section" for primary nav; use Link for route changes and click handlers for section scrolling.
 - If image assets are available for this section, use them prominently and thoughtfully. Prefer uploaded user assets when provided; otherwise use the resolved stock asset aliases already available in context.
+- Treat asset aliases as strict IDs, not descriptive suggestions. Use the exact alias from context for the matching slot.
 - Do not treat imagery as a one-off accent. If the section can credibly support visuals, prefer a richer composition with photos, product shots, portraits, or supporting images so the page feels visually dense in a polished way.
+- CSS animation is fallback-only. If you need only a tiny ambient loop, keep it secondary and subtle; the section should still rely primarily on 'motion/react' for any notable animation.
 
 **Design consistency (when existing sections are provided)**
 - Match the design of existing sections: same colors, typography, spacing, button styles, and container patterns.

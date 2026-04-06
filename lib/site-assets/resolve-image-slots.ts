@@ -8,6 +8,21 @@ import { searchStockImages } from "@/lib/images/search-images";
 import type { ImageSearchOrientation } from "@/lib/images/providers/types";
 
 const RENDERABLE_INTENTS = new Set(["site_asset", "both"]);
+const DEBUG_SITE_IMAGES = process.env.DEBUG_SITE_IMAGES === "1";
+const SEARCH_STYLE_HINTS = new Set([
+  "warm",
+  "moody",
+  "editorial",
+  "minimal",
+  "rustic",
+  "luxury",
+  "cozy",
+  "modern",
+  "vintage",
+  "dark",
+  "bright",
+  "cinematic",
+]);
 
 export interface ImageSlotRequest {
   slotKey: string;
@@ -38,6 +53,15 @@ export interface ResolvedImageSlot {
 export interface ResolveImageSlotsResult {
   resolved: ResolvedImageSlot[];
   unresolved: Array<{ slotKey: string; reason: string }>;
+}
+
+function debugImageLog(message: string, payload?: Record<string, unknown>) {
+  if (!DEBUG_SITE_IMAGES) return;
+  if (payload) {
+    console.log(`[site-images] ${message}`, payload);
+    return;
+  }
+  console.log(`[site-images] ${message}`);
 }
 
 function tokenize(value: string): string[] {
@@ -107,9 +131,33 @@ function inferMimeTypeFromUrl(url: string): string {
   return "image/jpeg";
 }
 
-function aliasBaseFromSlot(slot: ImageSlotRequest, tags?: string[]): string {
-  const firstTag = (tags ?? []).find(Boolean);
-  return firstTag ? `${slot.slotKey}-${firstTag}.jpg` : `${slot.slotKey}.jpg`;
+function aliasBaseFromSlot(slot: ImageSlotRequest): string {
+  return `${slot.slotKey}.jpg`;
+}
+
+function buildTargetedStockSearchQuery(
+  slot: ImageSlotRequest,
+  brandStyle?: string
+): string {
+  const queryTokens = uniqueTokens(slot.query).slice(0, 6);
+  const purposeTokens = uniqueTokens(slot.purpose).filter(
+    (token) => !queryTokens.includes(token)
+  );
+  const styleTokens = uniqueTokens(brandStyle).filter(
+    (token) => SEARCH_STYLE_HINTS.has(token) && !queryTokens.includes(token)
+  );
+
+  const merged = [...queryTokens];
+
+  if (merged.length < 3) {
+    merged.push(...purposeTokens.slice(0, 3 - merged.length));
+  }
+
+  if (merged.length < 5) {
+    merged.push(...styleTokens.slice(0, Math.max(0, 5 - merged.length)));
+  }
+
+  return merged.slice(0, 6).join(" ").trim();
 }
 
 export async function resolveImageSlots(
@@ -129,10 +177,37 @@ export async function resolveImageSlots(
     return { resolved: [], unresolved: [] };
   }
 
+  debugImageLog("resolve start", {
+    chatId: input.chatId,
+    userId: input.userId,
+    pageGoal: input.pageGoal,
+    brandStyle: input.brandStyle ?? null,
+    slots: slots.map((slot) => ({
+      slotKey: slot.slotKey,
+      purpose: slot.purpose,
+      query: slot.query,
+      orientation: slot.orientation ?? null,
+      count: slot.count ?? 1,
+    })),
+  });
+
   const existingAssets = await getSiteAssetsByChatId(input.chatId, input.userId);
   const existingAliases = new Set(
     await getSiteAssetAliasesByChatId(input.chatId, input.userId)
   );
+  debugImageLog("existing assets loaded", {
+    chatId: input.chatId,
+    totalAssets: existingAssets.length,
+    assets: existingAssets.map((asset) => ({
+      id: asset.id,
+      alias: asset.alias,
+      sourceType: asset.sourceType ?? "upload",
+      intent: asset.intent,
+      status: asset.status,
+      slotKey: asset.slotKey ?? null,
+      label: asset.label ?? null,
+    })),
+  });
   const usedAssetIds = new Set<number>();
   const resolved: ResolvedImageSlot[] = [];
   const unresolved: Array<{ slotKey: string; reason: string }> = [];
@@ -150,6 +225,13 @@ export async function resolveImageSlots(
 
     if (existingExact) {
       usedAssetIds.add(existingExact.id);
+      debugImageLog("reused exact existing asset", {
+        chatId: input.chatId,
+        slotKey: slot.slotKey,
+        alias: existingExact.alias,
+        sourceType: existingExact.sourceType ?? "upload",
+        provider: existingExact.provider ?? null,
+      });
       resolved.push({
         slotKey: slot.slotKey,
         alias: existingExact.alias,
@@ -178,6 +260,12 @@ export async function resolveImageSlots(
 
     if (matchingUpload && matchingUpload.score > 0) {
       usedAssetIds.add(matchingUpload.asset.id);
+      debugImageLog("reused uploaded asset", {
+        chatId: input.chatId,
+        slotKey: slot.slotKey,
+        alias: matchingUpload.asset.alias,
+        score: matchingUpload.score,
+      });
       resolved.push({
         slotKey: slot.slotKey,
         alias: matchingUpload.asset.alias,
@@ -194,17 +282,39 @@ export async function resolveImageSlots(
 
   const stockResults = await Promise.all(
     pendingStockSlots.map(async (slot) => {
+      const searchQuery = buildTargetedStockSearchQuery(
+        slot,
+        input.brandStyle
+      );
       try {
         const candidates = await searchStockImages({
-          query: [slot.query, input.brandStyle, input.pageGoal]
-            .filter(Boolean)
-            .join(" "),
+          query: searchQuery,
           orientation: slot.orientation,
           count: Math.max(1, slot.count ?? 1),
+        });
+        debugImageLog("stock search completed", {
+          chatId: input.chatId,
+          slotKey: slot.slotKey,
+          rawQuery: slot.query,
+          query: searchQuery,
+          candidateCount: candidates.length,
+          candidates: candidates.slice(0, 3).map((candidate) => ({
+            provider: candidate.provider,
+            providerAssetId: candidate.providerAssetId,
+            imageUrl: candidate.imageUrl,
+            tags: candidate.tags ?? [],
+          })),
         });
 
         return { slot, chosen: candidates[0] ?? null, error: null as string | null };
       } catch (error) {
+        debugImageLog("stock search failed", {
+          chatId: input.chatId,
+          slotKey: slot.slotKey,
+          rawQuery: slot.query,
+          query: searchQuery,
+          error: error instanceof Error ? error.message : "Stock image resolution failed",
+        });
         return {
           slot,
           chosen: null,
@@ -233,7 +343,7 @@ export async function resolveImageSlots(
     }
 
     const alias = createUniqueSiteAssetAlias(
-      aliasBaseFromSlot(result.slot, result.chosen.tags),
+      aliasBaseFromSlot(result.slot),
       existingAliases,
       "jpg"
     );
@@ -265,6 +375,14 @@ export async function resolveImageSlots(
     });
 
     usedAssetIds.add(created.id);
+    debugImageLog("created stock asset", {
+      chatId: input.chatId,
+      slotKey: result.slot.slotKey,
+      alias: created.alias,
+      provider: result.chosen.provider,
+      providerAssetId: result.chosen.providerAssetId,
+      imageUrl: result.chosen.imageUrl,
+    });
     resolved.push({
       slotKey: result.slot.slotKey,
       alias: created.alias,
@@ -276,5 +394,10 @@ export async function resolveImageSlots(
     });
   }
 
+  debugImageLog("resolve finished", {
+    chatId: input.chatId,
+    resolved,
+    unresolved,
+  });
   return { resolved, unresolved };
 }

@@ -66,7 +66,8 @@ export function buildSiteAssetPromptGuidance(): string {
     "- Stock assets may be used to fill missing image slots when uploaded assets are unavailable or insufficient.",
     "- Assets with intent=reference are visual inspiration only and must not be rendered directly unless the user explicitly asks.",
     "- Assets with intent=site_asset or intent=both may be rendered on the site when appropriate.",
-    "- Prefer reusing the provided aliases exactly as given.",
+    "- Use the provided alias exactly as written. Do not rename it, beautify it, translate it, or derive a new filename from the label, alt text, or slot.",
+    "- If a manifest line includes slot=hero and alias=hero.jpg, then the component must use asset=\"hero.jpg\" exactly.",
     "- Do not invent new asset aliases or raw external image URLs.",
   ].join("\n");
 }
