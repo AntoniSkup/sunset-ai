@@ -17,6 +17,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { signOut } from "@/app/(login)/actions";
 import { mutate } from "swr";
+import useSWR from "swr";
+import type { User } from "@/lib/db/schema";
 
 type SunsetLogoMenuProps = {
   variant?: "default" | "dashboard";
@@ -30,6 +32,10 @@ export function SunsetLogoMenu({
   contentClassName = "w-40",
 }: SunsetLogoMenuProps) {
   const router = useRouter();
+  const { data: user } = useSWR<User>("/api/user", (url: string) =>
+    fetch(url).then((res) => res.json())
+  );
+  const isSuperadmin = user?.role === "superadmin";
 
   async function handleSignOut() {
     await signOut();
@@ -58,6 +64,12 @@ export function SunsetLogoMenu({
           >
             My Account
           </DropdownMenuLabel>
+
+          {isSuperadmin ? (
+            <DropdownMenuItem onClick={() => router.push("/dashboard/admin")}>
+              Admin
+            </DropdownMenuItem>
+          ) : null}
 
           {variant === "dashboard" ? (
             <DropdownMenuItem onClick={() => router.push("/start")}>
