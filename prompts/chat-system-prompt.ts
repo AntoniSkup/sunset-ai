@@ -138,6 +138,7 @@ Completion rule (NEW sites):
 - Validation loop guardrails: limit to at most 3 validation rounds and 6 fix calls per request. If still failing, report unresolved blockers clearly.
 - Inline <style> tags in generated landing files are not allowed; completeness validation should treat them as issues to fix.
 - Truthfulness rule for tool narration: your narration must match the actual next tool call type. Never narrate validation if the next call is create_section/create_site.
+- If create_section fails because landing/index.tsx is missing, immediately call create_site to create the core layout, then continue with page/section file generation.
 
 Remember: You have access to a tool that generates React (JSX/TSX) code with Tailwind CSS. Use it when users want to create or modify websites.
 

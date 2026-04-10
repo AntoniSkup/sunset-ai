@@ -74,6 +74,11 @@ function isIndexDestination(destination: string): boolean {
   return d === "landing/index.html" || d === "landing/index.tsx";
 }
 
+function isLandingPageOrSectionDestination(destination: string): boolean {
+  const d = destination.toLowerCase();
+  return d.startsWith("landing/pages/") || d.startsWith("landing/sections/");
+}
+
 function enforceIndexShell(html: string): string {
   const includeLine = "<!-- include: landing/pages/home.html -->";
 
@@ -618,10 +623,30 @@ const createSectionToolExecute = async (
     return { success: false, error: "Chat ID is required" };
   }
 
+  const normalizedDestination = normalizeDestinationPath(destination);
+  if (!normalizedDestination) {
+    return { success: false, error: "Invalid destination path" };
+  }
+
+  if (isLandingPageOrSectionDestination(normalizedDestination)) {
+    const existingIndex = await getLatestLandingSiteFileContent(
+      chatId,
+      "landing/index.tsx"
+    );
+
+    if (!existingIndex?.content?.trim()) {
+      return {
+        success: false,
+        error:
+          "Core layout is missing. Create landing/index.tsx first with create_site, then create landing/pages/* and landing/sections/* files.",
+      };
+    }
+  }
+
   const result = await generateAndSaveSingleFile({
     chatId,
     userId,
-    destination,
+    destination: normalizedDestination,
     userRequest,
     isModification,
     ensureChargedForAction,
@@ -753,7 +778,7 @@ export function createSectionTool(
 ) {
   return tool({
     description:
-      "Create or modify exactly one React/TSX file (layout, page, or section) for the landing site. One tool call writes exactly one file. Use .tsx paths (e.g. landing/sections/Hero.tsx, landing/pages/Home.tsx).",
+      "Create or modify exactly one React/TSX file (layout, page, or section) for the landing site. One tool call writes exactly one file. Use .tsx paths (e.g. landing/sections/Hero.tsx, landing/pages/Home.tsx). For landing/pages/* and landing/sections/*, landing/index.tsx must already exist (create it first with create_site).",
     inputSchema: createSectionSchema,
     execute: async (input: z.infer<typeof createSectionSchema>) => {
       return createSectionToolExecute(
