@@ -3,6 +3,7 @@ import {
   getSiteAssetAliasesByChatId,
   getSiteAssetsByChatId,
 } from "@/lib/db/queries";
+import { put } from "@vercel/blob";
 import { createUniqueSiteAssetAlias } from "@/lib/site-assets/alias";
 import { searchStockImages } from "@/lib/images/search-images";
 import type { ImageSearchOrientation } from "@/lib/images/providers/types";
@@ -129,6 +130,62 @@ function inferMimeTypeFromUrl(url: string): string {
   if (clean.includes(".png")) return "image/png";
   if (clean.includes(".webp")) return "image/webp";
   return "image/jpeg";
+}
+
+function normalizeStockMimeType(
+  contentType: string | null,
+  fallbackUrl: string
+): string {
+  const normalized = contentType?.split(";")[0]?.trim().toLowerCase() ?? "";
+  if (
+    normalized === "image/jpeg" ||
+    normalized === "image/png" ||
+    normalized === "image/webp"
+  ) {
+    return normalized;
+  }
+
+  return inferMimeTypeFromUrl(fallbackUrl);
+}
+
+async function mirrorStockImageToBlob(params: {
+  chatId: string;
+  alias: string;
+  imageUrl: string;
+}): Promise<{ blobUrl: string; mimeType: string; sizeBytes: number }> {
+  const response = await fetch(params.imageUrl);
+  if (!response.ok) {
+    throw new Error(
+      `Failed to download stock image: ${response.status} ${response.statusText}`
+    );
+  }
+
+  const mimeType = normalizeStockMimeType(
+    response.headers.get("content-type"),
+    params.imageUrl
+  );
+  const buffer = await response.arrayBuffer();
+  const sizeBytes = buffer.byteLength;
+
+  if (sizeBytes <= 0) {
+    throw new Error("Downloaded stock image is empty");
+  }
+
+  const blob = await put(
+    `site-assets/${params.chatId}/stock/${Date.now()}-${params.alias}`,
+    buffer,
+    {
+      access: "public",
+      addRandomSuffix: false,
+      contentType: mimeType,
+    }
+  );
+
+  return {
+    blobUrl: blob.url,
+    mimeType,
+    sizeBytes,
+  };
 }
 
 function aliasBaseFromSlot(slot: ImageSlotRequest): string {
@@ -348,12 +405,46 @@ export async function resolveImageSlots(
       "jpg"
     );
     existingAliases.add(alias);
+    let mirroredAsset: {
+      blobUrl: string;
+      mimeType: string;
+      sizeBytes: number;
+    };
+
+    try {
+      mirroredAsset = await mirrorStockImageToBlob({
+        chatId: input.chatId,
+        alias,
+        imageUrl: result.chosen.imageUrl,
+      });
+    } catch (error) {
+      unresolved.push({
+        slotKey: result.slot.slotKey,
+        reason:
+          error instanceof Error
+            ? error.message
+            : "Failed to mirror stock image to Blob",
+      });
+      debugImageLog("stock mirror failed", {
+        chatId: input.chatId,
+        slotKey: result.slot.slotKey,
+        alias,
+        provider: result.chosen.provider,
+        providerAssetId: result.chosen.providerAssetId,
+        imageUrl: result.chosen.imageUrl,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to mirror stock image to Blob",
+      });
+      continue;
+    }
 
     const created = await createSiteAsset({
       chatId: input.chatId,
       userId: input.userId,
       alias,
-      blobUrl: result.chosen.imageUrl,
+      blobUrl: mirroredAsset.blobUrl,
       sourceType: "stock",
       provider: result.chosen.provider,
       providerAssetId: result.chosen.providerAssetId,
@@ -365,8 +456,8 @@ export async function resolveImageSlots(
       tags: result.chosen.tags ?? null,
       intent: "site_asset",
       status: "ready",
-      mimeType: inferMimeTypeFromUrl(result.chosen.imageUrl),
-      sizeBytes: 0,
+      mimeType: mirroredAsset.mimeType,
+      sizeBytes: mirroredAsset.sizeBytes,
       width: result.chosen.width,
       height: result.chosen.height,
       originalFilename: null,
@@ -382,6 +473,7 @@ export async function resolveImageSlots(
       provider: result.chosen.provider,
       providerAssetId: result.chosen.providerAssetId,
       imageUrl: result.chosen.imageUrl,
+      blobUrl: created.blobUrl,
     });
     resolved.push({
       slotKey: result.slot.slotKey,
