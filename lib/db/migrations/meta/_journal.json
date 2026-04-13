@@ -134,6 +134,13 @@
       "when": 1775256253376,
       "tag": "0018_clear_miss_america",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1775510400000,
+      "tag": "0019_tidy_hero_vectors",
+      "breakpoints": true
     }
   ]
 }

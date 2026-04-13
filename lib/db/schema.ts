@@ -86,6 +86,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   invitationsSent: many(invitations),
   chats: many(chats),
   siteAssets: many(siteAssets),
+  inspirations: many(inspirations),
   accounts: many(accounts),
 }));
 
@@ -461,6 +462,29 @@ export const siteAssets = pgTable(
   })
 );
 
+export const INSPIRATION_EMBEDDING_DIMENSIONS = 1536;
+
+export const inspirations = pgTable(
+  "inspirations",
+  {
+    id: serial("id").primaryKey(),
+    description: text("description").notNull(),
+    tags: jsonb("tags").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    embedding: jsonb("embedding").$type<number[]>().notNull().default(sql`'[]'::jsonb`),
+    createdByUserId: integer("created_by_user_id")
+      .notNull()
+      .references(() => users.id),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    createdByUserIdIdx: index("inspirations_created_by_user_id_idx").on(
+      table.createdByUserId
+    ),
+    createdAtIdx: index("inspirations_created_at_idx").on(table.createdAt),
+  })
+);
+
 export const chatsRelations = relations(chats, ({ one, many }) => ({
   user: one(users, {
     fields: [chats.userId],
@@ -535,6 +559,13 @@ export const siteAssetsRelations = relations(siteAssets, ({ one }) => ({
   }),
 }));
 
+export const inspirationsRelations = relations(inspirations, ({ one }) => ({
+  createdByUser: one(users, {
+    fields: [inspirations.createdByUserId],
+    references: [users.id],
+  }),
+}));
+
 export type Chat = typeof chats.$inferSelect;
 export type NewChat = typeof chats.$inferInsert;
 export type ChatMessage = typeof chatMessages.$inferSelect;
@@ -549,6 +580,8 @@ export type ChatStreamEvent = typeof chatStreamEvents.$inferSelect;
 export type NewChatStreamEvent = typeof chatStreamEvents.$inferInsert;
 export type SiteAsset = typeof siteAssets.$inferSelect;
 export type NewSiteAsset = typeof siteAssets.$inferInsert;
+export type Inspiration = typeof inspirations.$inferSelect;
+export type NewInspiration = typeof inspirations.$inferInsert;
 
 export const publishedSites = pgTable(
   "published_sites",

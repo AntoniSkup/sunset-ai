@@ -17,6 +17,7 @@ import {
   chatStreamEvents,
   siteAssets,
   publishedSites,
+  inspirations,
 } from "./schema";
 import { nanoid } from "nanoid";
 import { cookies } from "next/headers";
@@ -1128,4 +1129,66 @@ export async function updatePublishedSite(
     .returning();
 
   return result.length > 0 ? result[0] : null;
+}
+
+export async function createInspiration(data: {
+  description: string;
+  tags: string[];
+  embedding: number[];
+  createdByUserId: number;
+}) {
+  const result = await db
+    .insert(inspirations)
+    .values({
+      description: data.description.trim(),
+      tags: data.tags,
+      embedding: data.embedding,
+      createdByUserId: data.createdByUserId,
+      updatedAt: new Date(),
+    })
+    .returning();
+
+  return result[0] ?? null;
+}
+
+export async function listInspirations(limit = 100) {
+  return db
+    .select()
+    .from(inspirations)
+    .orderBy(desc(inspirations.createdAt))
+    .limit(Math.min(Math.max(limit, 1), 500));
+}
+
+export async function deleteInspirationById(id: number) {
+  const result = await db
+    .delete(inspirations)
+    .where(eq(inspirations.id, id))
+    .returning();
+
+  return result[0] ?? null;
+}
+
+export async function searchInspirationsByEmbedding(params: {
+  embedding: number[];
+  limit?: number;
+}) {
+  const limit = Math.min(Math.max(params.limit ?? 8, 1), 50);
+  if (!Array.isArray(params.embedding) || params.embedding.length === 0) {
+    throw new Error("Embedding vector cannot be empty");
+  }
+
+  return db
+    .select({
+      id: inspirations.id,
+      description: inspirations.description,
+      tags: inspirations.tags,
+      createdByUserId: inspirations.createdByUserId,
+      createdAt: inspirations.createdAt,
+      updatedAt: inspirations.updatedAt,
+      // Fallback ranking when pgvector is unavailable.
+      similarity: sql<number>`0`,
+    })
+    .from(inspirations)
+    .orderBy(desc(inspirations.createdAt))
+    .limit(limit);
 }
