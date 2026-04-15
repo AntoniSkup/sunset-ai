@@ -1133,6 +1133,7 @@ export async function updatePublishedSite(
 
 export async function createInspiration(data: {
   description: string;
+  section: string;
   tags: string[];
   embedding: number[];
   createdByUserId: number;
@@ -1141,6 +1142,7 @@ export async function createInspiration(data: {
     .insert(inspirations)
     .values({
       description: data.description.trim(),
+      section: data.section,
       tags: data.tags,
       embedding: data.embedding,
       createdByUserId: data.createdByUserId,
@@ -1168,6 +1170,19 @@ export async function deleteInspirationById(id: number) {
   return result[0] ?? null;
 }
 
+export async function updateInspirationEmbedding(id: number, embedding: number[]) {
+  const result = await db
+    .update(inspirations)
+    .set({
+      embedding,
+      updatedAt: new Date(),
+    })
+    .where(eq(inspirations.id, id))
+    .returning();
+
+  return result[0] ?? null;
+}
+
 export async function searchInspirationsByEmbedding(params: {
   embedding: number[];
   limit?: number;
@@ -1181,11 +1196,11 @@ export async function searchInspirationsByEmbedding(params: {
     .select({
       id: inspirations.id,
       description: inspirations.description,
+      section: inspirations.section,
       tags: inspirations.tags,
       createdByUserId: inspirations.createdByUserId,
       createdAt: inspirations.createdAt,
       updatedAt: inspirations.updatedAt,
-      // Fallback ranking when pgvector is unavailable.
       similarity: sql<number>`0`,
     })
     .from(inspirations)

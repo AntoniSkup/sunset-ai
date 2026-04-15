@@ -23,12 +23,14 @@ import {
 type InspirationItem = {
   id: number;
   description: string;
+  section: string;
   tags: string[];
   createdAt: string;
 };
 
 export function InspirationsPanel() {
   const [description, setDescription] = useState("");
+  const [sectionInput, setSectionInput] = useState("");
   const [tagInput, setTagInput] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [items, setItems] = useState<InspirationItem[]>([]);
@@ -54,6 +56,15 @@ export function InspirationsPanel() {
       .replace(/\s+/g, "-");
   }
 
+  function normalizeSectionValue(raw: string): string {
+    return raw
+      .trim()
+      .replace(/^['"]+|['"]+$/g, "")
+      .toLowerCase()
+      .replace(/\s+/g, "-")
+      .slice(0, 64);
+  }
+
   function parseTags(rawValue: string): string[] {
     return rawValue
       .split(",")
@@ -64,6 +75,7 @@ export function InspirationsPanel() {
   function extractFromDescriptionInput(rawValue: string): {
     description: string;
     tags: string[];
+    section?: string;
   } {
     const trimmed = rawValue.trim();
     if (!trimmed) {
@@ -71,7 +83,7 @@ export function InspirationsPanel() {
     }
 
     // 1) JSON support:
-    // - { "description": "...", "tags": ["..."] }
+    // - { "description": "...", "section": "...", "tags": ["..."] }
     // - ["tag-1", "tag-2"]
     try {
       const parsed = JSON.parse(trimmed);
@@ -90,6 +102,11 @@ export function InspirationsPanel() {
             ? (parsed as { description: string }).description.trim()
             : "";
 
+        const parsedSection =
+          typeof (parsed as { section?: unknown }).section === "string"
+            ? (parsed as { section: string }).section.trim()
+            : "";
+
         const parsedTagsRaw = (parsed as { tags?: unknown }).tags;
         const parsedTags = Array.isArray(parsedTagsRaw)
           ? parsedTagsRaw
@@ -97,7 +114,11 @@ export function InspirationsPanel() {
               .flatMap((value) => parseTags(value))
           : [];
 
-        return { description: parsedDescription, tags: parsedTags };
+        return {
+          description: parsedDescription,
+          tags: parsedTags,
+          ...(parsedSection ? { section: parsedSection } : {}),
+        };
       }
     } catch {
       // Not JSON, continue with freeform extraction below.
@@ -181,6 +202,7 @@ export function InspirationsPanel() {
 
   function resetForm() {
     setDescription("");
+    setSectionInput("");
     setTagInput("");
     setTags([]);
   }
@@ -197,6 +219,12 @@ export function InspirationsPanel() {
     const extracted = extractFromDescriptionInput(description);
     const descriptionFromInput = extracted.description.trim();
     const mergedTags = Array.from(new Set([...tags, ...extracted.tags]));
+    const fromManualSection = normalizeSectionValue(sectionInput);
+    const fromJsonSection =
+      extracted.section !== undefined
+        ? normalizeSectionValue(extracted.section)
+        : "";
+    const finalSection = fromManualSection || fromJsonSection || "unknown";
 
     const finalDescription =
       descriptionFromInput || "Imported tag-driven inspiration entry.";
@@ -212,6 +240,7 @@ export function InspirationsPanel() {
         },
         body: JSON.stringify({
           description: finalDescription,
+          section: finalSection,
           tags: mergedTags,
         }),
       });
@@ -276,12 +305,28 @@ export function InspirationsPanel() {
             id="inspiration-description"
             value={description}
             onChange={(event) => setDescription(event.target.value)}
-            placeholder="Paste or write the detailed hero inspiration outline..."
+            placeholder="Paste or write the detailed inspiration outline..."
             className="border-input placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 min-h-36 w-full rounded-md border bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none focus-visible:ring-[3px]"
           />
           <p className="text-xs text-muted-foreground">
-            Paste regular text, a JSON object with <code>description</code> and{" "}
-            <code>tags</code>, or a quoted tag list. We auto-extract tags.
+            Paste regular text, a JSON object with <code>description</code>,{" "}
+            <code>section</code>, and <code>tags</code>, or a quoted tag list. We
+            auto-extract tags and section when present.
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <label htmlFor="inspiration-section" className="text-sm font-medium">
+            Section
+          </label>
+          <Input
+            id="inspiration-section"
+            value={sectionInput}
+            onChange={(event) => setSectionInput(event.target.value)}
+            placeholder="e.g. hero, footer, map (optional; defaults to unknown)"
+          />
+          <p className="text-xs text-muted-foreground">
+            Overrides <code>section</code> from pasted JSON when filled.
           </p>
         </div>
 
@@ -365,6 +410,7 @@ export function InspirationsPanel() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Description</TableHead>
+                    <TableHead className="w-28">Section</TableHead>
                     <TableHead>Tags</TableHead>
                     <TableHead className="w-48">Created</TableHead>
                     <TableHead className="w-14 text-right">Actions</TableHead>
@@ -377,6 +423,9 @@ export function InspirationsPanel() {
                         <p className="line-clamp-4 whitespace-pre-wrap text-sm leading-6">
                           {item.description}
                         </p>
+                      </TableCell>
+                      <TableCell className="align-top font-mono text-xs">
+                        {item.section}
                       </TableCell>
                       <TableCell className="max-w-[320px] align-top">
                         {item.tags.length > 0 ? (

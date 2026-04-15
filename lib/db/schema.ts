@@ -469,6 +469,7 @@ export const inspirations = pgTable(
   {
     id: serial("id").primaryKey(),
     description: text("description").notNull(),
+    section: varchar("section", { length: 64 }).notNull().default("unknown"),
     tags: jsonb("tags").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
     embedding: jsonb("embedding").$type<number[]>().notNull().default(sql`'[]'::jsonb`),
     createdByUserId: integer("created_by_user_id")
@@ -482,6 +483,7 @@ export const inspirations = pgTable(
       table.createdByUserId
     ),
     createdAtIdx: index("inspirations_created_at_idx").on(table.createdAt),
+    sectionIdx: index("inspirations_section_idx").on(table.section),
   })
 );
 

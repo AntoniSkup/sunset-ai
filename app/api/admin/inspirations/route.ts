@@ -1,8 +1,13 @@
 import { NextResponse } from "next/server";
 import {
+  buildInspirationCorpusForStorage,
+  embedInspirationText,
+} from "@/lib/ai/embed-inspiration";
+import {
   createInspiration,
   getUser,
   listInspirations,
+  updateInspirationEmbedding,
 } from "@/lib/db/queries";
 import { INSPIRATION_EMBEDDING_DIMENSIONS } from "@/lib/db/schema";
 
@@ -27,6 +32,17 @@ function normalizeTags(rawTags: unknown): string[] {
   return Array.from(new Set(tags));
 }
 
+function normalizeSection(raw: unknown): string {
+  if (typeof raw !== "string") return "unknown";
+  const s = raw
+    .trim()
+    .replace(/^['"]+|['"]+$/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .slice(0, 64);
+  return s || "unknown";
+}
+
 async function requireSuperadmin() {
   const user = await getUser();
   if (!user) {
@@ -48,6 +64,7 @@ export async function GET() {
     items: rows.map((row) => ({
       id: row.id,
       description: row.description,
+      section: row.section,
       tags: row.tags ?? [],
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
@@ -62,11 +79,13 @@ export async function POST(request: Request) {
 
   const body = (await request.json()) as {
     description?: unknown;
+    section?: unknown;
     tags?: unknown;
   };
 
   const description =
     typeof body.description === "string" ? body.description.trim() : "";
+  const section = normalizeSection(body.section);
   const tags = normalizeTags(body.tags);
 
   if (!description && tags.length === 0) {
@@ -78,6 +97,7 @@ export async function POST(request: Request) {
 
   const inserted = await createInspiration({
     description: description || "Imported tag-driven inspiration entry.",
+    section,
     tags,
     embedding: buildZeroEmbedding(),
     createdByUserId: auth.user.id,
@@ -87,10 +107,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Failed to create inspiration" }, { status: 500 });
   }
 
+  const corpus = buildInspirationCorpusForStorage({
+    description: inserted.description,
+    tags: inserted.tags ?? [],
+  });
+  const embedding = await embedInspirationText(corpus);
+  if (embedding) {
+    await updateInspirationEmbedding(inserted.id, embedding);
+  }
+
   return NextResponse.json({
     item: {
       id: inserted.id,
       description: inserted.description,
+      section: inserted.section,
       tags: inserted.tags ?? [],
       createdAt: inserted.createdAt.toISOString(),
       updatedAt: inserted.updatedAt.toISOString(),

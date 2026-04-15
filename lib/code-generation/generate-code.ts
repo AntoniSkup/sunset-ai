@@ -23,11 +23,13 @@ import {
 import { checkRateLimit } from "@/lib/code-generation/rate-limit";
 import {
   buildExistingSectionsContext,
+  buildInspirationContextSection,
   buildSiteAssetContextSection,
   buildModificationContext,
   buildUserRequestSection,
   createSectionPrompt,
 } from "@/prompts/tool-generate-code-prompt";
+import { retrieveInspirationForQuery } from "@/lib/inspirations/retrieve-for-query";
 import {
   buildSiteAssetPromptContext,
   toSiteAssetPromptDescriptors,
@@ -181,6 +183,7 @@ export function buildCodeGenerationPrompt(params: {
   isModification?: boolean;
   existingSections?: Array<{ path: string; content: string }>;
   siteAssetContext?: string;
+  inspirationContext?: string;
 }): string {
   const previousCodeVersion = params.previousCodeVersion;
   const cleanedPreviousCodeVersion = previousCodeVersion
@@ -205,6 +208,7 @@ export function buildCodeGenerationPrompt(params: {
     ? buildExistingSectionsContext(params.existingSections)
     : "";
   const siteAssetContext = buildSiteAssetContextSection(params.siteAssetContext);
+  const inspirationContext = params.inspirationContext?.trim() ?? "";
 
   const userRequestSection = buildUserRequestSection(
     `Destination: ${params.destination}\n\n${params.userRequest}`
@@ -219,6 +223,7 @@ export function buildCodeGenerationPrompt(params: {
     modificationContext +
     existingSectionsContext +
     siteAssetContext +
+    inspirationContext +
     userRequestSection +
     tsxSafetyInstruction
   );
@@ -240,6 +245,7 @@ async function generateAndSaveSingleFile(params: {
   destination: string;
   userRequest: string;
   isModification?: boolean;
+  inspirationQuery?: string;
   ensureChargedForAction?: EnsureChargedForAction;
 }): Promise<GenerateAndSaveSingleFileResult> {
   try {
@@ -332,6 +338,33 @@ async function generateAndSaveSingleFile(params: {
       });
     }
 
+    let inspirationContextForPrompt = "";
+    const inspirationTrimmed = params.inspirationQuery?.trim();
+    if (!shouldModify && inspirationTrimmed) {
+      try {
+        const match = await retrieveInspirationForQuery(inspirationTrimmed);
+        if (match) {
+          console.log("[codegen] inspiration retrieved for section", {
+            chatId: params.chatId,
+            destination: normalizedDestination,
+            inspirationId: match.id,
+            inspirationSection: match.section,
+            similarity: Number(match.score.toFixed(4)),
+            inspirationQuery: inspirationTrimmed,
+          });
+          inspirationContextForPrompt = buildInspirationContextSection(match);
+        } else {
+          console.log("[codegen] no inspiration match for section", {
+            chatId: params.chatId,
+            destination: normalizedDestination,
+            inspirationQuery: inspirationTrimmed,
+          });
+        }
+      } catch (err) {
+        console.error("[codegen] inspiration retrieval failed", err);
+      }
+    }
+
     const executeGeneration =
       async (): Promise<GenerateAndSaveSingleFileResult> => {
       const prompt = buildCodeGenerationPrompt({
@@ -342,6 +375,7 @@ async function generateAndSaveSingleFile(params: {
         existingSections:
           existingSections.length > 0 ? existingSections : undefined,
         siteAssetContext,
+        inspirationContext: inspirationContextForPrompt || undefined,
       });
 
       const model = await getAIModel();
@@ -514,6 +548,13 @@ const createSectionSchema = z.object({
     .boolean()
     .optional()
     .describe("True when modifying existing destination; false when creating new"),
+  inspirationQuery: z
+    .string()
+    .max(500)
+    .optional()
+    .describe(
+      "Optional short phrase or keywords to retrieve a curated design-inspiration outline from the library. Omit when the brief is already very specific. Do not pass when isModification is true."
+    ),
 });
 
 const validateCompletenessSchema = z.object({
@@ -614,7 +655,12 @@ const createSiteToolExecute = async (
 };
 
 const createSectionToolExecute = async (
-  { destination, userRequest, isModification }: z.infer<typeof createSectionSchema>,
+  {
+    destination,
+    userRequest,
+    isModification,
+    inspirationQuery,
+  }: z.infer<typeof createSectionSchema>,
   chatId: string,
   userId: number,
   ensureChargedForAction?: EnsureChargedForAction
@@ -649,6 +695,7 @@ const createSectionToolExecute = async (
     destination: normalizedDestination,
     userRequest,
     isModification,
+    inspirationQuery,
     ensureChargedForAction,
   });
 
@@ -778,7 +825,7 @@ export function createSectionTool(
 ) {
   return tool({
     description:
-      "Create or modify exactly one React/TSX file (layout, page, or section) for the landing site. One tool call writes exactly one file. Use .tsx paths (e.g. landing/sections/Hero.tsx, landing/pages/Home.tsx). For landing/pages/* and landing/sections/*, landing/index.tsx must already exist (create it first with create_site).",
+      "Create or modify exactly one React/TSX file (layout, page, or section) for the landing site. One tool call writes exactly one file. Use .tsx paths (e.g. landing/sections/Hero.tsx, landing/pages/Home.tsx). For landing/pages/* and landing/sections/*, landing/index.tsx must already exist (create it first with create_site). Optionally pass inspirationQuery (short keywords or phrase) on initial creates to pull a curated design-inspiration outline into the codegen prompt; omit when the user brief is already very specific or when isModification is true.",
     inputSchema: createSectionSchema,
     execute: async (input: z.infer<typeof createSectionSchema>) => {
       return createSectionToolExecute(

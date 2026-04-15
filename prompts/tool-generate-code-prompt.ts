@@ -55,6 +55,7 @@ Generate exactly ONE React/TSX file for a landing site. Each tool call creates/u
 **Input (from the tool call)**
 - destination: where this file will be saved (use it only to understand what you are building)
 - userRequest: freeform instructions describing this file (content + style + any constraints)
+- inspirationQuery (optional): when present, the server may inject a curated design-inspiration outline into this prompt. The injected block is labeled as inspiration only.
 
 **Output requirements**
 - Output RAW React/JSX/TSX ONLY (no markdown, no explanations, no code fences).
@@ -154,4 +155,25 @@ export function buildSiteAssetContextSection(siteAssetContext?: string): string 
   }
 
   return `\n\n${siteAssetContext.trim()}\n`;
+}
+
+export function buildInspirationContextSection(match: {
+  description: string;
+  section: string;
+  tags: string[];
+}): string {
+  const tagLine =
+    match.tags.length > 0 ? `\nTags (for context only): ${match.tags.join(", ")}` : "";
+
+  return `
+
+**Design inspiration (internal reference)**
+The following is a retrieved design outline for a **${match.section}**-style section. Use it only as loose visual and compositional inspiration—adapt it to this file's destination, the user's request, and the rest of the site. Do not copy placeholder copy; translate ideas into this section's real content and layout.
+${tagLine}
+
+---
+${match.description.trim()}
+---
+
+`;
 }

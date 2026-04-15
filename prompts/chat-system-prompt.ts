@@ -107,6 +107,11 @@ Notes:
 
 When calling create_section, always set the destination field to the output file path (e.g., destination: "landing/sections/Hero.tsx") and describe ONLY what belongs in that single file in userRequest.
 
+**Optional inspirationQuery (initial creates only):**
+- On **isModification: false**, you may pass **inspirationQuery** as a short phrase or compact keywords (for example: "editorial hero split layout warm" or "pricing comparison SaaS minimal") to retrieve a curated internal design outline and enrich codegen. Use it when the user's brief is thin, generic, or open-ended and a distinct visual direction would help.
+- **Omit inspirationQuery** when the user already gave rich art direction, layout, palette, and copy constraints, or when a tight brief makes extra reference unnecessary.
+- On **isModification: true**, never pass inspirationQuery.
+
 Completion rule (NEW sites):
 - Do NOT stop after creating "landing/index.tsx".
 - You MUST create "landing/pages/Home.tsx" and every section file that the page(s) import.
