@@ -379,7 +379,7 @@ export async function validateCompleteness(params: {
     const unresolvedImports: Array<{ from: string; target: string }> = [];
     for (const file of files) {
       if (!file.path.startsWith("landing/")) continue;
-      if (/<style[\s>]/i.test(file.content)) {
+      if (/<style[\s>\/]/.test(file.content)) {
         findings.push({
           severity: "critical",
           issueCode: "INLINE_STYLE_TAG",
@@ -679,7 +679,7 @@ export async function validateUiConsistency(params: {
       totalClassAttr += (file.content.match(/\bclass=/g) ?? []).length;
       totalClassNameAttr += (file.content.match(/\bclassName=/g) ?? []).length;
 
-      if (/<style[\s>]/i.test(file.content)) {
+      if (/<style[\s>\/]/.test(file.content)) {
         findings.push({
           severity: "critical",
           issueCode: "INLINE_STYLE_TAG",
