@@ -78,6 +78,18 @@ export async function getAIModel(useLighterModel: boolean = false): Promise<Lang
  * Returns the model identifier string (e.g. "gpt-5.2" or "openai/gpt-5.2" when using gateway).
  * Use for logging, tracing, or billing.
  */
+/**
+ * Whether codegen may attach Anthropic prompt caching (`cacheControl: ephemeral`)
+ * to the stable instructions block. Only meaningful when `AI_MODEL_PROVIDER=anthropic`
+ * (direct SDK or AI Gateway with an Anthropic model id).
+ *
+ * Set `CODEGEN_PROMPT_CACHE=false` to force the legacy single-string prompt.
+ */
+export function isAnthropicCodegenPromptCachingEnabled(): boolean {
+  if (process.env.CODEGEN_PROMPT_CACHE === "false") return false;
+  return process.env.AI_MODEL_PROVIDER === "anthropic";
+}
+
 export async function getAIModelId(useLighterModel: boolean = false): Promise<string> {
   const modelProvider = process.env.AI_MODEL_PROVIDER;
   const defaults = DEFAULT_MODELS[modelProvider as keyof typeof DEFAULT_MODELS] ?? DEFAULT_MODELS.openai;

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { after } from "next/server";
 import { trace } from "@opentelemetry/api";
 import {
-  observe,
+  startActiveObservation,
   updateActiveObservation,
   updateActiveTrace,
 } from "@langfuse/tracing";
@@ -844,7 +844,18 @@ async function chatHandler(request: NextRequest) {
   }
 }
 
-export const POST = observe(chatHandler, {
-  name: "chat-message",
-  endOnExit: false,
-});
+/**
+ * Use startActiveObservation (OTEL startActiveSpan) instead of observe().
+ * observe() only wrapped the first sync tick of the async handler with an active
+ * span, so streamText + nested generateText/tool telemetry often lost parent
+ * context and showed up as separate Langfuse traces.
+ */
+export async function POST(request: NextRequest) {
+  return startActiveObservation(
+    "chat-message",
+    async () => {
+      return chatHandler(request);
+    },
+    { endOnExit: false }
+  );
+}

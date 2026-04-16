@@ -83,3 +83,18 @@ export function buildSiteAssetPromptContext(
     .filter(Boolean)
     .join("\n\n");
 }
+
+/** Manifest + guidance when assets exist; explicit notice when none (codegen). */
+export function buildSiteAssetPromptContextForCodegen(
+  assets: SiteAssetPromptDescriptor[]
+): string {
+  if (assets.length === 0) {
+    return [
+      "**Site images (ImageAsset aliases)**",
+      "No registered image assets are available for this chat yet. Do not invent raw blob URLs, placeholder CDN URLs, or direct stock URLs in generated TSX.",
+      "If this section needs resolved images with stable aliases, the workflow should call resolve_image_slots before or after generating files that render them.",
+    ].join("\n");
+  }
+
+  return buildSiteAssetPromptContext(assets);
+}

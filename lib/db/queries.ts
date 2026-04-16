@@ -428,6 +428,73 @@ export async function getExistingLandingSiteFilesContent(
   }));
 }
 
+function isLandingSectionTsxPath(path: string): boolean {
+  const n = path.replace(/\\/g, "/").toLowerCase();
+  return n.startsWith("landing/sections/") && n.endsWith(".tsx");
+}
+
+/**
+ * For codegen consistency context: the one other section file that was saved
+ * most recently (by latest revision number), excluding the file being generated.
+ * Only considers landing/sections/*.tsx — not index, pages, or runtime.
+ */
+export async function getPreviousLandingSectionContentForCodegen(
+  chatId: string,
+  excludePath: string
+): Promise<{ path: string; content: string } | null> {
+  const normalizedExclude = excludePath.replace(/\\/g, "/");
+  const excludeLower = normalizedExclude.toLowerCase();
+  const rows = await db
+    .select({
+      path: landingSiteFiles.path,
+      content: landingSiteFileVersions.content,
+      revisionNumber: landingSiteRevisions.revisionNumber,
+    })
+    .from(landingSiteFiles)
+    .innerJoin(
+      landingSiteFileVersions,
+      eq(landingSiteFileVersions.fileId, landingSiteFiles.id)
+    )
+    .innerJoin(
+      landingSiteRevisions,
+      eq(landingSiteRevisions.id, landingSiteFileVersions.revisionId)
+    )
+    .where(eq(landingSiteFiles.chatId, chatId));
+
+  const latestByPath = new Map<string, { content: string; revisionNumber: number }>();
+  for (const row of rows) {
+    if (!isLandingSectionTsxPath(row.path)) continue;
+    const existing = latestByPath.get(row.path);
+    if (
+      !existing ||
+      (row.revisionNumber ?? 0) > existing.revisionNumber
+    ) {
+      latestByPath.set(row.path, {
+        content: row.content,
+        revisionNumber: row.revisionNumber ?? 0,
+      });
+    }
+  }
+
+  type Candidate = { path: string; content: string; revisionNumber: number };
+  const candidates: Candidate[] = [];
+  for (const [path, { content, revisionNumber }] of latestByPath.entries()) {
+    if (path.replace(/\\/g, "/").toLowerCase() === excludeLower) continue;
+    candidates.push({ path, content, revisionNumber });
+  }
+  if (candidates.length === 0) return null;
+
+  candidates.sort((a, b) => {
+    if (b.revisionNumber !== a.revisionNumber) {
+      return b.revisionNumber - a.revisionNumber;
+    }
+    return a.path.localeCompare(b.path);
+  });
+
+  const pick = candidates[0]!;
+  return { path: pick.path, content: pick.content };
+}
+
 export async function getLandingSiteFileContentAtOrBeforeRevision(data: {
   chatId: string;
   path: string;

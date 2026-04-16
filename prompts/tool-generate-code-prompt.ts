@@ -57,6 +57,10 @@ Generate exactly ONE React/TSX file for a landing site. Each tool call creates/u
 - userRequest: freeform instructions describing this file (content + style + any constraints)
 - inspirationQuery (optional): when present, the server may inject a curated design-inspiration outline into this prompt. The injected block is labeled as inspiration only.
 
+**Server-injected context (when applicable)**
+- **Entry layout:** For section/page files, the current \`landing/index.tsx\` source may be included so you see the HashRouter shell, which pages exist, and Navbar/Footer imports.
+- **Site images:** A list of available ImageAsset aliases (or a notice when none exist yet). Use only those aliases for real imagery; never invent URLs.
+
 **Output requirements**
 - Output RAW React/JSX/TSX ONLY (no markdown, no explanations, no code fences).
 - Use Tailwind CSS utility classes for ALL styling (no <style> tags, no external CSS). Use the className prop.
@@ -102,10 +106,10 @@ ${LANDING_PAGE_ART_DIRECTION_GUIDANCE}
 - Do not treat imagery as a one-off accent. If the section can credibly support visuals, prefer a richer composition with photos, product shots, portraits, or supporting images so the page feels visually dense in a polished way.
 - CSS animation is fallback-only. If you need only a tiny ambient loop, keep it secondary and subtle; the section should still rely primarily on 'motion/react' for any notable animation.
 
-**Design consistency (when existing sections are provided)**
-- Match the design of existing sections: same colors, typography, spacing, button styles, and container patterns.
+**Design consistency (when a previous section is provided in context)**
+- Match the design of that section: same colors, typography, spacing, button styles, and container patterns.
 - Use the same Tailwind classes for similar elements (e.g., if headings use text-2xl font-serif, use the same).
-- Keep the visual language consistent across the entire site.
+- Keep the visual language consistent with the rest of the site even if only one prior section file is shown for reference.
 
 **Multi-page sites**
 - For the entry (landing/index.tsx), use React Router: import { HashRouter, Routes, Route } from 'react-router-dom'. Wrap the app in <HashRouter>, put <Routes> and <Route path=\"/\" element={<Home />} /> etc. inside <main>. Do not use window.location.hash.
@@ -136,11 +140,32 @@ export function buildExistingSectionsContext(
     .map((s) => `--- ${s.path} ---\n${s.content}`)
     .join("\n\n");
 
+  const heading =
+    sections.length === 1
+      ? "**Previous section (match its design—colors, typography, spacing, button styles):**"
+      : "**Existing sections (match their design—colors, typography, spacing, button styles):**";
+
   return `
 
-**Existing sections (match their design - colors, typography, spacing, button styles):**
+${heading}
 
 ${blocks}
+
+`;
+}
+
+export function buildLayoutContextSection(indexSource: string): string {
+  const trimmed = indexSource.trim();
+  if (!trimmed) return "";
+
+  return `
+
+**Current entry layout (landing/index.tsx)**  
+The app shell below already wraps the site (HashRouter, Navbar, routes, Footer). Match route/page imports to what is imported here. Do not duplicate that shell inside this section or page file.
+
+---
+${trimmed}
+---
 
 `;
 }

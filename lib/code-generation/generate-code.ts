@@ -1,7 +1,10 @@
 import { generateText, tool } from "ai";
 import { z } from "zod";
 import { transform } from "esbuild";
-import { getAIModel } from "@/lib/ai/get-ai-model";
+import {
+  getAIModel,
+  isAnthropicCodegenPromptCachingEnabled,
+} from "@/lib/ai/get-ai-model";
 import { getOrCreateAccountForUser } from "@/lib/billing/accounts";
 import { runWithCredits } from "@/lib/credits/run-with-credits";
 import { InsufficientCreditsError } from "@/lib/credits/debit";
@@ -15,7 +18,7 @@ import {
 import {
   createLandingSiteFileVersion,
   createLandingSiteRevision,
-  getExistingLandingSiteFilesContent,
+  getPreviousLandingSectionContentForCodegen,
   getLatestLandingSiteFileContent,
   getSiteAssetsByChatId,
   upsertLandingSiteFile,
@@ -24,6 +27,7 @@ import { checkRateLimit } from "@/lib/code-generation/rate-limit";
 import {
   buildExistingSectionsContext,
   buildInspirationContextSection,
+  buildLayoutContextSection,
   buildSiteAssetContextSection,
   buildModificationContext,
   buildUserRequestSection,
@@ -31,7 +35,7 @@ import {
 } from "@/prompts/tool-generate-code-prompt";
 import { retrieveInspirationForQuery } from "@/lib/inspirations/retrieve-for-query";
 import {
-  buildSiteAssetPromptContext,
+  buildSiteAssetPromptContextForCodegen,
   toSiteAssetPromptDescriptors,
 } from "@/lib/site-assets/prompt-manifest";
 import {
@@ -176,28 +180,32 @@ async function validateAndFixReactCode(code: string): Promise<CodeValidationResu
   }
 }
 
-export function buildCodeGenerationPrompt(params: {
+export type CodeGenerationPromptParams = {
   destination: string;
   userRequest: string;
   previousCodeVersion?: string;
   isModification?: boolean;
   existingSections?: Array<{ path: string; content: string }>;
+  layoutContext?: string;
   siteAssetContext?: string;
   inspirationContext?: string;
-}): string {
-  const previousCodeVersion = params.previousCodeVersion;
-  const cleanedPreviousCodeVersion = previousCodeVersion
-    ?.trim()
-    .startsWith("```")
-    ? previousCodeVersion
-      .trim()
-      .replace(/^```[^\r\n]*\r?\n/, "")
-      .replace(/\r?\n```$/, "")
-      .replace(/```$/, "")
-      .trim()
-    : previousCodeVersion;
+};
 
-  const basePrompt = createSectionPrompt();
+function cleanPreviousCodeVersion(previousCodeVersion: string | undefined): string | undefined {
+  if (!previousCodeVersion) return undefined;
+  return previousCodeVersion.trim().startsWith("```")
+    ? previousCodeVersion
+        .trim()
+        .replace(/^```[^\r\n]*\r?\n/, "")
+        .replace(/\r?\n```$/, "")
+        .replace(/```$/, "")
+        .trim()
+    : previousCodeVersion;
+}
+
+/** Per-request context appended after the stable `createSectionPrompt()` block. */
+export function buildCodeGenerationDynamicPrompt(params: CodeGenerationPromptParams): string {
+  const cleanedPreviousCodeVersion = cleanPreviousCodeVersion(params.previousCodeVersion);
 
   const modificationContext =
     params.isModification && cleanedPreviousCodeVersion
@@ -207,6 +215,7 @@ export function buildCodeGenerationPrompt(params: {
   const existingSectionsContext = params.existingSections?.length
     ? buildExistingSectionsContext(params.existingSections)
     : "";
+  const layoutContext = params.layoutContext?.trim() ?? "";
   const siteAssetContext = buildSiteAssetContextSection(params.siteAssetContext);
   const inspirationContext = params.inspirationContext?.trim() ?? "";
 
@@ -219,14 +228,18 @@ export function buildCodeGenerationPrompt(params: {
     : "";
 
   return (
-    basePrompt +
     modificationContext +
     existingSectionsContext +
+    layoutContext +
     siteAssetContext +
     inspirationContext +
     userRequestSection +
     tsxSafetyInstruction
   );
+}
+
+export function buildCodeGenerationPrompt(params: CodeGenerationPromptParams): string {
+  return createSectionPrompt() + buildCodeGenerationDynamicPrompt(params);
 }
 
 type EnsureChargedForAction = (actionType: string) => Promise<void>;
@@ -313,16 +326,30 @@ async function generateAndSaveSingleFile(params: {
 
     let existingSections: Array<{ path: string; content: string }> = [];
     if (!shouldModify) {
-      existingSections = await getExistingLandingSiteFilesContent(
+      const previousSection = await getPreviousLandingSectionContentForCodegen(
         params.chatId,
         normalizedDestination
       );
+      if (previousSection) {
+        existingSections = [previousSection];
+      }
     }
 
     const promptableSiteAssets = toSiteAssetPromptDescriptors(
       await getSiteAssetsByChatId(params.chatId, params.userId)
     );
-    const siteAssetContext = buildSiteAssetPromptContext(promptableSiteAssets);
+    const siteAssetContext = buildSiteAssetPromptContextForCodegen(promptableSiteAssets);
+
+    let layoutContextForPrompt = "";
+    if (!isIndexDestination(normalizedDestination)) {
+      const indexFile = await getLatestLandingSiteFileContent(
+        params.chatId,
+        "landing/index.tsx"
+      );
+      if (indexFile?.content?.trim()) {
+        layoutContextForPrompt = buildLayoutContextSection(indexFile.content);
+      }
+    }
     if (DEBUG_SITE_IMAGES) {
       console.log("[site-images] codegen assets", {
         chatId: params.chatId,
@@ -367,32 +394,62 @@ async function generateAndSaveSingleFile(params: {
 
     const executeGeneration =
       async (): Promise<GenerateAndSaveSingleFileResult> => {
-      const prompt = buildCodeGenerationPrompt({
+      const promptParams: CodeGenerationPromptParams = {
         destination: normalizedDestination,
         userRequest: params.userRequest,
         previousCodeVersion: previousCode,
         isModification: shouldModify,
         existingSections:
           existingSections.length > 0 ? existingSections : undefined,
+        layoutContext: layoutContextForPrompt || undefined,
         siteAssetContext,
         inspirationContext: inspirationContextForPrompt || undefined,
-      });
+      };
+
+      const staticCodegenPrompt = createSectionPrompt();
+      const dynamicCodegenPrompt =
+        buildCodeGenerationDynamicPrompt(promptParams);
 
       const model = await getAIModel();
 
-      const genResult = await generateText({
-        model,
-        prompt,
-        experimental_telemetry: {
-          isEnabled: true,
-          functionId: "code-generation",
-          metadata: {
-            chatId: params.chatId,
-            userId: params.userId,
-            destination: normalizedDestination,
-          },
+      const telemetry = {
+        isEnabled: true,
+        functionId: "code-generation",
+        metadata: {
+          chatId: params.chatId,
+          userId: params.userId,
+          destination: normalizedDestination,
+          codegenPromptCache: isAnthropicCodegenPromptCachingEnabled(),
         },
-      });
+      } as const;
+
+      const genResult = isAnthropicCodegenPromptCachingEnabled()
+        ? await generateText({
+            model,
+            messages: [
+              {
+                role: "user",
+                content: [
+                  {
+                    type: "text",
+                    text: staticCodegenPrompt,
+                    providerOptions: {
+                      anthropic: {
+                        cacheControl: { type: "ephemeral" },
+                      },
+                    },
+                  },
+                  { type: "text", text: dynamicCodegenPrompt },
+                ],
+              },
+            ],
+            experimental_telemetry: telemetry,
+          })
+        : await generateText({
+            model,
+            prompt: staticCodegenPrompt + dynamicCodegenPrompt,
+            experimental_telemetry: telemetry,
+          });
 
       const generatedCode = genResult.text;
 
