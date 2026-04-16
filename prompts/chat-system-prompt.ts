@@ -149,16 +149,22 @@ Remember: You have access to a tool that generates React (JSX/TSX) code with Tai
 
 `;
 
-export function buildChatSystemPrompt(params?: { siteAssetContext?: string }) {
+/** Stable base + optional per-chat site-asset tail (same concatenation as {@link buildChatSystemPrompt}). */
+export function buildChatSystemPromptParts(params?: { siteAssetContext?: string }): {
+  staticSystemPrompt: string;
+  dynamicSystemSuffix: string;
+} {
   const siteAssetContext = params?.siteAssetContext?.trim();
-  if (!siteAssetContext) {
-    return BASE_CHAT_SYSTEM_PROMPT;
-  }
+  return {
+    staticSystemPrompt: BASE_CHAT_SYSTEM_PROMPT,
+    dynamicSystemSuffix: siteAssetContext ? `\n\n${siteAssetContext}` : "",
+  };
+}
 
-  return [
-    BASE_CHAT_SYSTEM_PROMPT,
-    siteAssetContext,
-  ].join("\n\n");
+export function buildChatSystemPrompt(params?: { siteAssetContext?: string }) {
+  const { staticSystemPrompt, dynamicSystemSuffix } =
+    buildChatSystemPromptParts(params);
+  return staticSystemPrompt + dynamicSystemSuffix;
 }
 
 export const chatSystemPrompt = BASE_CHAT_SYSTEM_PROMPT;

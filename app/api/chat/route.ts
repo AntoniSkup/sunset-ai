@@ -24,15 +24,22 @@ import { ensureDailyCreditsForAccount } from "@/lib/billing/daily-credits";
 import { InsufficientCreditsError } from "@/lib/credits/debit";
 import { createMessageBillingSession } from "@/lib/credits/message-billing";
 import { streamText, convertToModelMessages, stepCountIs } from "ai";
-import type { UIMessage } from "ai";
+import type { SystemModelMessage, UIMessage } from "ai";
 import {
   createSectionTool,
   createResolveImageSlotsTool,
   createSiteTool,
   createValidateCompletenessTool,
 } from "@/lib/code-generation/generate-code";
-import { getAIModel, getAIModelId } from "@/lib/ai/get-ai-model";
-import { buildChatSystemPrompt } from "@/prompts/chat-system-prompt";
+import {
+  getAIModel,
+  getAIModelId,
+  isAnthropicChatPromptCachingEnabled,
+} from "@/lib/ai/get-ai-model";
+import {
+  buildChatSystemPrompt,
+  buildChatSystemPromptParts,
+} from "@/prompts/chat-system-prompt";
 import { captureLandingPageScreenshot } from "@/lib/screenshots/capture";
 import { langfuseSpanProcessor } from "@/instrumentation";
 import {
@@ -429,9 +436,28 @@ async function chatHandler(request: NextRequest) {
     const promptableSiteAssets = toSiteAssetPromptDescriptors(
       await getSiteAssetsByChatId(chatId, user.id)
     );
-    const systemPrompt = buildChatSystemPrompt({
-      siteAssetContext: buildSiteAssetPromptContext(promptableSiteAssets),
+    const siteAssetContext = buildSiteAssetPromptContext(promptableSiteAssets);
+    const { staticSystemPrompt, dynamicSystemSuffix } = buildChatSystemPromptParts({
+      siteAssetContext,
     });
+    const useChatPromptCache = isAnthropicChatPromptCachingEnabled();
+    const systemPrompt: string | SystemModelMessage | SystemModelMessage[] =
+      useChatPromptCache
+        ? [
+            {
+              role: "system",
+              content: staticSystemPrompt,
+              providerOptions: {
+                anthropic: {
+                  cacheControl: { type: "ephemeral" },
+                },
+              },
+            },
+            ...(dynamicSystemSuffix
+              ? [{ role: "system" as const, content: dynamicSystemSuffix }]
+              : []),
+          ]
+        : buildChatSystemPrompt({ siteAssetContext });
 
     const createSiteToolCall = createSiteTool(
       chatId,
@@ -491,6 +517,7 @@ async function chatHandler(request: NextRequest) {
       input: lastUserText.trim() || undefined,
       metadata: {
         model: modelId,
+        chatPromptCache: useChatPromptCache,
       },
     });
     updateActiveTrace({
@@ -500,6 +527,7 @@ async function chatHandler(request: NextRequest) {
       input: lastUserText.trim() || undefined,
       metadata: {
         model: modelId,
+        chatPromptCache: useChatPromptCache,
       },
     });
 
@@ -532,6 +560,7 @@ async function chatHandler(request: NextRequest) {
           userId: user.id,
           chatId,
           sessionId: chatId,
+          chatPromptCache: useChatPromptCache,
         },
       },
       onChunk: async (chunkEvent: unknown) => {
