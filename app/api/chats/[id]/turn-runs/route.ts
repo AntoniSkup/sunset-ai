@@ -20,6 +20,13 @@ import {
   hasDisplayableMessageParts,
   sanitizePersistedMessageParts,
 } from "@/lib/chat/message-parts";
+import {
+  getOrCreateAccountForUser,
+  getSubscriptionByAccountId,
+} from "@/lib/billing/accounts";
+import { ensureDailyCreditsForAccount } from "@/lib/billing/daily-credits";
+import { getCreditsBreakdown } from "@/lib/billing/credits-breakdown";
+import { getCreditsCostForAction } from "@/lib/credits/pricing";
 
 export async function POST(
   request: NextRequest,
@@ -70,6 +77,25 @@ export async function POST(
   const existing = await getChatTurnRunByIdempotencyKey(idempotencyKey);
   if (existing && existing.chatId === chat.id && existing.userId === user.id) {
     return NextResponse.json({ run: existing, deduped: true });
+  }
+
+  const account = await getOrCreateAccountForUser(user.id);
+  await ensureDailyCreditsForAccount(account.id);
+  const subscription = await getSubscriptionByAccountId(account.id);
+  const { balance } = await getCreditsBreakdown(account.id, subscription);
+  const minCreditsForTurnStart = await getCreditsCostForAction(
+    "chat_message",
+    subscription?.planId ?? null
+  );
+  if (balance < minCreditsForTurnStart) {
+    return NextResponse.json(
+      {
+        error:
+          "Insufficient credits. Please upgrade your plan or buy more credits.",
+        code: "INSUFFICIENT_CREDITS",
+      },
+      { status: 402 }
+    );
   }
 
   const hadRunning = Boolean(await getRunningChatTurnRun(chat.id));

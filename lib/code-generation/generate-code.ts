@@ -259,7 +259,10 @@ async function generateAndSaveSingleFile(params: {
   userRequest: string;
   isModification?: boolean;
   inspirationQuery?: string;
+  /** Legacy: charge incrementally (non-chat callers). */
   ensureChargedForAction?: EnsureChargedForAction;
+  /** Chat turn: no per-file debit; parent charges once on stream success. */
+  deferredChatTurnBilling?: boolean;
 }): Promise<GenerateAndSaveSingleFileResult> {
   try {
     const rateLimit = checkRateLimit(params.userId);
@@ -309,9 +312,10 @@ async function generateAndSaveSingleFile(params: {
     const actionType =
       inferredKind === "section" ? "regenerate_section" : "generate_page";
 
-    const account = params.ensureChargedForAction
-      ? null
-      : await getOrCreateAccountForUser(params.userId);
+    const account =
+      params.ensureChargedForAction || params.deferredChatTurnBilling
+        ? null
+        : await getOrCreateAccountForUser(params.userId);
     const idempotencyKey = `codegen-${params.chatId}-${normalizedDestination}-${Date.now()}`;
 
     let previousCode: string | undefined;
@@ -548,6 +552,10 @@ async function generateAndSaveSingleFile(params: {
         return await executeGeneration();
       }
 
+      if (params.deferredChatTurnBilling) {
+        return await executeGeneration();
+      }
+
       return await runWithCredits(
         {
           accountId: account!.id,
@@ -680,7 +688,7 @@ const createSiteToolExecute = async (
   { userRequest }: z.infer<typeof createSiteSchema>,
   chatId: string,
   userId: number,
-  ensureChargedForAction?: EnsureChargedForAction
+  deferredChatTurnBilling?: boolean
 ): Promise<any> => {
   if (!chatId) {
     return { success: false, error: "Chat ID is required" };
@@ -694,7 +702,7 @@ const createSiteToolExecute = async (
       userRequest +
       "\n\nCreate the entry React component for the site (landing/index.tsx) as a WIREFRAME ONLY.\n\nHard requirements:\n- Use React Router: import { HashRouter, Routes, Route } from 'react-router-dom'. Wrap the whole app in <HashRouter>.\n- Put page content inside <Routes>. Only create Route entries for pages that are actually part of the current site plan. If only Home exists, include only <Route path=\"/\" element={<Home />} />.\n- Import and render ONLY: Navbar from './sections/Navbar', Footer from './sections/Footer', and the page components that really exist under './pages/...'. Do not import About, Contact, or any other page unless that page is part of the current site plan.\n- Structure: <HashRouter><div><Navbar /><main><Routes>...</Routes></main><Footer /></div></HashRouter>.\n- Do NOT use window.location.hash or manual switch; use HashRouter and Routes only.\n- Do NOT output <!DOCTYPE html>, <html>, <head>, or <body>; the app wraps your component.\n- Use Tailwind utility classes (className).",
     isModification: false,
-    ensureChargedForAction,
+    deferredChatTurnBilling,
   });
 
   if (result.success) {
@@ -720,7 +728,7 @@ const createSectionToolExecute = async (
   }: z.infer<typeof createSectionSchema>,
   chatId: string,
   userId: number,
-  ensureChargedForAction?: EnsureChargedForAction
+  deferredChatTurnBilling?: boolean
 ): Promise<any> => {
   if (!chatId) {
     return { success: false, error: "Chat ID is required" };
@@ -753,7 +761,7 @@ const createSectionToolExecute = async (
     userRequest,
     isModification,
     inspirationQuery,
-    ensureChargedForAction,
+    deferredChatTurnBilling,
   });
 
   if (result.success) {
@@ -776,8 +784,7 @@ const createSectionToolExecute = async (
 const validateCompletenessToolExecute = async (
   input: z.infer<typeof validateCompletenessSchema>,
   chatId: string,
-  _userId: number,
-  ensureChargedForAction?: EnsureChargedForAction
+  _userId: number
 ): Promise<any> => {
   if (!chatId) {
     return { success: false, error: "Chat ID is required" };
@@ -786,9 +793,6 @@ const validateCompletenessToolExecute = async (
     chatId,
     hasSiteSpec: Boolean(input?.siteSpec?.trim()),
   });
-  if (ensureChargedForAction) {
-    await ensureChargedForAction("validate_site_completeness");
-  }
   return validateCompleteness({
     chatId,
     siteSpec: input?.siteSpec,
@@ -798,14 +802,10 @@ const validateCompletenessToolExecute = async (
 const validateUiConsistencyToolExecute = async (
   input: z.infer<typeof validateUiConsistencySchema>,
   chatId: string,
-  _userId: number,
-  ensureChargedForAction?: EnsureChargedForAction
+  _userId: number
 ): Promise<any> => {
   if (!chatId) {
     return { success: false, error: "Chat ID is required" };
-  }
-  if (ensureChargedForAction) {
-    await ensureChargedForAction("validate_site_ui");
   }
   return validateUiConsistency({
     chatId,
@@ -816,14 +816,10 @@ const validateUiConsistencyToolExecute = async (
 const resolveImageSlotsToolExecute = async (
   input: z.infer<typeof resolveImageSlotsSchema>,
   chatId: string,
-  userId: number,
-  ensureChargedForAction?: EnsureChargedForAction
+  userId: number
 ): Promise<any> => {
   if (!chatId) {
     return { success: false, error: "Chat ID is required" };
-  }
-  if (ensureChargedForAction) {
-    await ensureChargedForAction("resolve_site_images");
   }
 
   const result = await resolveImageSlots({
@@ -857,8 +853,9 @@ const resolveImageSlotsToolExecute = async (
 export function createSiteTool(
   chatId: string,
   userId: number,
-  ensureChargedForAction?: EnsureChargedForAction
+  options?: { deferredChatTurnBilling?: boolean }
 ) {
+  const deferredChatTurnBilling = Boolean(options?.deferredChatTurnBilling);
   return tool({
     description:
       "Create the entry React component (landing/index.tsx) for a new site as a WIREFRAME ONLY. The file must import Navbar from './sections/Navbar', Footer from './sections/Footer', and page(s) from './pages/...', and render only those components (no inline navbar/footer markup). Call once at the start of building a new website.",
@@ -868,7 +865,7 @@ export function createSiteTool(
         input,
         chatId,
         userId,
-        ensureChargedForAction
+        deferredChatTurnBilling
       );
     },
   } as any);
@@ -878,8 +875,9 @@ export function createSiteTool(
 export function createSectionTool(
   chatId: string,
   userId: number,
-  ensureChargedForAction?: EnsureChargedForAction
+  options?: { deferredChatTurnBilling?: boolean }
 ) {
+  const deferredChatTurnBilling = Boolean(options?.deferredChatTurnBilling);
   return tool({
     description:
       "Create or modify exactly one React/TSX file (layout, page, or section) for the landing site. One tool call writes exactly one file. Use .tsx paths (e.g. landing/sections/Hero.tsx, landing/pages/Home.tsx). For landing/pages/* and landing/sections/*, landing/index.tsx must already exist (create it first with create_site). Optionally pass inspirationQuery (short keywords or phrase) on initial creates to pull a curated design-inspiration outline into the codegen prompt; omit when the user brief is already very specific or when isModification is true.",
@@ -889,7 +887,7 @@ export function createSectionTool(
         input,
         chatId,
         userId,
-        ensureChargedForAction
+        deferredChatTurnBilling
       );
     },
   } as any);
@@ -897,60 +895,42 @@ export function createSectionTool(
 
 export function createValidateCompletenessTool(
   chatId: string,
-  userId: number,
-  ensureChargedForAction?: EnsureChargedForAction
+  userId: number
 ) {
   return tool({
     description:
       "Validate generated landing site completeness after all files are created. Uses deterministic checks plus an LLM semantic review to detect missing files, unresolved imports, missing requested sections/pages, and composition gaps.",
     inputSchema: validateCompletenessSchema,
     execute: async (input: z.infer<typeof validateCompletenessSchema>) => {
-      return validateCompletenessToolExecute(
-        input,
-        chatId,
-        userId,
-        ensureChargedForAction
-      );
+      return validateCompletenessToolExecute(input, chatId, userId);
     },
   } as any);
 }
 
 export function createValidateUiConsistencyTool(
   chatId: string,
-  userId: number,
-  ensureChargedForAction?: EnsureChargedForAction
+  userId: number
 ) {
   return tool({
     description:
       "Validate landing page UI consistency and detect visual/code oddities after completeness passes. Can optionally include screenshot-assisted checks.",
     inputSchema: validateUiConsistencySchema,
     execute: async (input: z.infer<typeof validateUiConsistencySchema>) => {
-      return validateUiConsistencyToolExecute(
-        input,
-        chatId,
-        userId,
-        ensureChargedForAction
-      );
+      return validateUiConsistencyToolExecute(input, chatId, userId);
     },
   } as any);
 }
 
 export function createResolveImageSlotsTool(
   chatId: string,
-  userId: number,
-  ensureChargedForAction?: EnsureChargedForAction
+  userId: number
 ) {
   return tool({
     description:
       "Resolve a batch of landing-page image slots using uploaded assets first and stock images second. Use this before generating image-heavy sections so the page can render stable aliased assets via ImageAsset.",
     inputSchema: resolveImageSlotsSchema,
     execute: async (input: z.infer<typeof resolveImageSlotsSchema>) => {
-      return resolveImageSlotsToolExecute(
-        input,
-        chatId,
-        userId,
-        ensureChargedForAction
-      );
+      return resolveImageSlotsToolExecute(input, chatId, userId);
     },
   } as any);
 }

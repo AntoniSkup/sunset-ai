@@ -19,10 +19,17 @@ import {
   markChatTurnRunSucceeded,
   markChatTurnRunFailed,
 } from "@/lib/db/queries";
-import { getOrCreateAccountForUser } from "@/lib/billing/accounts";
+import {
+  getOrCreateAccountForUser,
+  getSubscriptionByAccountId,
+} from "@/lib/billing/accounts";
 import { ensureDailyCreditsForAccount } from "@/lib/billing/daily-credits";
-import { InsufficientCreditsError } from "@/lib/credits/debit";
-import { createMessageBillingSession } from "@/lib/credits/message-billing";
+import { getCreditsBreakdown } from "@/lib/billing/credits-breakdown";
+import {
+  billingActionTypeFromSuccessfulCodegenDestination,
+  finalizeSuccessfulChatTurnBilling,
+} from "@/lib/credits/chat-turn-billing";
+import { getCreditsCostForAction } from "@/lib/credits/pricing";
 import { streamText, convertToModelMessages, stepCountIs } from "ai";
 import type { SystemModelMessage, UIMessage } from "ai";
 import {
@@ -363,30 +370,29 @@ async function chatHandler(request: NextRequest) {
 
     const account = await getOrCreateAccountForUser(user.id);
     await ensureDailyCreditsForAccount(account.id);
-    const idempotencyKey =
+    const turnBillingIdempotencyKey =
       typeof turnRunId === "string" && turnRunId.trim()
-        ? `chat-turn-${turnRunId.trim()}`
-        : `chat-${chatId}-${user.id}-${messages.length}`;
-    const billingSession = createMessageBillingSession({
-      accountId: account.id,
-      userId: user.id,
-      idempotencyKey,
-    });
+        ? `chat-turn-bill-${turnRunId.trim()}`
+        : `chat-turn-bill-${chatId}-${user.id}-${messages.length}`;
 
-    try {
-      await billingSession.ensureChargedForAction("chat_message");
-    } catch (err) {
-      if (err instanceof InsufficientCreditsError) {
-        return NextResponse.json(
-          {
-            error:
-              "Insufficient credits. Please upgrade your plan or buy more credits.",
-            code: "INSUFFICIENT_CREDITS",
-          },
-          { status: 402 }
-        );
-      }
-      throw err;
+    const subscriptionForGate = await getSubscriptionByAccountId(account.id);
+    const { balance: balanceForGate } = await getCreditsBreakdown(
+      account.id,
+      subscriptionForGate
+    );
+    const minCreditsToStartTurn = await getCreditsCostForAction(
+      "chat_message",
+      subscriptionForGate?.planId ?? null
+    );
+    if (balanceForGate < minCreditsToStartTurn) {
+      return NextResponse.json(
+        {
+          error:
+            "Insufficient credits. Please upgrade your plan or buy more credits.",
+          code: "INSUFFICIENT_CREDITS",
+        },
+        { status: 402 }
+      );
     }
 
     const lastIncomingMessage = messages[messages.length - 1] as any;
@@ -459,25 +465,19 @@ async function chatHandler(request: NextRequest) {
           ]
         : buildChatSystemPrompt({ siteAssetContext });
 
-    const createSiteToolCall = createSiteTool(
-      chatId,
-      user.id,
-      billingSession.ensureChargedForAction
-    );
-    const createSectionToolCall = createSectionTool(
-      chatId,
-      user.id,
-      billingSession.ensureChargedForAction
-    );
+    const createSiteToolCall = createSiteTool(chatId, user.id, {
+      deferredChatTurnBilling: true,
+    });
+    const createSectionToolCall = createSectionTool(chatId, user.id, {
+      deferredChatTurnBilling: true,
+    });
     const validateCompletenessToolCall = createValidateCompletenessTool(
       chatId,
-      user.id,
-      billingSession.ensureChargedForAction
+      user.id
     );
     const resolveImageSlotsToolCall = createResolveImageSlotsTool(
       chatId,
-      user.id,
-      billingSession.ensureChargedForAction
+      user.id
     );
     const tools = {
       create_site: createSiteToolCall,
@@ -501,6 +501,9 @@ async function chatHandler(request: NextRequest) {
       revisionNumber: number;
       revisionId: number;
     } | null = null;
+
+    /** Billable codegen SKUs observed this turn (max price wins at stream end). */
+    const billableTiersThisTurn = new Set<string>();
 
     const lastUserText =
       (lastMessage?.role === "user" && Array.isArray(lastMessage.parts)
@@ -779,6 +782,16 @@ async function chatHandler(request: NextRequest) {
                   revisionNumber: Number(output.revisionNumber),
                   revisionId: Number(output.revisionId ?? output.versionId ?? 0),
                 };
+                if (toolName === "create_site") {
+                  billableTiersThisTurn.add("generate_page");
+                } else if (toolName === "create_section") {
+                  const tier = billingActionTypeFromSuccessfulCodegenDestination(
+                    typeof output.destination === "string"
+                      ? output.destination
+                      : null
+                  );
+                  if (tier) billableTiersThisTurn.add(tier);
+                }
               }
             }
           }
@@ -813,7 +826,16 @@ async function chatHandler(request: NextRequest) {
             revisionId: lastSuccessfulRevision.revisionId,
           });
         }
-        await billingSession.markSucceeded();
+        try {
+          await finalizeSuccessfulChatTurnBilling({
+            accountId: account.id,
+            userId: user.id,
+            observedTiers: billableTiersThisTurn,
+            idempotencyKey: turnBillingIdempotencyKey,
+          });
+        } catch (billingErr) {
+          console.error("[chat] End-of-turn billing failed", billingErr);
+        }
         if (turnRunId) {
           await markChatTurnRunSucceeded(turnRunId);
           await emitTurnEvent("run_completed", {
@@ -842,7 +864,6 @@ async function chatHandler(request: NextRequest) {
         await flushLiveTextDelta();
 
         const errMsg = normalizeErrorMessage(error, "Generation failed");
-        await billingSession.markFailed(errMsg);
         if (turnRunId) {
           await markChatTurnRunFailed({
             runId: turnRunId,

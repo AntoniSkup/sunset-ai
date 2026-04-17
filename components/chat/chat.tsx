@@ -188,12 +188,15 @@ function ChatInner({
   const pendingMessage = usePendingMessageStore((s) => s.pendingMessage);
   const setPendingMessage = usePendingMessageStore((s) => s.setPendingMessage);
   const consumedPendingIdsRef = useRef<Set<string>>(new Set());
-  const { data: billing, mutate: mutateBilling } = useSWR<BillingApiResponse>(
-    "/api/billing",
-    billingFetcher
-  );
+  const {
+    data: billing,
+    error: billingError,
+    isLoading: isBillingLoading,
+    mutate: mutateBilling,
+  } = useSWR<BillingApiResponse>("/api/billing", billingFetcher);
+  /** Require a loaded balance; never treat "still fetching" as sufficient credits. */
   const hasCredits =
-    billing === undefined || Number(billing.balance) >= MIN_CREDITS_TO_SEND;
+    billing != null && Number(billing.balance) >= MIN_CREDITS_TO_SEND;
 
   const scheduleUploadToastHide = useCallback((delayMs: number) => {
     if (uploadToastTimerRef.current != null) {
@@ -362,6 +365,13 @@ function ChatInner({
 
       if (!response.ok) {
         const data = await response.json().catch(() => null);
+        if (response.status === 402 || data?.code === "INSUFFICIENT_CREDITS") {
+          setMessages((prev) => prev.filter((m) => m.id !== userMessageId && m.id !== assistantMessageId));
+          setShowCreditsLimitModal(true);
+          void mutateBilling();
+          setStatus("ready");
+          return;
+        }
         const errMsg = normalizeErrorMessage(
           data?.error ?? data,
           `Failed to queue generation (${response.status})`
@@ -381,7 +391,7 @@ function ChatInner({
       await response.json().catch(() => null);
       setStatus("streaming");
     },
-    [chatId]
+    [chatId, mutateBilling]
   );
 
   useEffect(() => {
@@ -399,6 +409,13 @@ function ChatInner({
         consumedPendingIdsRef.current.has(pendingMessage.id) ||
         alreadyConsumedInSession
       ) {
+        return;
+      }
+
+      if (isBillingLoading && billing == null) {
+        return;
+      }
+      if (billing == null && billingError) {
         return;
       }
 
@@ -449,6 +466,8 @@ function ChatInner({
     enqueueTurnRun,
     setPendingMessage,
     billing,
+    billingError,
+    isBillingLoading,
   ]);
 
   const isLoading = status === "streaming" || status === "submitted";
@@ -668,6 +687,10 @@ function ChatInner({
       return;
     }
 
+    if (isBillingLoading && billing == null) {
+      return;
+    }
+
     if (!hasCredits) {
       setShowCreditsLimitModal(true);
       return;
@@ -697,6 +720,7 @@ function ChatInner({
 
   const handleRetry = (errorMessageId: string) => {
     if (isLoading) return;
+    if (isBillingLoading && billing == null) return;
 
     const errorMsg = errorMessages.find((e) => e.id === errorMessageId);
     if (!errorMsg) return;
@@ -717,6 +741,11 @@ function ChatInner({
     }
 
     if (!messageToRetry && partsToRetry.length === 0) return;
+
+    if (!hasCredits) {
+      setShowCreditsLimitModal(true);
+      return;
+    }
 
     setErrorMessages((prev) => prev.filter((e) => e.id !== errorMessageId));
     lastUserMessagePartsRef.current = partsToRetry;
