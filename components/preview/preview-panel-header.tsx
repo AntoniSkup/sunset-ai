@@ -80,11 +80,11 @@ export default function PreviewPanelHeader({
           </div>
           {publishedUrl ? (
             <Button
-              variant="outline"
+              variant="default"
               onClick={() => setIsSuccessModalOpen(true)}
-              className="text-sm bg-[#FF9FFC] hover:bg-[#FF9FFC]/80"
+              className="text-sm bg-black text-white hover:bg-black/90"
             >
-              Published
+              Dashboard
             </Button>
           ) : (
             <Button

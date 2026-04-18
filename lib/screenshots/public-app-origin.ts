@@ -1,25 +1,32 @@
 import "server-only";
+import {
+  firstHttpOriginFromCandidates,
+  parseHttpOriginCandidate,
+  isLoopbackHttpOrigin,
+} from "@/lib/url/resolve-http-origin";
 
 /**
- * Absolute origin (no trailing slash) used when ScreenshotOne or other services
- * must fetch a URL on this deployment (e.g. signed render-snapshot page).
+ * Absolute origin used when ScreenshotOne (or similar) must fetch this app over the internet.
+ *
+ * - Skips invalid tokens and loopback URLs (localhost cannot be reached from ScreenshotOne).
+ * - For local dev, set `SCREENSHOT_BROWSER_BASE_URL` to a tunnel URL (e.g. ngrok `https://….ngrok-free.app`).
  */
 export function getPublicAppOrigin(): string | null {
-  const explicit =
-    process.env.SCREENSHOT_BROWSER_BASE_URL?.trim() ||
-    process.env.NEXT_PUBLIC_APP_URL?.trim();
-  if (explicit) {
-    try {
-      const u = new URL(explicit.startsWith("http") ? explicit : `https://${explicit}`);
-      return u.origin;
-    } catch {
-      return null;
-    }
+  const dedicated = parseHttpOriginCandidate(
+    process.env.SCREENSHOT_BROWSER_BASE_URL
+  );
+  if (dedicated && !isLoopbackHttpOrigin(dedicated)) {
+    return dedicated;
   }
-  const vercel = process.env.VERCEL_URL?.trim();
-  if (vercel) {
-    const host = vercel.replace(/^https?:\/\//i, "").replace(/\/+$/, "");
-    if (host) return `https://${host}`;
+
+  const fallback = firstHttpOriginFromCandidates([
+    process.env.APP_BASE_URL,
+    process.env.BASE_URL,
+    process.env.NEXT_PUBLIC_APP_URL,
+    process.env.VERCEL_URL,
+  ]);
+  if (fallback && !isLoopbackHttpOrigin(fallback)) {
+    return fallback;
   }
   return null;
 }

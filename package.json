@@ -2,6 +2,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
+    "dev:ngrok": "node -e \"console.log('ScreenshotOne needs a public URL. In another terminal run: ngrok http 3000\\nThen set SCREENSHOT_BROWSER_BASE_URL to the https Forwarding origin (no path).')\"",
     "dev:all": "docker compose up -d postgres && concurrently -n app,trigger -c blue,magenta \"pnpm dev\" \"pnpm exec trigger dev\"",
     "build": "next build",
     "start": "next start",
@@ -95,7 +96,7 @@
   },
   "devDependencies": {
     "@trigger.dev/build": "4.4.3",
-    "baseline-browser-mapping": "^2.10.10",
+    "baseline-browser-mapping": "^2.10.20",
     "concurrently": "^9.2.1",
     "prettier": "^3.7.4",
     "trigger.dev": "^4.4.3"

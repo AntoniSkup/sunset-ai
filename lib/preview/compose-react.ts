@@ -13,6 +13,7 @@ import {
   IMAGE_ASSET_COMPONENT_PATH,
   IMAGE_ASSET_MAP_PATH,
 } from "@/lib/site-assets/conventions";
+import { firstHttpOriginFromCandidates } from "@/lib/url/resolve-http-origin";
 
 const ENTRY_PATH = "landing/index.tsx";
 const MAX_FILES = 50;
@@ -23,6 +24,14 @@ const KEEP_BUNDLE_ON_ERROR = process.env.COMPOSE_REACT_KEEP_BUNDLE_ON_ERROR === 
 function debugLog(...args: unknown[]) {
   if (!COMPOSE_REACT_DEBUG) return;
   console.log("[compose-react][debug]", ...args);
+}
+
+/** Wait after first paint before `data-landing-snapshot` (ScreenshotOne / thumbnails). */
+function snapshotPostPaintDelayMs(): number {
+  const raw = process.env.LANDING_SNAPSHOT_POST_PAINT_MS?.trim();
+  const n = raw != null && raw !== "" ? Number(raw) : NaN;
+  if (!Number.isFinite(n)) return 3800;
+  return Math.min(30_000, Math.max(800, Math.round(n)));
 }
 
 const runtimeRequire = createRequire(path.join(process.cwd(), "package.json"));
@@ -116,11 +125,14 @@ const TAILWIND_CDN =
   '<script src="https://cdn.tailwindcss.com"></script>';
 
 function getMockBrowserBaseUrl(): string {
-  const base =
-    process.env.SCREENSHOT_BROWSER_BASE_URL ??
-    process.env.BASE_URL ??
-    "http://localhost:3000";
-  return base.replace(/\/+$/, "");
+  const fromEnv = firstHttpOriginFromCandidates([
+    process.env.SCREENSHOT_BROWSER_BASE_URL,
+    process.env.APP_BASE_URL,
+    process.env.BASE_URL,
+    process.env.NEXT_PUBLIC_APP_URL,
+    process.env.VERCEL_URL,
+  ]);
+  return (fromEnv ?? "http://localhost:3000").replace(/\/+$/, "");
 }
 
 function wrapInHtml(bodyHtml: string): string {
@@ -255,7 +267,33 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import App from 'landing/index.tsx';
 const root = document.getElementById('root');
-if (root) createRoot(root).render(React.createElement(App));
+function landingHasRenderableSubtree(el) {
+  return Boolean(el && el.querySelector('*'));
+}
+function scheduleSnapshotReadyMark() {
+  setTimeout(() => {
+    document.documentElement.setAttribute('data-landing-snapshot', '1');
+  }, ${snapshotPostPaintDelayMs()});
+}
+if (root) {
+  createRoot(root).render(React.createElement(App));
+  if (landingHasRenderableSubtree(root)) {
+    scheduleSnapshotReadyMark();
+  } else {
+    const mo = new MutationObserver(() => {
+      if (landingHasRenderableSubtree(root)) {
+        mo.disconnect();
+        scheduleSnapshotReadyMark();
+      }
+    });
+    mo.observe(root, { childList: true, subtree: true });
+    setTimeout(() => {
+      try {
+        mo.disconnect();
+      } catch {}
+    }, 25000);
+  }
+}
 `.trim();
 
 export async function getPreviewBrowserBundle(params: {

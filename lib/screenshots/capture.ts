@@ -8,6 +8,9 @@ import { captureUrlWithScreenshotOne } from "@/lib/screenshots/screenshot-one-ur
 
 const SCREENSHOTONE_API = "https://api.screenshotone.com/take";
 
+/** URL-capture JPEGs smaller than this are usually blank / error placeholders; retry static HTML. */
+const MIN_URL_CAPTURE_JPEG_BYTES = 12_000;
+
 /**
  * Captures a screenshot of the landing page at the given revision,
  * uploads to Vercel Blob, and updates the chat's screenshot_url.
@@ -40,7 +43,10 @@ export async function captureLandingPageScreenshot(params: {
         imageHeight: 350,
         imageQuality: 80,
       });
-      if (imageBuffer && imageBuffer.byteLength > 0) {
+      if (
+        imageBuffer &&
+        imageBuffer.byteLength >= MIN_URL_CAPTURE_JPEG_BYTES
+      ) {
         const blob = await put(
           `screenshots/${chatId}-${revisionNumber}-${Date.now()}.jpg`,
           imageBuffer,
@@ -52,12 +58,18 @@ export async function captureLandingPageScreenshot(params: {
         await updateChatScreenshotUrl(chatId, userId, blob.url);
         return;
       }
-      console.warn(
-        "[Screenshot] URL capture failed or empty; falling back to static HTML"
-      );
+      if (imageBuffer && imageBuffer.byteLength > 0) {
+        console.warn(
+          `[Screenshot] URL capture JPEG too small (${imageBuffer.byteLength} bytes); falling back to static HTML`
+        );
+      } else {
+        console.warn(
+          "[Screenshot] URL capture failed or empty; falling back to static HTML"
+        );
+      }
     } else if (!origin) {
       console.warn(
-        "[Screenshot] No public app origin (set SCREENSHOT_BROWSER_BASE_URL, NEXT_PUBLIC_APP_URL, or deploy with VERCEL_URL); falling back to static HTML"
+        "[Screenshot] No public origin for ScreenshotOne (localhost is ignored). Set SCREENSHOT_BROWSER_BASE_URL to a tunnel URL, e.g. run `ngrok http 3000` and paste the https origin. See `pnpm dev:ngrok`. Deployed: use VERCEL_URL or your production origin. Falling back to static HTML."
       );
     } else if (!token) {
       console.warn(
