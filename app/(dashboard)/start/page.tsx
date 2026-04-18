@@ -7,6 +7,8 @@ import {
   useRef,
   useCallback,
   ChangeEvent,
+  type ClipboardEvent,
+  type DragEvent,
 } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -36,6 +38,11 @@ import {
   UploadProgressToast,
   type UploadProgressToastState,
 } from "@/components/chat/upload-progress-toast";
+import {
+  dataTransferHasFilePayload,
+  isAcceptedChatImageFile,
+  pickAcceptedChatImageFilesFromDataTransfer,
+} from "@/lib/files/chat-image-files";
 
 type Chat = {
   id: number;
@@ -91,6 +98,8 @@ export default function StartPage() {
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileDragDepthRef = useRef(0);
+  const [isFileDragActive, setIsFileDragActive] = useState(false);
   const attachmentUrlsRef = useRef<string[]>([]);
   const uploadToastTimerRef = useRef<number | null>(null);
   const router = useRouter();
@@ -195,17 +204,64 @@ export default function StartPage() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [showPlaceholder, isLoading]);
 
-  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-
-    const next = Array.from(files).map((file) => ({
+  const appendImageFiles = useCallback((files: File[]) => {
+    const accepted = files.filter(isAcceptedChatImageFile);
+    if (accepted.length === 0) return;
+    const next = accepted.map((file) => ({
       localId: nanoid(),
       file,
       previewUrl: URL.createObjectURL(file),
     }));
     setAttachments((prev) => [...prev, ...next]);
+  }, []);
+
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    appendImageFiles(Array.from(files));
     e.target.value = "";
+  };
+
+  const resetFileDragDepth = () => {
+    fileDragDepthRef.current = 0;
+    setIsFileDragActive(false);
+  };
+
+  const handlePaste = (e: ClipboardEvent<HTMLTextAreaElement>) => {
+    if (isLoading) return;
+    const files = pickAcceptedChatImageFilesFromDataTransfer(e.clipboardData);
+    if (files.length === 0) return;
+    e.preventDefault();
+    appendImageFiles(files);
+  };
+
+  const handleDragEnter = (e: DragEvent) => {
+    if (isLoading) return;
+    if (!dataTransferHasFilePayload(e.dataTransfer)) return;
+    fileDragDepthRef.current += 1;
+    setIsFileDragActive(true);
+  };
+
+  const handleDragLeave = (e: DragEvent) => {
+    if (!dataTransferHasFilePayload(e.dataTransfer)) return;
+    fileDragDepthRef.current = Math.max(0, fileDragDepthRef.current - 1);
+    if (fileDragDepthRef.current === 0) setIsFileDragActive(false);
+  };
+
+  const handleDragOver = (e: DragEvent) => {
+    if (isLoading) return;
+    if (!dataTransferHasFilePayload(e.dataTransfer)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+  };
+
+  const handleDrop = (e: DragEvent) => {
+    resetFileDragDepth();
+    if (isLoading) return;
+    e.preventDefault();
+    const files = pickAcceptedChatImageFilesFromDataTransfer(e.dataTransfer);
+    if (files.length === 0) return;
+    appendImageFiles(files);
   };
 
   const handleRemoveAttachment = (localId: string) => {
@@ -373,10 +429,27 @@ export default function StartPage() {
 
           <form onSubmit={handleSubmit} className="mt-8 w-full">
             <div
-              className="relative  rounded-xl border bg-[#ffffffe9] 
-              border-gray-500
-               px-8 py-6 overflow-hidden shadow"
+              className={`relative rounded-xl border bg-[#ffffffe9] border-gray-500 px-8 py-6 overflow-hidden shadow transition-[box-shadow,border-color] ${
+                isFileDragActive ? "border-gray-900 ring-2 ring-gray-900/15" : ""
+              }`}
+              onDragEnter={handleDragEnter}
+              onDragLeave={handleDragLeave}
+              onDragOver={handleDragOver}
+              onDrop={handleDrop}
             >
+              {isFileDragActive && (
+                <div
+                  className="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center gap-0.5 rounded-xl border-2 border-dashed border-gray-900/35 bg-[#ffffff]/90 px-4 text-center"
+                  aria-hidden
+                >
+                  <span className="text-sm font-medium text-gray-900">
+                    Drop images here
+                  </span>
+                  <span className="text-xs text-gray-500">
+                    PNG, JPG, or WebP — or paste from clipboard
+                  </span>
+                </div>
+              )}
               <div className="relative min-h-[4.5rem]">
                 {!input.trim() && !isFocused && (
                   <div
@@ -401,6 +474,7 @@ export default function StartPage() {
                   ref={textareaRef}
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
+                  onPaste={handlePaste}
                   onFocus={() => setIsFocused(true)}
                   onBlur={() => setIsFocused(false)}
                   onKeyDown={(e) => {

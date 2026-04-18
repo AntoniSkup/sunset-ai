@@ -7,10 +7,15 @@ import {
 import { Button } from "@/components/ui/button";
 import { ArrowPathIcon, ArrowUpIcon } from "@heroicons/react/24/outline";
 import type { FileUIPart } from "ai";
-import { FormEvent, useEffect, useRef } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import TextareaAutosize from "react-textarea-autosize";
 import { cn } from "@/lib/utils";
 import { PlusIcon } from "lucide-react";
+import {
+  dataTransferHasFilePayload,
+  pickAcceptedChatImageFilesFromDataTransfer,
+  toFileList,
+} from "@/lib/files/chat-image-files";
 
 type PendingAttachment = {
   localId: string;
@@ -67,7 +72,51 @@ export function ChatInput({
   const formRef = useRef<HTMLFormElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileDragDepthRef = useRef(0);
+  const [isFileDragActive, setIsFileDragActive] = useState(false);
   const canSubmit = input.trim().length > 0 || pendingAttachments.length > 0;
+
+  const resetFileDragDepth = () => {
+    fileDragDepthRef.current = 0;
+    setIsFileDragActive(false);
+  };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    if (isLoading || isUploadingAttachments) return;
+    const files = pickAcceptedChatImageFilesFromDataTransfer(e.clipboardData);
+    if (files.length === 0) return;
+    e.preventDefault();
+    onFilesSelected(toFileList(files));
+  };
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    if (isLoading || isUploadingAttachments) return;
+    if (!dataTransferHasFilePayload(e.dataTransfer)) return;
+    fileDragDepthRef.current += 1;
+    setIsFileDragActive(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    if (!dataTransferHasFilePayload(e.dataTransfer)) return;
+    fileDragDepthRef.current = Math.max(0, fileDragDepthRef.current - 1);
+    if (fileDragDepthRef.current === 0) setIsFileDragActive(false);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    if (isLoading || isUploadingAttachments) return;
+    if (!dataTransferHasFilePayload(e.dataTransfer)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    resetFileDragDepth();
+    if (isLoading || isUploadingAttachments) return;
+    e.preventDefault();
+    const files = pickAcceptedChatImageFilesFromDataTransfer(e.dataTransfer);
+    if (files.length === 0) return;
+    onFilesSelected(toFileList(files));
+  };
 
   useEffect(() => {
     if (
@@ -119,7 +168,29 @@ export function ChatInput({
 
   return (
     <form ref={formRef} onSubmit={handleSubmit} className="bg-transparent p-2 ">
-      <div className="relative overflow-hidden rounded-lg border border-gray-500 bg-white shadow-xs">
+      <div
+        className={cn(
+          "relative overflow-hidden rounded-lg border border-gray-500 bg-white shadow-xs transition-[box-shadow,border-color]",
+          isFileDragActive && "border-gray-900 ring-2 ring-gray-900/15"
+        )}
+        onDragEnter={handleDragEnter}
+        onDragLeave={handleDragLeave}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
+      >
+        {isFileDragActive && (
+          <div
+            className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-0.5 rounded-lg border-2 border-dashed border-gray-900/35 bg-white/85 px-4 text-center"
+            aria-hidden
+          >
+            <span className="text-sm font-medium text-gray-900">
+              Drop images here
+            </span>
+            <span className="text-xs text-gray-500">
+              PNG, JPG, or WebP — or paste from clipboard
+            </span>
+          </div>
+        )}
         <div
           className={cn(
             "overflow-hidden transition-[max-height,opacity,padding,border-color] duration-300 ease-out",
@@ -151,6 +222,7 @@ export function ChatInput({
             ref={textareaRef}
             value={input}
             onChange={handleInputChange}
+            onPaste={handlePaste}
             onKeyDown={handleKeyDown}
             placeholder="What would you like to change?"
             minRows={3}
