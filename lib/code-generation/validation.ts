@@ -1,5 +1,11 @@
-import { getExistingLandingSiteFilesContent } from "@/lib/db/queries";
+import {
+  getExistingLandingSiteFilesContent,
+  getLatestLandingSiteRevision,
+} from "@/lib/db/queries";
 import { getComposedReactHtml } from "@/lib/preview/compose-react";
+import { createRenderSnapshotToken } from "@/lib/render-snapshot-token";
+import { getPublicAppOrigin } from "@/lib/screenshots/public-app-origin";
+import { captureUrlWithScreenshotOne } from "@/lib/screenshots/screenshot-one-url";
 import { generateText } from "ai";
 import { getAIModel } from "@/lib/ai/get-ai-model";
 import { z } from "zod";
@@ -564,23 +570,74 @@ async function maybeRunScreenshotCheck(params: {
     ];
   }
 
-  // Phase 2 branch: capture renderability signal from composed HTML before model-based visual scoring.
-  const html = await getComposedReactHtml({
-    chatId: params.chatId,
-    revisionNumber: 2_147_483_647,
-  });
-  if (!html) {
+  const latestRev = await getLatestLandingSiteRevision(params.chatId);
+  if (!latestRev) {
     return [
       {
         severity: "warning",
-        issueCode: "SCREENSHOT_COMPOSE_FAILED",
+        issueCode: "SCREENSHOT_SKIPPED_NO_REVISION",
         message:
-          "Could not compose HTML for screenshot-assisted validation; using code-only checks.",
+          "Skipped screenshot-assisted checks because no landing revision exists.",
       },
     ];
   }
+  const revisionNumber = latestRev.revisionNumber;
+
+  const origin = getPublicAppOrigin();
+  const token = await createRenderSnapshotToken({
+    chatId: params.chatId,
+    revisionNumber,
+  });
 
   try {
+    if (origin && token) {
+      const renderUrl = `${origin}/api/render-snapshot?token=${encodeURIComponent(token)}`;
+      const imageBytes = await captureUrlWithScreenshotOne({
+        url: renderUrl,
+        viewportWidth: 1440,
+        viewportHeight: 900,
+        imageWidth: 720,
+        imageHeight: 450,
+        imageQuality: 70,
+      });
+      if (imageBytes && imageBytes.byteLength >= 10_000) {
+        return [];
+      }
+      if (imageBytes && imageBytes.byteLength < 10_000) {
+        return [
+          {
+            severity: "warning",
+            issueCode: "SCREENSHOT_TOO_SMALL",
+            message:
+              "Screenshot output looks unusually small; review visual rendering manually.",
+          },
+        ];
+      }
+      return [
+        {
+          severity: "warning",
+          issueCode: "SCREENSHOT_CAPTURE_FAILED",
+          message:
+            "Screenshot API URL capture failed during UI validation; using code-only checks.",
+        },
+      ];
+    }
+
+    const html = await getComposedReactHtml({
+      chatId: params.chatId,
+      revisionNumber,
+    });
+    if (!html) {
+      return [
+        {
+          severity: "warning",
+          issueCode: "SCREENSHOT_COMPOSE_FAILED",
+          message:
+            "Could not compose HTML for screenshot-assisted validation; using code-only checks.",
+        },
+      ];
+    }
+
     const response = await fetch("https://api.screenshotone.com/take", {
       method: "POST",
       headers: {

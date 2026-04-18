@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPublishedSiteByPublicId } from "@/lib/db/queries";
 import { getComposedHtml } from "@/lib/preview/compose-html";
-import { getComposedReactHtml } from "@/lib/preview/compose-react";
+import {
+  getComposedReactHtml,
+  getPreviewBrowserBundle,
+  getPreviewHtml,
+} from "@/lib/preview/compose-react";
 
 export async function GET(
   request: NextRequest,
@@ -21,6 +25,27 @@ export async function GET(
         { error: "Published site not found", code: "NOT_FOUND" },
         { status: 404 }
       );
+    }
+
+    const bundle = await getPreviewBrowserBundle({
+      chatId: publishedSite.chatId,
+      revisionNumber: publishedSite.revisionNumber,
+    });
+
+    if (bundle) {
+      const basePath = `/api/published/${siteId}`;
+      const html = getPreviewHtml({
+        chatId: publishedSite.chatId,
+        revisionNumber: publishedSite.revisionNumber,
+        basePath,
+        bundleSuffix: `?v=${publishedSite.revisionNumber}`,
+      });
+      return new NextResponse(html, {
+        headers: {
+          "Content-Type": "text/html; charset=utf-8",
+          "Cache-Control": "private, max-age=0, must-revalidate",
+        },
+      });
     }
 
     const composed =

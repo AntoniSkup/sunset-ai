@@ -230,9 +230,11 @@ export function getPreviewHtml(params: {
   chatId: string;
   revisionNumber: number;
   basePath: string;
+  /** Appended after `${basePath}/bundle`, e.g. `?token=…` for signed public bundles */
+  bundleSuffix?: string;
 }): string {
-  const { basePath } = params;
-  const scriptSrc = `${basePath}/bundle`;
+  const { basePath, bundleSuffix = "" } = params;
+  const scriptSrc = `${basePath}/bundle${bundleSuffix}`;
   return `<!DOCTYPE html>
 <html lang="en">
 <head>

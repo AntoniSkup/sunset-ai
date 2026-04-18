@@ -5,6 +5,7 @@ import Script from "next/script";
 import { getUser, getTeamForUser } from "@/lib/db/queries";
 
 import { SWRConfig } from "swr";
+import { Analytics } from "@vercel/analytics/next";
 
 const ibmPlexSans = IBM_Plex_Sans({
   subsets: ["latin"],
@@ -69,6 +70,7 @@ export default function RootLayout({
             </Script>
           </>
         ) : null}
+        <Analytics />
       </body>
     </html>
   );

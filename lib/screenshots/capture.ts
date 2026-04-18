@@ -2,6 +2,9 @@ import { put } from "@vercel/blob";
 import { getComposedHtml } from "@/lib/preview/compose-html";
 import { getComposedReactHtml } from "@/lib/preview/compose-react";
 import { updateChatScreenshotUrl } from "@/lib/db/queries";
+import { createRenderSnapshotToken } from "@/lib/render-snapshot-token";
+import { getPublicAppOrigin } from "@/lib/screenshots/public-app-origin";
+import { captureUrlWithScreenshotOne } from "@/lib/screenshots/screenshot-one-url";
 
 const SCREENSHOTONE_API = "https://api.screenshotone.com/take";
 
@@ -24,6 +27,44 @@ export async function captureLandingPageScreenshot(params: {
   }
 
   try {
+    const origin = getPublicAppOrigin();
+    const token = await createRenderSnapshotToken({ chatId, revisionNumber });
+
+    if (origin && token) {
+      const renderUrl = `${origin}/api/render-snapshot?token=${encodeURIComponent(token)}`;
+      const imageBuffer = await captureUrlWithScreenshotOne({
+        url: renderUrl,
+        viewportWidth: 1920,
+        viewportHeight: 1080,
+        imageWidth: 624,
+        imageHeight: 350,
+        imageQuality: 80,
+      });
+      if (imageBuffer && imageBuffer.byteLength > 0) {
+        const blob = await put(
+          `screenshots/${chatId}-${revisionNumber}-${Date.now()}.jpg`,
+          imageBuffer,
+          {
+            access: "public",
+            addRandomSuffix: false,
+          }
+        );
+        await updateChatScreenshotUrl(chatId, userId, blob.url);
+        return;
+      }
+      console.warn(
+        "[Screenshot] URL capture failed or empty; falling back to static HTML"
+      );
+    } else if (!origin) {
+      console.warn(
+        "[Screenshot] No public app origin (set SCREENSHOT_BROWSER_BASE_URL, NEXT_PUBLIC_APP_URL, or deploy with VERCEL_URL); falling back to static HTML"
+      );
+    } else if (!token) {
+      console.warn(
+        "[Screenshot] Could not mint render token (set RENDER_SNAPSHOT_SECRET or AUTH_SECRET); falling back to static HTML"
+      );
+    }
+
     const html =
       (await getComposedReactHtml({ chatId, revisionNumber })) ??
       (await getComposedHtml({ chatId, revisionNumber }));
