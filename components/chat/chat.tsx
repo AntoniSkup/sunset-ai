@@ -265,6 +265,9 @@ function ChatInner({
   const streamInitializedRef = useRef(false);
   const streamConnectionIdRef = useRef(0);
   const toolErrorKeysRef = useRef<Set<string>>(new Set());
+  const turnFetchAbortRef = useRef<AbortController | null>(null);
+  const activeTurnRunIdRef = useRef<string | null>(null);
+  const reconnectStreamRef = useRef<(() => void) | null>(null);
   const loadMessages = useCallback(async () => {
     if (!chatId) return;
     const res = await fetch(
@@ -350,36 +353,87 @@ function ChatInner({
         .toString(36)
         .slice(2, 10)}`;
 
-      const response = await fetch(
-        `/api/chats/${encodeURIComponent(chatId)}/turn-runs`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            payload: {
-              chatId,
-              messages: [{ role: "user", parts }],
-            },
-            idempotencyKey,
-          }),
-        }
-      );
+      const ac = new AbortController();
+      turnFetchAbortRef.current = ac;
+      activeTurnRunIdRef.current = null;
 
-      if (!response.ok) {
-        const data = await response.json().catch(() => null);
-        if (response.status === 402 || data?.code === "INSUFFICIENT_CREDITS") {
-          setMessages((prev) => prev.filter((m) => m.id !== userMessageId && m.id !== assistantMessageId));
-          setShowCreditsLimitModal(true);
-          void mutateBilling();
+      try {
+        const response = await fetch(
+          `/api/chats/${encodeURIComponent(chatId)}/turn-runs`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            signal: ac.signal,
+            body: JSON.stringify({
+              payload: {
+                chatId,
+                messages: [{ role: "user", parts }],
+              },
+              idempotencyKey,
+            }),
+          }
+        );
+
+        if (!response.ok) {
+          const data = await response.json().catch(() => null);
+          if (response.status === 402 || data?.code === "INSUFFICIENT_CREDITS") {
+            setMessages((prev) =>
+              prev.filter((m) => m.id !== userMessageId && m.id !== assistantMessageId)
+            );
+            setShowCreditsLimitModal(true);
+            void mutateBilling();
+            setStatus("ready");
+            return;
+          }
+          const errMsg = normalizeErrorMessage(
+            data?.error ?? data,
+            `Failed to queue generation (${response.status})`
+          );
+          setErrorMessages((prev) => [
+            ...prev,
+            {
+              id: `error-${Date.now()}-${Math.random()}`,
+              message: errMsg,
+              userMessageId,
+            },
+          ]);
           setStatus("ready");
           return;
         }
-        const errMsg = normalizeErrorMessage(
-          data?.error ?? data,
-          `Failed to queue generation (${response.status})`
-        );
+
+        const data = await response.json().catch(() => null);
+        const runId =
+          data &&
+          typeof data === "object" &&
+          data.run &&
+          typeof (data as { run: { id?: unknown } }).run.id === "string"
+            ? (data as { run: { id: string } }).run.id
+            : null;
+        if (runId) {
+          activeTurnRunIdRef.current = runId;
+        }
+        setStatus("streaming");
+      } catch (err) {
+        if (err instanceof Error && err.name === "AbortError") {
+          try {
+            await fetch(
+              `/api/chats/${encodeURIComponent(chatId)}/turn-runs/cancel`,
+              { method: "POST" }
+            );
+          } catch {
+            // ignore
+          }
+          setMessages((prev) =>
+            prev.filter((m) => m.id !== userMessageId && m.id !== assistantMessageId)
+          );
+          setStatus("ready");
+          activeAssistantMessageIdRef.current = null;
+          hidePreviewLoader();
+          return;
+        }
+        const errMsg = normalizeErrorMessage(err, "Failed to queue generation");
         setErrorMessages((prev) => [
           ...prev,
           {
@@ -389,11 +443,9 @@ function ChatInner({
           },
         ]);
         setStatus("ready");
-        return;
+      } finally {
+        turnFetchAbortRef.current = null;
       }
-
-      await response.json().catch(() => null);
-      setStatus("streaming");
     },
     [chatId, mutateBilling]
   );
@@ -756,11 +808,53 @@ function ChatInner({
     void enqueueTurnRun(partsToRetry);
   };
 
+  const handleStopGeneration = useCallback(() => {
+    if (!chatId) return;
+
+    turnFetchAbortRef.current?.abort();
+
+    void (async () => {
+      try {
+        if (activeTurnRunIdRef.current) {
+          await fetch(
+            `/api/chats/${encodeURIComponent(chatId)}/turn-runs/${encodeURIComponent(activeTurnRunIdRef.current)}`,
+            { method: "DELETE" }
+          );
+        } else {
+          await fetch(
+            `/api/chats/${encodeURIComponent(chatId)}/turn-runs/cancel`,
+            { method: "POST" }
+          );
+        }
+      } catch {
+        // ignore network errors; local UI still resets
+      } finally {
+        activeTurnRunIdRef.current = null;
+      }
+    })();
+
+    streamConnectionIdRef.current += 1;
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+    }
+    if (reconnectTimerRef.current != null) {
+      window.clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+    reconnectStreamRef.current?.();
+
+    setStatus("ready");
+    hidePreviewLoader();
+    activeAssistantMessageIdRef.current = null;
+    void loadMessages();
+  }, [chatId, loadMessages]);
+
   useEffect(() => {
     if (!chatId) return;
 
     let cancelled = false;
-    let terminalEventPending: null | "completed" | "failed" = null;
+    let terminalEventPending: null | "completed" | "failed" | "canceled" = null;
     let pendingFailureMessage: string | null = null;
     streamInitializedRef.current = false;
     lastEventIdRef.current = 0;
@@ -1087,6 +1181,7 @@ function ChatInner({
       terminalEventPending = null;
 
       if (terminalType === "completed") {
+        activeTurnRunIdRef.current = null;
         const pendingPreview = pendingPreviewUpdateRef.current;
         if (
           pendingPreview &&
@@ -1107,7 +1202,17 @@ function ChatInner({
         return;
       }
 
+      if (terminalType === "canceled") {
+        activeTurnRunIdRef.current = null;
+        pendingPreviewUpdateRef.current = null;
+        setStatus("ready");
+        activeAssistantMessageIdRef.current = null;
+        void loadMessages();
+        return;
+      }
+
       pendingPreviewUpdateRef.current = null;
+      activeTurnRunIdRef.current = null;
       setStatus("ready");
       activeAssistantMessageIdRef.current = null;
       const err = normalizeErrorMessage(
@@ -1354,6 +1459,13 @@ function ChatInner({
         finalizeTerminalEventIfReady();
         return;
       }
+      if (eventType === "run_canceled") {
+        stopProgressTicker();
+        hidePreviewLoader();
+        terminalEventPending = "canceled";
+        finalizeTerminalEventIfReady();
+        return;
+      }
       if (eventType === "run_failed") {
         stopProgressTicker();
         hidePreviewLoader();
@@ -1387,6 +1499,7 @@ function ChatInner({
         "preview_update",
         "run_completed",
         "run_failed",
+        "run_canceled",
       ];
 
       const listener = (event: MessageEvent) => {
@@ -1438,8 +1551,13 @@ function ChatInner({
 
     void bootstrap();
 
+    reconnectStreamRef.current = () => {
+      void bootstrap();
+    };
+
     return () => {
       cancelled = true;
+      reconnectStreamRef.current = null;
       stopProgressTicker();
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
@@ -1502,6 +1620,7 @@ function ChatInner({
         handleSubmit={handleSubmit}
         handleInputChange={handleInputChange}
         isLoading={isLoading}
+        onStop={handleStopGeneration}
         isUploadingAttachments={isUploadingAttachments}
         pendingAttachments={pendingAttachments}
         attachmentError={attachmentError}

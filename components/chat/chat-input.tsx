@@ -5,12 +5,12 @@ import {
   MessageAttachments,
 } from "@/components/ai-elements/message";
 import { Button } from "@/components/ui/button";
-import { ArrowPathIcon, ArrowUpIcon } from "@heroicons/react/24/outline";
+import { ArrowUpIcon } from "@heroicons/react/24/outline";
 import type { FileUIPart } from "ai";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import TextareaAutosize from "react-textarea-autosize";
 import { cn } from "@/lib/utils";
-import { PlusIcon } from "lucide-react";
+import { PlusIcon, Square } from "lucide-react";
 import {
   dataTransferHasFilePayload,
   pickAcceptedChatImageFilesFromDataTransfer,
@@ -32,6 +32,8 @@ interface ChatInputProps {
   handleSubmit: (e: FormEvent<HTMLFormElement>) => void;
   handleInputChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
   isLoading: boolean;
+  /** When set, the send control becomes a stop button while loading. */
+  onStop?: () => void;
   isUploadingAttachments: boolean;
   pendingAttachments: PendingAttachment[];
   attachmentError: string | null;
@@ -60,6 +62,7 @@ export function ChatInput({
   handleSubmit,
   handleInputChange,
   isLoading,
+  onStop,
   isUploadingAttachments,
   pendingAttachments,
   attachmentError,
@@ -246,26 +249,39 @@ export function ChatInput({
           >
             <PlusIcon className="h-4 w-4" />
           </Button>
-          <Button
-            type="submit"
-            disabled={isLoading || isUploadingAttachments || !canSubmit}
-            size="icon"
-            className={cn(
-              "absolute bottom-3 right-3 h-8 w-8 rounded-full bg-[#222424]",
+          {isLoading && onStop ? (
+            <Button
+              type="button"
+              onClick={onStop}
+              size="icon"
+              className="absolute bottom-3 right-3 h-8 w-8 rounded-full bg-[#222424] text-white hover:bg-[#222424]/90"
+              aria-label="Stop generation"
+              title="Stop generation"
+            >
+              <Square
+                className="h-3 w-3 fill-current"
+                strokeWidth={0}
+                aria-hidden
+              />
+            </Button>
+          ) : (
+            <Button
+              type="submit"
+              disabled={isLoading || isUploadingAttachments || !canSubmit}
+              size="icon"
+              className={cn(
+                "absolute bottom-3 right-3 h-8 w-8 rounded-full bg-[#222424]",
 
-              isLoading || isUploadingAttachments || !canSubmit
-                ? "bg-muted text-muted-foreground hover:bg-muted"
-                : ""
-            )}
-            aria-label="Send message"
-            title="Send message"
-          >
-            {isLoading ? (
-              <ArrowPathIcon className="h-5 w-5 animate-spin" />
-            ) : (
+                isLoading || isUploadingAttachments || !canSubmit
+                  ? "bg-muted text-muted-foreground hover:bg-muted"
+                  : ""
+              )}
+              aria-label="Send message"
+              title="Send message"
+            >
               <ArrowUpIcon className="h-6 w-6" strokeWidth={2} />
-            )}
-          </Button>
+            </Button>
+          )}
         </div>
       </div>
       <input

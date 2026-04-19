@@ -1006,6 +1006,53 @@ export async function markChatTurnRunFailed(params: {
   return row ?? null;
 }
 
+/** Cancels a single turn run if it is still pending or running (e.g. user stop). */
+export async function cancelChatTurnRunIfActive(
+  runId: string,
+  scope: { chatId: number; userId: number }
+) {
+  const [row] = await db
+    .update(chatTurnRuns)
+    .set({
+      status: "canceled",
+      errorMessage: "Canceled by user",
+      completedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(chatTurnRuns.id, runId),
+        eq(chatTurnRuns.chatId, scope.chatId),
+        eq(chatTurnRuns.userId, scope.userId),
+        or(eq(chatTurnRuns.status, "pending"), eq(chatTurnRuns.status, "running"))
+      )
+    )
+    .returning();
+
+  return row ?? null;
+}
+
+/** Cancels all pending/running turn runs for a chat (covers race before run id is known). */
+export async function cancelAllActiveChatTurnRunsForChat(
+  chatId: number,
+  userId: number
+) {
+  return db
+    .update(chatTurnRuns)
+    .set({
+      status: "canceled",
+      errorMessage: "Canceled by user",
+      completedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(chatTurnRuns.chatId, chatId),
+        eq(chatTurnRuns.userId, userId),
+        or(eq(chatTurnRuns.status, "pending"), eq(chatTurnRuns.status, "running"))
+      )
+    )
+    .returning({ id: chatTurnRuns.id });
+}
+
 export async function appendChatStreamEvent(data: {
   chatId: number;
   runId: string;

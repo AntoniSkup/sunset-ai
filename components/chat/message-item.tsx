@@ -114,11 +114,11 @@ function getFileParts(message: UIMessage): FileUIPart[] {
 }
 
 function getDefaultFileNameForTool(toolName: string): string {
-  if (toolName === "create_site") return "landing/index.html";
-  if (toolName === "create_section") return "landing/sections/section.html";
+  if (toolName === "create_site") return "page structure";
+  if (toolName === "create_section") return "section";
   if (toolName === "validate_completeness") return "site completeness";
-  if (toolName === "validate_ui_consistency") return "ui consistency";
-  return "file.html";
+  if (toolName === "validate_ui_consistency") return "UI consistency";
+  return "page update";
 }
 
 function buildRenderTokens(message: UIMessage): RenderToken[] {

@@ -302,12 +302,50 @@ export function PreviewPanel({
   useEffect(() => {
     let cancelled = false;
 
+    async function hasActiveGenerationRun(): Promise<boolean> {
+      if (!chatId || typeof chatId !== "string") {
+        return false;
+      }
+
+      try {
+        const summaryRes = await fetch(
+          `/api/chats/${encodeURIComponent(chatId)}/turn-runs?summary=1`,
+          { cache: "no-store" }
+        );
+        if (!summaryRes.ok) {
+          return false;
+        }
+        const summaryData = (await summaryRes.json()) as {
+          summary?: { hasActiveRuns?: boolean };
+        };
+        return Boolean(summaryData?.summary?.hasActiveRuns);
+      } catch {
+        return false;
+      }
+    }
+
+    async function canLoadPreview(previewUrl: string): Promise<boolean> {
+      try {
+        const previewRes = await fetch(previewUrl, { cache: "no-store" });
+        return previewRes.ok;
+      } catch {
+        return false;
+      }
+    }
+
     async function loadLatestPreview() {
       if (!chatId || typeof chatId !== "string") {
         return;
       }
 
       try {
+        const hasActiveRun = await hasActiveGenerationRun();
+        if (!cancelled && hasActiveRun) {
+          setIsLoading(true);
+          setLoadingMessage("Generating landing page...");
+          setLoadingStep("Generating landing page...");
+        }
+
         const res = await fetch(`/api/preview/${chatId}/latest`, {
           cache: "no-store",
         });
@@ -335,6 +373,13 @@ export function PreviewPanel({
         const id = Number(data?.revisionId ?? data?.versionId ?? 0);
         const revNum = data?.revisionNumber ?? data?.versionNumber ?? null;
         if (id && data?.previewUrl && iframeRef.current) {
+          const previewReady = await canLoadPreview(data.previewUrl);
+          if (!previewReady) {
+            return;
+          }
+          if (cancelled) {
+            return;
+          }
           setCurrentVersionId(id);
           setRevisionNumber(revNum ?? null);
           setIsIframeLoading(true);
@@ -384,11 +429,11 @@ export function PreviewPanel({
             onLoad={() => setIsIframeLoading(false)}
             onError={() => setIsIframeLoading(false)}
           />
-          {!isIframeLoading && (
+          {!currentVersionId && (
             <div className="absolute inset-0 bg-white rounded-lg ">
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-6 px-4">
                 <div className="text-center flex-col flex">
-                  {true ? (
+                  {isLoading ? (
                     <>
                       <div className="mx-auto mb-10">
                         <LoadingProgressDonut progress={displayProgress} />

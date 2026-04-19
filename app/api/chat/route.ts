@@ -18,6 +18,7 @@ import {
   generateChatName,
   markChatTurnRunSucceeded,
   markChatTurnRunFailed,
+  getChatTurnRunById,
 } from "@/lib/db/queries";
 import {
   getOrCreateAccountForUser,
@@ -550,11 +551,30 @@ async function chatHandler(request: NextRequest) {
       }, TEXT_DELTA_FLUSH_MS);
     };
 
+    const turnRunAbortController =
+      typeof turnRunId === "string" && turnRunId.trim()
+        ? new AbortController()
+        : null;
+    let lastTurnCancelPollMs = 0;
+    const pollTurnCanceled = async (): Promise<boolean> => {
+      if (!turnRunAbortController || !turnRunId) return false;
+      const now = Date.now();
+      if (now - lastTurnCancelPollMs < 450) return false;
+      lastTurnCancelPollMs = now;
+      const run = await getChatTurnRunById(turnRunId);
+      if (run?.status === "canceled") {
+        turnRunAbortController.abort();
+        return true;
+      }
+      return false;
+    };
+
     const result = streamText({
       model,
       system: systemPrompt,
       messages: modelMessages,
       tools,
+      abortSignal: turnRunAbortController?.signal,
       stopWhen: stepCountIs(20),
       experimental_telemetry: {
         isEnabled: true,
@@ -568,6 +588,7 @@ async function chatHandler(request: NextRequest) {
       },
       onChunk: async (chunkEvent: unknown) => {
         try {
+          if (await pollTurnCanceled()) return;
           const evt = chunkEvent as any;
           const rawEventType =
             typeof evt?.type === "string"
@@ -642,6 +663,7 @@ async function chatHandler(request: NextRequest) {
       },
       onStepFinish: async (step) => {
         try {
+          if (await pollTurnCanceled()) return;
           stepCounter += 1;
           const stepNumber = stepCounter;
           const content = Array.isArray((step as any).content)
@@ -799,12 +821,29 @@ async function chatHandler(request: NextRequest) {
           console.error("Failed to persist tool calls/results:", e);
         }
       },
+      onAbort: async () => {
+        if (liveTextFlushTimer) {
+          clearTimeout(liveTextFlushTimer);
+          liveTextFlushTimer = null;
+        }
+        await flushLiveTextDelta();
+        await flushTurnEventsNow();
+      },
       onFinish: async () => {
         if (liveTextFlushTimer) {
           clearTimeout(liveTextFlushTimer);
           liveTextFlushTimer = null;
         }
         await flushLiveTextDelta();
+
+        if (turnRunId) {
+          const run = await getChatTurnRunById(turnRunId);
+          if (run?.status === "canceled") {
+            await flushTurnEventsNow();
+            trace.getActiveSpan()?.end();
+            return;
+          }
+        }
 
         const finalText = buildOrderedAssistantContent(contentSegments);
         if (finalText) {
@@ -856,14 +895,36 @@ async function chatHandler(request: NextRequest) {
           });
         }
       },
-      onError: async (error) => {
+      onError: async (event: { error: unknown }) => {
         if (liveTextFlushTimer) {
           clearTimeout(liveTextFlushTimer);
           liveTextFlushTimer = null;
         }
         await flushLiveTextDelta();
 
-        const errMsg = normalizeErrorMessage(error, "Generation failed");
+        const rootError = event?.error;
+
+        if (turnRunId) {
+          const run = await getChatTurnRunById(turnRunId);
+          if (run?.status === "canceled") {
+            await flushTurnEventsNow();
+            trace.getActiveSpan()?.end();
+            return;
+          }
+        }
+
+        const abortCause =
+          rootError instanceof Error ? rootError.cause : undefined;
+        const isAbortError =
+          (rootError instanceof Error && rootError.name === "AbortError") ||
+          (abortCause instanceof Error && abortCause.name === "AbortError");
+
+        if (isAbortError && turnRunId) {
+          trace.getActiveSpan()?.end();
+          return;
+        }
+
+        const errMsg = normalizeErrorMessage(rootError, "Generation failed");
         if (turnRunId) {
           await markChatTurnRunFailed({
             runId: turnRunId,

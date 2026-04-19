@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { nanoid } from "nanoid";
 import {
+  cancelChatTurnRunIfActive,
   enqueueChatTurnRun,
   getChatByPublicId,
   getChatTurnRunById,
@@ -44,6 +45,67 @@ export async function GET(
   }
 
   return NextResponse.json({ run });
+}
+
+export async function DELETE(
+  _request: NextRequest,
+  {
+    params,
+  }: {
+    params: Promise<{ id: string; turnId: string }>;
+  }
+) {
+  const user = await getUser();
+  if (!user) {
+    return NextResponse.json(
+      { error: "Unauthorized", code: "UNAUTHORIZED" },
+      { status: 401 }
+    );
+  }
+
+  const { id: chatPublicId, turnId } = await params;
+  if (!turnId || typeof turnId !== "string") {
+    return NextResponse.json(
+      { error: "Invalid turn id", code: "INVALID_TURN_ID" },
+      { status: 400 }
+    );
+  }
+
+  const chat = await getChatByPublicId(chatPublicId, user.id);
+  if (!chat) {
+    return NextResponse.json(
+      { error: "Chat not found", code: "CHAT_NOT_FOUND" },
+      { status: 404 }
+    );
+  }
+
+  const canceled = await cancelChatTurnRunIfActive(turnId, {
+    chatId: chat.id,
+    userId: user.id,
+  });
+
+  if (!canceled) {
+    return NextResponse.json(
+      {
+        error: "Turn run not found or not cancelable",
+        code: "NOT_CANCELABLE",
+      },
+      { status: 404 }
+    );
+  }
+
+  await publishStreamEvents({
+    chatId: chat.id,
+    runId: canceled.id,
+    events: [
+      {
+        eventType: "run_canceled",
+        payload: { runId: canceled.id },
+      },
+    ],
+  });
+
+  return NextResponse.json({ ok: true as const, runId: canceled.id });
 }
 
 export async function POST(
