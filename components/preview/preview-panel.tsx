@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { ArrowPathIcon } from "@heroicons/react/24/outline";
+import { useEffect, useId, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import type {
   PreviewMessagePayload,
@@ -9,7 +8,6 @@ import type {
   PreviewLoadingPayload,
 } from "@/lib/preview/update-preview";
 import { PREVIEW_EVENT_TYPE } from "@/lib/preview/update-preview";
-import loader from "@/components/icons/loader.svg";
 import sunsetLogoLarge from "@/components/icons/sunset_logo_large.png";
 import { CodePanel } from "./code-panel";
 
@@ -105,6 +103,93 @@ function BuilderTipsFromButton({
   );
 }
 
+function clampProgress(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(1, value));
+}
+
+function mapProgressForUX(value: number): number {
+  const p = clampProgress(value);
+  // Keep early progress calmer, then accelerate near the end.
+  return Math.pow(p, 1.28);
+}
+
+function LoadingStepMessage({ message }: { message: string }) {
+  return (
+    <div className="relative min-h-[1.75rem] w-[min(420px,calc(100vw-2rem))] text-center">
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.p
+          key={message}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -8 }}
+          transition={{ duration: 0.22, ease: "easeOut" }}
+          className="absolute inset-x-0 text-sm text-muted-foreground font-medium leading-relaxed"
+        >
+          {message}
+          <LoadingDots />
+        </motion.p>
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function LoadingProgressDonut({ progress }: { progress: number }) {
+  const gradientId = useId();
+  const size = 112;
+  const strokeWidth = 12;
+  const radius = size / 2 - strokeWidth;
+  const circumference = 2 * Math.PI * radius;
+  const normalizedProgress = clampProgress(progress);
+  const progressOffset = circumference * (1 - normalizedProgress);
+
+  return (
+    <div className="relative">
+      <motion.div
+        className="absolute inset-0 rounded-full border border-transparent"
+        animate={{ rotate: 360 }}
+        transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
+      />
+      <svg width={size} height={size} className="-rotate-90">
+        <defs>
+          <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#F87C07" />
+            <stop offset="55%" stopColor="#FB923C" />
+            <stop offset="100%" stopColor="#FDBA74" />
+          </linearGradient>
+        </defs>
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="transparent"
+          stroke="currentColor"
+          strokeWidth={strokeWidth}
+          className="text-muted/35"
+        />
+        <motion.circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="transparent"
+          stroke={`url(#${gradientId})`}
+          strokeWidth={strokeWidth}
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          animate={{ strokeDashoffset: progressOffset }}
+          initial={false}
+          transition={{ duration: 0.5, ease: "easeOut" }}
+        />
+      </svg>
+      <div className="absolute inset-0 flex items-center justify-center">
+        <span className="text-sm font-medium text-foreground tabular-nums">
+          {Math.round(normalizedProgress * 100)}%
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export function PreviewPanel({
   className,
   chatId,
@@ -114,27 +199,80 @@ export function PreviewPanel({
   const [isLoading, setIsLoading] = useState(false);
   const [isIframeLoading, setIsIframeLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState<string>("");
+  const [loadingStep, setLoadingStep] = useState<string>("");
+  const [realProgress, setRealProgress] = useState(0);
+  const [displayProgress, setDisplayProgress] = useState(0);
   const [currentVersionId, setCurrentVersionId] = useState<number | null>(null);
   const [revisionNumber, setRevisionNumber] = useState<number | null>(null);
-  const loaderSrc = typeof loader === "string" ? loader : loader.src;
+  const realProgressRef = useRef(0);
+  const lastMilestoneAtRef = useRef(Date.now());
+
+  useEffect(() => {
+    if (!isLoading) {
+      realProgressRef.current = 0;
+      lastMilestoneAtRef.current = Date.now();
+      setDisplayProgress(0);
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      setDisplayProgress((current) => {
+        const real = clampProgress(realProgressRef.current);
+        const uxReal = mapProgressForUX(real);
+        const elapsedSeconds = (Date.now() - lastMilestoneAtRef.current) / 1000;
+        const optimism = Math.min(0.12, elapsedSeconds * 0.016);
+        const optimisticCap =
+          uxReal >= 1 ? 1 : Math.min(0.97, uxReal + optimism);
+        const target = Math.max(uxReal, optimisticCap);
+        const next =
+          current < target ? Math.min(target, current + 0.0065) : current;
+        return clampProgress(next);
+      });
+    }, 80);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [isLoading]);
+
+  useEffect(() => {
+    const next = clampProgress(realProgress);
+    if (next > realProgressRef.current + 0.0005) {
+      lastMilestoneAtRef.current = Date.now();
+    }
+    realProgressRef.current = next;
+    const uxNext = mapProgressForUX(next);
+    setDisplayProgress((current) => Math.max(current, uxNext));
+  }, [realProgress]);
 
   useEffect(() => {
     const handlePreviewUpdate = (event: CustomEvent<PreviewMessagePayload>) => {
       const payload = event.detail;
 
       if (payload.type === "LOADING") {
+        const loadingPayload = payload as PreviewLoadingPayload;
+        const nextMessage =
+          loadingPayload.progress?.currentStep ||
+          loadingPayload.message ||
+          "Generating landing page...";
         setIsLoading(true);
-        setLoadingMessage(
-          (payload as PreviewLoadingPayload).message ||
-            "Generating landing page..."
+        setLoadingMessage(nextMessage);
+        setLoadingStep(nextMessage);
+        const nextProgress = clampProgress(
+          loadingPayload.progress?.progress ?? realProgressRef.current
         );
+        setRealProgress((current) => Math.max(current, nextProgress));
       } else if (payload.type === "STOP_LOADING") {
         setIsLoading(false);
         setLoadingMessage("");
+        setLoadingStep("");
+        setRealProgress(0);
       } else if (payload.type === "UPDATE_PREVIEW") {
         const updatePayload = payload as PreviewUpdatePayload;
         setIsLoading(false);
         setLoadingMessage("");
+        setLoadingStep("");
+        setRealProgress(0);
         setCurrentVersionId(updatePayload.versionId);
         setRevisionNumber(updatePayload.versionNumber);
 
@@ -226,14 +364,12 @@ export function PreviewPanel({
         />
       ) : (
         <>
-          {(isLoading || isIframeLoading) && (
+          {isIframeLoading && (
             <div className="absolute inset-0 flex items-center justify-center bg-background z-10">
               <div className="flex flex-col items-center gap-3">
-                <ArrowPathIcon className="h-8 w-8 animate-spin text-muted-foreground" />
+                <LoadingProgressDonut progress={1} />
                 <p className="text-sm text-muted-foreground">
-                  {isLoading
-                    ? loadingMessage || "Generating landing page..."
-                    : "Loading preview..."}
+                  Loading preview...
                 </p>
               </div>
             </div>
@@ -248,21 +384,39 @@ export function PreviewPanel({
             onLoad={() => setIsIframeLoading(false)}
             onError={() => setIsIframeLoading(false)}
           />
-          {!isLoading && !currentVersionId && (
+          {!isIframeLoading && (
             <div className="absolute inset-0 bg-white rounded-lg ">
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-6 px-4">
                 <div className="text-center flex-col flex">
-                  <img
-                    src={sunsetLogoLarge.src}
-                    alt="Sunset logo large"
-                    className="mx-auto mb-12"
-                  />
+                  {true ? (
+                    <>
+                      <div className="mx-auto mb-10">
+                        <LoadingProgressDonut progress={displayProgress} />
+                      </div>
+                      <span className="text-2xl font-medium mb-2">
+                        Bringing your idea to life
+                      </span>
+                      <LoadingStepMessage
+                        message={
+                          loadingStep || loadingMessage || "Building layout"
+                        }
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <img
+                        src={sunsetLogoLarge.src}
+                        alt="Sunset logo large"
+                        className="mx-auto mb-12"
+                      />
 
-                  <span className="text-2xl font-medium mb-2">
-                    Bringing your idea to life
-                  </span>
+                      <span className="text-2xl font-medium mb-2">
+                        Bringing your idea to life
+                      </span>
 
-                  <BuilderTipsFromButton active />
+                      <BuilderTipsFromButton active />
+                    </>
+                  )}
                 </div>
               </div>
             </div>

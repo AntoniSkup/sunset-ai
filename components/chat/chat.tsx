@@ -11,7 +11,11 @@ import {
   UploadProgressToast,
   type UploadProgressToastState,
 } from "./upload-progress-toast";
-import { updatePreviewPanel } from "@/lib/preview/update-preview";
+import {
+  hidePreviewLoader,
+  showPreviewLoader,
+  updatePreviewPanel,
+} from "@/lib/preview/update-preview";
 import { usePendingMessageStore } from "@/lib/stores/usePendingMessageStore";
 import type { BillingApiResponse } from "@/app/api/billing/route";
 
@@ -761,6 +765,282 @@ function ChatInner({
     streamInitializedRef.current = false;
     lastEventIdRef.current = 0;
 
+    const TRACKED_PROGRESS_TOOLS = new Set([
+      "create_site",
+      "create_section",
+      "resolve_image_slots",
+      "validate_completeness",
+    ]);
+    const NAVBAR_VIRTUAL_KEY = "virtual:section:navbar";
+    const FOOTER_VIRTUAL_KEY = "virtual:section:footer";
+    type ProgressStepKind =
+      | "section"
+      | "layout"
+      | "assets"
+      | "validation"
+      | "other";
+    const STEP_WEIGHT: Record<ProgressStepKind, number> = {
+      section: 1.35,
+      layout: 0.75,
+      assets: 0.45,
+      validation: 0.8,
+      other: 0.65,
+    };
+    const STEP_DURATION_MS: Record<ProgressStepKind, number> = {
+      section: 30_000,
+      layout: 12_000,
+      assets: 10_000,
+      validation: 8_000,
+      other: 12_000,
+    };
+    const BASELINE_TOTAL_SECTION_STEPS = 10;
+    const plannedStepKeys: string[] = [];
+    const plannedStepSet = new Set<string>();
+    const stepLabelsByKey = new Map<string, string>();
+    const stepKindByKey = new Map<string, ProgressStepKind>();
+    const stepStartedAtByKey = new Map<string, number>();
+    const stepVerbByKey = new Map<string, "Building" | "Generating">();
+    const completedStepSet = new Set<string>();
+    const stepKeyByToolCallId = new Map<string, string>();
+    let activeStepKey: string | null = null;
+    let sawCompletenessCheck = false;
+    let progressTickerId: number | null = null;
+
+    const clamp01 = (value: number): number => {
+      if (!Number.isFinite(value)) return 0;
+      return Math.min(1, Math.max(0, value));
+    };
+
+    const humanizeFileName = (value: string): string => {
+      const withSpaces = value
+        .replace(/\.[a-z0-9]+$/i, "")
+        .replace(/[-_]+/g, " ")
+        .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (!withSpaces) return value;
+      return withSpaces.charAt(0).toUpperCase() + withSpaces.slice(1);
+    };
+
+    const getStepLabel = (toolName: string, destination?: string): string => {
+      if (typeof destination === "string" && destination.trim()) {
+        const parts = destination.split("/");
+        const fileName = parts[parts.length - 1] || "";
+        if (fileName) {
+          if (fileName.toLowerCase().startsWith("index.")) {
+            return "App layout";
+          }
+          return humanizeFileName(fileName);
+        }
+      }
+
+      if (toolName === "validate_completeness") return "Completeness check";
+      if (toolName === "resolve_image_slots") return "Visuals";
+      if (toolName === "create_site") return "App layout";
+      if (toolName === "create_section") return "Section";
+      return "Layout";
+    };
+
+    const inferStepKind = (
+      toolName: string,
+      destination?: string
+    ): ProgressStepKind => {
+      const d = typeof destination === "string" ? destination.toLowerCase() : "";
+      if (toolName === "create_site") {
+        return "section";
+      }
+      if (toolName === "create_section" || d.includes("/sections/")) {
+        return "section";
+      }
+      if (d.endsWith("/index.tsx")) {
+        return "layout";
+      }
+      if (toolName === "resolve_image_slots") {
+        return "assets";
+      }
+      if (toolName === "validate_completeness") {
+        return "validation";
+      }
+      return "other";
+    };
+
+    const getStepWeight = (stepKey: string): number =>
+      STEP_WEIGHT[stepKindByKey.get(stepKey) ?? "other"];
+
+    const isSectionLikeLabel = (label: string): boolean => {
+      const normalized = label.trim().toLowerCase();
+      if (!normalized) return false;
+      if (normalized.includes("section")) return true;
+      return (
+        normalized === "navbar" ||
+        normalized === "footer" ||
+        normalized === "hero" ||
+        normalized === "about" ||
+        normalized === "features" ||
+        normalized === "products" ||
+        normalized === "process" ||
+        normalized === "testimonials" ||
+        normalized === "cta"
+      );
+    };
+
+    const pickVerbForStep = (stepKey: string): "Building" | "Generating" => {
+      const existing = stepVerbByKey.get(stepKey);
+      if (existing) return existing;
+      let hash = 0;
+      for (let i = 0; i < stepKey.length; i += 1) {
+        hash = (hash * 31 + stepKey.charCodeAt(i)) >>> 0;
+      }
+      const verb: "Building" | "Generating" =
+        hash % 2 === 0 ? "Building" : "Generating";
+      stepVerbByKey.set(stepKey, verb);
+      return verb;
+    };
+
+    const formatStepStatusText = (stepKey: string | null): string => {
+      if (!stepKey) return "Building layout";
+      const label = (stepLabelsByKey.get(stepKey) || "layout").trim();
+      const kind = stepKindByKey.get(stepKey) ?? "other";
+      const verb = pickVerbForStep(stepKey);
+
+      if (kind === "validation") {
+        return "Running completeness check";
+      }
+      if (kind === "assets") {
+        return `${verb} visuals`;
+      }
+      if (kind === "section" || isSectionLikeLabel(label)) {
+        const withSectionSuffix = /section$/i.test(label)
+          ? label
+          : `${label} section`;
+        return `${verb} ${withSectionSuffix}`;
+      }
+      return `${verb} ${label}`;
+    };
+
+    const ensureVirtualStep = (
+      stepKey: string,
+      label: string,
+      kind: ProgressStepKind
+    ) => {
+      if (plannedStepSet.has(stepKey)) return;
+      plannedStepSet.add(stepKey);
+      plannedStepKeys.push(stepKey);
+      stepLabelsByKey.set(stepKey, label);
+      stepKindByKey.set(stepKey, kind);
+    };
+
+    const syncVirtualSectionCompletionFromLabel = (label: string) => {
+      const normalized = label.trim().toLowerCase();
+      if (normalized === "navbar" || normalized.includes("navbar")) {
+        completedStepSet.add(NAVBAR_VIRTUAL_KEY);
+      }
+      if (normalized === "footer" || normalized.includes("footer")) {
+        completedStepSet.add(FOOTER_VIRTUAL_KEY);
+      }
+    };
+
+    const startProgressTicker = () => {
+      if (progressTickerId != null) return;
+      progressTickerId = window.setInterval(() => {
+        emitPreviewProgress();
+      }, 900);
+    };
+
+    const stopProgressTicker = () => {
+      if (progressTickerId == null) return;
+      window.clearInterval(progressTickerId);
+      progressTickerId = null;
+    };
+
+    const ensureProgressStep = (
+      toolName: string,
+      toolCallId: string,
+      destination?: string
+    ): string => {
+      const normalizedCallId = toolCallId.trim();
+      const existingKey =
+        normalizedCallId && stepKeyByToolCallId.has(normalizedCallId)
+          ? stepKeyByToolCallId.get(normalizedCallId)!
+          : null;
+
+      const inferredLabel = getStepLabel(toolName, destination);
+      const inferredKind = inferStepKind(toolName, destination);
+      if (existingKey) {
+        stepLabelsByKey.set(existingKey, inferredLabel);
+        stepKindByKey.set(existingKey, inferredKind);
+        return existingKey;
+      }
+
+      const fallbackKey = `${toolName}:${destination || inferredLabel}:${plannedStepKeys.length}`;
+      const key = normalizedCallId || fallbackKey;
+      if (!plannedStepSet.has(key)) {
+        plannedStepSet.add(key);
+        plannedStepKeys.push(key);
+      }
+      stepLabelsByKey.set(key, inferredLabel);
+      stepKindByKey.set(key, inferredKind);
+      if (normalizedCallId) {
+        stepKeyByToolCallId.set(normalizedCallId, key);
+      }
+      return key;
+    };
+
+    const emitPreviewProgress = (messageOverride?: string) => {
+      const discoveredSteps = plannedStepKeys.length;
+      const discoveredSectionSteps = plannedStepKeys.filter(
+        (key) => (stepKindByKey.get(key) ?? "other") === "section"
+      ).length;
+      const predictedRemainingSectionSteps = Math.max(
+        0,
+        BASELINE_TOTAL_SECTION_STEPS - discoveredSectionSteps
+      );
+      const totalSteps = Math.max(
+        1,
+        discoveredSteps +
+          predictedRemainingSectionSteps +
+          (sawCompletenessCheck ? 0 : 1)
+      );
+      const reservedCompletenessWeight = sawCompletenessCheck
+        ? 0
+        : STEP_WEIGHT.validation;
+      const baseTotalWeight = plannedStepKeys.reduce(
+        (sum, key) => sum + getStepWeight(key),
+        0
+      );
+      const predictedRemainingWeight =
+        predictedRemainingSectionSteps * STEP_WEIGHT.section;
+      const totalWeight = Math.max(
+        0.0001,
+        baseTotalWeight + predictedRemainingWeight + reservedCompletenessWeight
+      );
+      const completedWeight = plannedStepKeys.reduce((sum, key) => {
+        if (!completedStepSet.has(key)) return sum;
+        return sum + getStepWeight(key);
+      }, 0);
+      let inFlightWeight = 0;
+      if (activeStepKey && !completedStepSet.has(activeStepKey)) {
+        const kind = stepKindByKey.get(activeStepKey) ?? "other";
+        const startedAt = stepStartedAtByKey.get(activeStepKey) ?? Date.now();
+        const elapsed = Math.max(0, Date.now() - startedAt);
+        const fractional = Math.min(0.92, clamp01(elapsed / STEP_DURATION_MS[kind]));
+        inFlightWeight = getStepWeight(activeStepKey) * fractional;
+      }
+      const progress = clamp01((completedWeight + inFlightWeight) / totalWeight);
+      const completedSteps = Math.min(completedStepSet.size, discoveredSteps);
+      const currentStepLabel =
+        messageOverride ||
+        formatStepStatusText(activeStepKey) ||
+        "Building layout";
+
+      showPreviewLoader(currentStepLabel, {
+        progress,
+        completedSteps,
+        totalSteps,
+        currentStep: currentStepLabel,
+      });
+    };
+
     const upsertAssistantText = (deltaText: string) => {
       const text = String(deltaText || "");
       if (!text) return;
@@ -952,6 +1232,25 @@ function ChatInner({
       }
       if (eventType === "run_started") {
         setStatus("streaming");
+        activeStepKey = null;
+        plannedStepKeys.length = 0;
+        plannedStepSet.clear();
+        stepLabelsByKey.clear();
+        stepKindByKey.clear();
+        stepStartedAtByKey.clear();
+        stepVerbByKey.clear();
+        completedStepSet.clear();
+        stepKeyByToolCallId.clear();
+        sawCompletenessCheck = false;
+        ensureVirtualStep(NAVBAR_VIRTUAL_KEY, "Navbar", "section");
+        ensureVirtualStep(FOOTER_VIRTUAL_KEY, "Footer", "section");
+        startProgressTicker();
+        showPreviewLoader("Planning landing page...", {
+          progress: 0,
+          completedSteps: 0,
+          totalSteps: plannedStepKeys.length + 1,
+          currentStep: "Planning landing page...",
+        });
         return;
       }
       if (eventType === "text_delta") {
@@ -971,6 +1270,14 @@ function ChatInner({
           toolName,
           destination,
         });
+        if (TRACKED_PROGRESS_TOOLS.has(toolName)) {
+          if (toolName === "validate_completeness") {
+            sawCompletenessCheck = true;
+          }
+          activeStepKey = ensureProgressStep(toolName, toolCallId, destination);
+          stepStartedAtByKey.set(activeStepKey, Date.now());
+          emitPreviewProgress();
+        }
         return;
       }
       if (eventType === "tool_result") {
@@ -1011,6 +1318,19 @@ function ChatInner({
             ]);
           }
         }
+        if (TRACKED_PROGRESS_TOOLS.has(toolName)) {
+          if (toolName === "validate_completeness") {
+            sawCompletenessCheck = true;
+          }
+          const stepKey = ensureProgressStep(toolName, toolCallId, destination);
+          const resolvedLabel = stepLabelsByKey.get(stepKey) ?? "";
+          syncVirtualSectionCompletionFromLabel(resolvedLabel);
+          completedStepSet.add(stepKey);
+          if (activeStepKey === stepKey) {
+            activeStepKey = null;
+          }
+          emitPreviewProgress();
+        }
         return;
       }
       if (eventType === "preview_update") {
@@ -1022,11 +1342,21 @@ function ChatInner({
         return;
       }
       if (eventType === "run_completed") {
+        stopProgressTicker();
+        showPreviewLoader("Finalizing preview...", {
+          progress: 1,
+          completedSteps: Math.max(completedStepSet.size, 1),
+          totalSteps: Math.max(completedStepSet.size, 1),
+          currentStep: "Completeness check",
+        });
+        hidePreviewLoader();
         terminalEventPending = "completed";
         finalizeTerminalEventIfReady();
         return;
       }
       if (eventType === "run_failed") {
+        stopProgressTicker();
+        hidePreviewLoader();
         pendingFailureMessage = normalizeErrorMessage(
           payload.error,
           "Generation failed"
@@ -1110,6 +1440,7 @@ function ChatInner({
 
     return () => {
       cancelled = true;
+      stopProgressTicker();
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
         eventSourceRef.current = null;

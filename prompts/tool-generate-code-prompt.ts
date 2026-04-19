@@ -2,7 +2,7 @@ const FRONTEND_AESTHETICS_GUIDANCE = `
 Frontend aesthetics:
 - Avoid generic, "on distribution" frontend outputs and the common "AI slop" aesthetic.
 - Make the UI feel distinctive, creative, and context-specific rather than like a cookie-cutter SaaS template.
-- Typography is a primary design tool: choose beautiful, interesting font combinations and avoid defaulting to Inter, Roboto, Arial, system fonts, or the same overused choices repeatedly.
+- Typography is a primary design tool: choose beautiful, interesting font combinations and avoid defaulting to Inter, Roboto, Arial, system fonts, or the same overused choices repeatedly. Load custom web fonts via <link> elements (for example <link rel="stylesheet" href="https://fonts.googleapis.com/css2?...">) in the global HTML <head>, not inside section/page TSX.
 - Commit to a cohesive color story. Use CSS variables when defining theme values or repeated colors. Prefer strong dominant tones with sharp accents over timid, evenly distributed palettes.
 - Draw inspiration from IDE themes, editorial layouts, cultural aesthetics, music scenes, fashion, print design, and other unexpected references when appropriate.
 - Use motion deliberately: prioritize a few memorable animation beats like staggered entrances, reveal effects, scroll-triggered entrances, and tactile hover states. Default to Motion for React via 'motion/react' for primary animation work. Use CSS/Tailwind animation only as a fallback for tiny ambient loops or very simple effects that do not warrant Motion.
@@ -39,6 +39,7 @@ Requirements:
 - Make the design modern, responsive, and visually appealing
 - Output MUST be raw React/JSX/TSX only (no markdown code fences, no backticks, no \`\`\`jsx)
 - Do NOT include <!DOCTYPE html>, <html>, <head>, or <body> in section/page files
+- Custom web fonts belong in the global HTML <head> via <link rel="stylesheet" href="..."> (never embedded font imports or @font-face blocks inside generated components)
 
 ${FRONTEND_AESTHETICS_GUIDANCE}
 
@@ -64,7 +65,7 @@ Generate exactly ONE React/TSX file for a landing site. Each tool call creates/u
 **Output requirements**
 - Output RAW React/JSX/TSX ONLY (no markdown, no explanations, no code fences).
 - Use Tailwind CSS utility classes for ALL styling (no <style> tags, no external CSS). Use the className prop.
-- Do not import Google Fonts or define font-face rules inside section/page files. Keep font loading global, and use inline style props only for truly dynamic values that cannot be expressed cleanly with Tailwind utilities.
+- Do not import Google Fonts or define @font-face rules inside section/page files. Keep font loading global: add stylesheets with <link rel="stylesheet" ...> (and preconnect <link>s when appropriate) in the document <head>, not @import or font imports inside TSX. Use inline style props only for truly dynamic values that cannot be expressed cleanly with Tailwind utilities.
 - When the section uses meaningful animation, import from 'motion/react' and implement the main entrances, reveals, staggers, or hover choreography with motion components/variants. Do not rely on custom CSS animation or Tailwind 'animate-*' classes for the primary animated experience.
 - For real imagery, render only resolved site assets with ImageAsset aliases. Never invent raw image URLs, placeholder CDN URLs, or direct stock-provider URLs in the generated TSX.
 - When site assets are provided in context, copy the alias exactly as given in the manifest. Never rewrite "hero.jpg" into something like "hero-warm-and-cozy.jpg".

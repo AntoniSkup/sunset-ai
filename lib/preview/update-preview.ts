@@ -9,6 +9,12 @@ export interface PreviewUpdatePayload {
 export interface PreviewLoadingPayload {
   type: "LOADING";
   message?: string;
+  progress?: {
+    progress?: number;
+    completedSteps?: number;
+    totalSteps?: number;
+    currentStep?: string;
+  };
 }
 
 export interface PreviewStopLoadingPayload {
@@ -39,10 +45,14 @@ function dispatchPreviewEvent(payload: PreviewMessagePayload): void {
 
 export const PREVIEW_EVENT_TYPE = PREVIEW_EVENT_NAME;
 
-export function showPreviewLoader(message?: string): void {
+export function showPreviewLoader(
+  message?: string,
+  progress?: PreviewLoadingPayload["progress"]
+): void {
   const payload: PreviewLoadingPayload = {
     type: "LOADING",
     message: message || "Generating landing page...",
+    progress,
   };
   dispatchPreviewEvent(payload);
 }
