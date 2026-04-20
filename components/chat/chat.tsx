@@ -899,6 +899,7 @@ function ChatInner({
     let activeStepKey: string | null = null;
     let sawCompletenessCheck = false;
     let progressTickerId: number | null = null;
+    let hasBuilderActivity = false;
 
     const clamp01 = (value: number): number => {
       if (!Number.isFinite(value)) return 0;
@@ -1045,6 +1046,20 @@ function ChatInner({
       if (progressTickerId == null) return;
       window.clearInterval(progressTickerId);
       progressTickerId = null;
+    };
+
+    const beginBuilderPreviewProgress = () => {
+      if (hasBuilderActivity) return;
+      hasBuilderActivity = true;
+      ensureVirtualStep(NAVBAR_VIRTUAL_KEY, "Navbar", "section");
+      ensureVirtualStep(FOOTER_VIRTUAL_KEY, "Footer", "section");
+      startProgressTicker();
+      showPreviewLoader("Planning landing page...", {
+        progress: 0,
+        completedSteps: 0,
+        totalSteps: plannedStepKeys.length + 1,
+        currentStep: "Planning landing page...",
+      });
     };
 
     const ensureProgressStep = (
@@ -1347,15 +1362,7 @@ function ChatInner({
         completedStepSet.clear();
         stepKeyByToolCallId.clear();
         sawCompletenessCheck = false;
-        ensureVirtualStep(NAVBAR_VIRTUAL_KEY, "Navbar", "section");
-        ensureVirtualStep(FOOTER_VIRTUAL_KEY, "Footer", "section");
-        startProgressTicker();
-        showPreviewLoader("Planning landing page...", {
-          progress: 0,
-          completedSteps: 0,
-          totalSteps: plannedStepKeys.length + 1,
-          currentStep: "Planning landing page...",
-        });
+        hasBuilderActivity = false;
         return;
       }
       if (eventType === "text_delta") {
@@ -1376,6 +1383,7 @@ function ChatInner({
           destination,
         });
         if (TRACKED_PROGRESS_TOOLS.has(toolName)) {
+          beginBuilderPreviewProgress();
           if (toolName === "validate_completeness") {
             sawCompletenessCheck = true;
           }
@@ -1424,6 +1432,7 @@ function ChatInner({
           }
         }
         if (TRACKED_PROGRESS_TOOLS.has(toolName)) {
+          beginBuilderPreviewProgress();
           if (toolName === "validate_completeness") {
             sawCompletenessCheck = true;
           }
@@ -1448,13 +1457,15 @@ function ChatInner({
       }
       if (eventType === "run_completed") {
         stopProgressTicker();
-        showPreviewLoader("Finalizing preview...", {
-          progress: 1,
-          completedSteps: Math.max(completedStepSet.size, 1),
-          totalSteps: Math.max(completedStepSet.size, 1),
-          currentStep: "Completeness check",
-        });
-        hidePreviewLoader();
+        if (hasBuilderActivity) {
+          showPreviewLoader("Finalizing preview...", {
+            progress: 1,
+            completedSteps: Math.max(completedStepSet.size, 1),
+            totalSteps: Math.max(completedStepSet.size, 1),
+            currentStep: "Completeness check",
+          });
+          hidePreviewLoader();
+        }
         terminalEventPending = "completed";
         finalizeTerminalEventIfReady();
         return;
