@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { nanoid } from "nanoid";
 import {
+  countActiveChatTurnRunsByUser,
   createChatMessage,
   enqueueChatTurnRun,
   getChatByPublicId,
@@ -28,19 +29,21 @@ import { ensureDailyCreditsForAccount } from "@/lib/billing/daily-credits";
 import { getCreditsBreakdown } from "@/lib/billing/credits-breakdown";
 import { getCreditsCostForAction } from "@/lib/credits/pricing";
 
+const MAX_CONCURRENT_TURN_RUNS_PER_USER = 3;
+
 export async function POST(
   request: NextRequest,
   {
     params,
   }: {
     params: Promise<{ id: string }>;
-  }
+  },
 ) {
   const user = await getUser();
   if (!user) {
     return NextResponse.json(
       { error: "Unauthorized", code: "UNAUTHORIZED" },
-      { status: 401 }
+      { status: 401 },
     );
   }
 
@@ -48,7 +51,7 @@ export async function POST(
   if (!chatPublicId || typeof chatPublicId !== "string") {
     return NextResponse.json(
       { error: "Invalid chat ID", code: "INVALID_CHAT_ID" },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -56,7 +59,7 @@ export async function POST(
   if (!chat) {
     return NextResponse.json(
       { error: "Chat not found", code: "CHAT_NOT_FOUND" },
-      { status: 404 }
+      { status: 404 },
     );
   }
 
@@ -65,7 +68,7 @@ export async function POST(
   if (!payload || typeof payload !== "object") {
     return NextResponse.json(
       { error: "Payload is required", code: "INVALID_PAYLOAD" },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -79,13 +82,25 @@ export async function POST(
     return NextResponse.json({ run: existing, deduped: true });
   }
 
+  const activeRuns = await countActiveChatTurnRunsByUser(user.id);
+  if (activeRuns >= MAX_CONCURRENT_TURN_RUNS_PER_USER) {
+    return NextResponse.json(
+      {
+        error: "Too many active generations. Please wait for one to finish.",
+        code: "TOO_MANY_ACTIVE_REQUESTS",
+        maxConcurrent: MAX_CONCURRENT_TURN_RUNS_PER_USER,
+      },
+      { status: 429 },
+    );
+  }
+
   const account = await getOrCreateAccountForUser(user.id);
   await ensureDailyCreditsForAccount(account.id);
   const subscription = await getSubscriptionByAccountId(account.id);
   const { balance } = await getCreditsBreakdown(account.id, subscription);
   const minCreditsForTurnStart = await getCreditsCostForAction(
     "chat_message",
-    subscription?.planId ?? null
+    subscription?.planId ?? null,
   );
   if (balance < minCreditsForTurnStart) {
     return NextResponse.json(
@@ -94,7 +109,7 @@ export async function POST(
           "Insufficient credits. Please upgrade your plan or buy more credits.",
         code: "INSUFFICIENT_CREDITS",
       },
-      { status: 402 }
+      { status: 402 },
     );
   }
 
@@ -104,8 +119,13 @@ export async function POST(
     ? (payloadObj.messages as Array<{ role?: string; parts?: unknown }>)
     : [];
   const payloadLastMessage = payloadMessages[payloadMessages.length - 1];
-  if (payloadLastMessage?.role === "user" && Array.isArray(payloadLastMessage.parts)) {
-    const persistedParts = sanitizePersistedMessageParts(payloadLastMessage.parts);
+  if (
+    payloadLastMessage?.role === "user" &&
+    Array.isArray(payloadLastMessage.parts)
+  ) {
+    const persistedParts = sanitizePersistedMessageParts(
+      payloadLastMessage.parts,
+    );
     const userText = extractTextFromMessageParts(persistedParts);
     if (hasDisplayableMessageParts(persistedParts)) {
       await createChatMessage({
@@ -158,7 +178,7 @@ export async function POST(
       queued: hadRunning,
       processingEnabled,
     },
-    { status: 202 }
+    { status: 202 },
   );
 }
 
@@ -168,13 +188,13 @@ export async function GET(
     params,
   }: {
     params: Promise<{ id: string }>;
-  }
+  },
 ) {
   const user = await getUser();
   if (!user) {
     return NextResponse.json(
       { error: "Unauthorized", code: "UNAUTHORIZED" },
-      { status: 401 }
+      { status: 401 },
     );
   }
 
@@ -183,7 +203,7 @@ export async function GET(
   if (!chat) {
     return NextResponse.json(
       { error: "Chat not found", code: "CHAT_NOT_FOUND" },
-      { status: 404 }
+      { status: 404 },
     );
   }
 

@@ -6,6 +6,7 @@ import { getUser, getTeamForUser } from "@/lib/db/queries";
 
 import { SWRConfig } from "swr";
 import { Analytics } from "@vercel/analytics/next";
+import { Toaster } from "sonner";
 
 const ibmPlexSans = IBM_Plex_Sans({
   subsets: ["latin"],
@@ -53,6 +54,7 @@ export default function RootLayout({
         >
           {children}
         </SWRConfig>
+        <Toaster richColors closeButton />
         {gaId ? (
           <>
             <Script

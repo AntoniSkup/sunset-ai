@@ -1,4 +1,16 @@
-import { desc, and, eq, isNull, max, asc, lte, lt, or, gt, sql } from "drizzle-orm";
+import {
+  desc,
+  and,
+  eq,
+  isNull,
+  max,
+  asc,
+  lte,
+  lt,
+  or,
+  gt,
+  sql,
+} from "drizzle-orm";
 import { db } from "./drizzle";
 import {
   activityLogs,
@@ -41,7 +53,7 @@ function buildFallbackChatName(userQuery: string): string {
 
 export async function generateChatName(
   userQuery: string,
-  context?: { userId?: number; chatId?: string }
+  context?: { userId?: number; chatId?: string },
 ): Promise<string> {
   try {
     const model = await getAIModel(true);
@@ -136,7 +148,7 @@ export async function updateTeamSubscription(
     stripeProductId: string | null;
     planName: string | null;
     subscriptionStatus: string;
-  }
+  },
 ) {
   await db
     .update(teams)
@@ -353,13 +365,18 @@ export async function getLandingSiteFileByPath(chatId: string, path: string) {
   const result = await db
     .select()
     .from(landingSiteFiles)
-    .where(and(eq(landingSiteFiles.chatId, chatId), eq(landingSiteFiles.path, path)))
+    .where(
+      and(eq(landingSiteFiles.chatId, chatId), eq(landingSiteFiles.path, path)),
+    )
     .limit(1);
 
   return result.length > 0 ? result[0] : null;
 }
 
-export async function getLatestLandingSiteFileContent(chatId: string, path: string) {
+export async function getLatestLandingSiteFileContent(
+  chatId: string,
+  path: string,
+) {
   const result = await db
     .select({
       content: landingSiteFileVersions.content,
@@ -368,12 +385,17 @@ export async function getLatestLandingSiteFileContent(chatId: string, path: stri
       fileId: landingSiteFiles.id,
     })
     .from(landingSiteFiles)
-    .innerJoin(landingSiteFileVersions, eq(landingSiteFileVersions.fileId, landingSiteFiles.id))
+    .innerJoin(
+      landingSiteFileVersions,
+      eq(landingSiteFileVersions.fileId, landingSiteFiles.id),
+    )
     .innerJoin(
       landingSiteRevisions,
-      eq(landingSiteRevisions.id, landingSiteFileVersions.revisionId)
+      eq(landingSiteRevisions.id, landingSiteFileVersions.revisionId),
     )
-    .where(and(eq(landingSiteFiles.chatId, chatId), eq(landingSiteFiles.path, path)))
+    .where(
+      and(eq(landingSiteFiles.chatId, chatId), eq(landingSiteFiles.path, path)),
+    )
     .orderBy(desc(landingSiteRevisions.revisionNumber))
     .limit(1);
 
@@ -382,7 +404,7 @@ export async function getLatestLandingSiteFileContent(chatId: string, path: stri
 
 export async function getExistingLandingSiteFilesContent(
   chatId: string,
-  excludePath?: string
+  excludePath?: string,
 ): Promise<Array<{ path: string; content: string }>> {
   const rows = await db
     .select({
@@ -393,11 +415,11 @@ export async function getExistingLandingSiteFilesContent(
     .from(landingSiteFiles)
     .innerJoin(
       landingSiteFileVersions,
-      eq(landingSiteFileVersions.fileId, landingSiteFiles.id)
+      eq(landingSiteFileVersions.fileId, landingSiteFiles.id),
     )
     .innerJoin(
       landingSiteRevisions,
-      eq(landingSiteRevisions.id, landingSiteFileVersions.revisionId)
+      eq(landingSiteRevisions.id, landingSiteFileVersions.revisionId),
     )
     .where(eq(landingSiteFiles.chatId, chatId));
 
@@ -407,10 +429,7 @@ export async function getExistingLandingSiteFilesContent(
   >();
   for (const row of rows) {
     const existing = latestByPath.get(row.path);
-    if (
-      !existing ||
-      (row.revisionNumber ?? 0) > existing.revisionNumber
-    ) {
+    if (!existing || (row.revisionNumber ?? 0) > existing.revisionNumber) {
       latestByPath.set(row.path, {
         content: row.content,
         revisionNumber: row.revisionNumber ?? 0,
@@ -440,7 +459,7 @@ function isLandingSectionTsxPath(path: string): boolean {
  */
 export async function getPreviousLandingSectionContentForCodegen(
   chatId: string,
-  excludePath: string
+  excludePath: string,
 ): Promise<{ path: string; content: string } | null> {
   const normalizedExclude = excludePath.replace(/\\/g, "/");
   const excludeLower = normalizedExclude.toLowerCase();
@@ -453,22 +472,22 @@ export async function getPreviousLandingSectionContentForCodegen(
     .from(landingSiteFiles)
     .innerJoin(
       landingSiteFileVersions,
-      eq(landingSiteFileVersions.fileId, landingSiteFiles.id)
+      eq(landingSiteFileVersions.fileId, landingSiteFiles.id),
     )
     .innerJoin(
       landingSiteRevisions,
-      eq(landingSiteRevisions.id, landingSiteFileVersions.revisionId)
+      eq(landingSiteRevisions.id, landingSiteFileVersions.revisionId),
     )
     .where(eq(landingSiteFiles.chatId, chatId));
 
-  const latestByPath = new Map<string, { content: string; revisionNumber: number }>();
+  const latestByPath = new Map<
+    string,
+    { content: string; revisionNumber: number }
+  >();
   for (const row of rows) {
     if (!isLandingSectionTsxPath(row.path)) continue;
     const existing = latestByPath.get(row.path);
-    if (
-      !existing ||
-      (row.revisionNumber ?? 0) > existing.revisionNumber
-    ) {
+    if (!existing || (row.revisionNumber ?? 0) > existing.revisionNumber) {
       latestByPath.set(row.path, {
         content: row.content,
         revisionNumber: row.revisionNumber ?? 0,
@@ -508,17 +527,20 @@ export async function getLandingSiteFileContentAtOrBeforeRevision(data: {
       fileId: landingSiteFiles.id,
     })
     .from(landingSiteFiles)
-    .innerJoin(landingSiteFileVersions, eq(landingSiteFileVersions.fileId, landingSiteFiles.id))
+    .innerJoin(
+      landingSiteFileVersions,
+      eq(landingSiteFileVersions.fileId, landingSiteFiles.id),
+    )
     .innerJoin(
       landingSiteRevisions,
-      eq(landingSiteRevisions.id, landingSiteFileVersions.revisionId)
+      eq(landingSiteRevisions.id, landingSiteFileVersions.revisionId),
     )
     .where(
       and(
         eq(landingSiteFiles.chatId, data.chatId),
         eq(landingSiteFiles.path, data.path),
-        lte(landingSiteRevisions.revisionNumber, data.revisionNumber)
-      )
+        lte(landingSiteRevisions.revisionNumber, data.revisionNumber),
+      ),
     )
     .orderBy(desc(landingSiteRevisions.revisionNumber))
     .limit(1);
@@ -537,18 +559,24 @@ export async function getAllLandingSiteFilesAtOrBeforeRevision(params: {
       revisionNumber: landingSiteRevisions.revisionNumber,
     })
     .from(landingSiteFiles)
-    .innerJoin(landingSiteFileVersions, eq(landingSiteFileVersions.fileId, landingSiteFiles.id))
+    .innerJoin(
+      landingSiteFileVersions,
+      eq(landingSiteFileVersions.fileId, landingSiteFiles.id),
+    )
     .innerJoin(
       landingSiteRevisions,
-      eq(landingSiteRevisions.id, landingSiteFileVersions.revisionId)
+      eq(landingSiteRevisions.id, landingSiteFileVersions.revisionId),
     )
     .where(
       and(
         eq(landingSiteFiles.chatId, params.chatId),
-        lte(landingSiteRevisions.revisionNumber, params.revisionNumber)
-      )
+        lte(landingSiteRevisions.revisionNumber, params.revisionNumber),
+      ),
     )
-    .orderBy(asc(landingSiteFiles.path), desc(landingSiteRevisions.revisionNumber));
+    .orderBy(
+      asc(landingSiteFiles.path),
+      desc(landingSiteRevisions.revisionNumber),
+    );
 
   const byPath = new Map<string, string>();
   for (const row of rows) {
@@ -556,7 +584,10 @@ export async function getAllLandingSiteFilesAtOrBeforeRevision(params: {
       byPath.set(row.path, row.content);
     }
   }
-  return Array.from(byPath.entries()).map(([path, content]) => ({ path, content }));
+  return Array.from(byPath.entries()).map(([path, content]) => ({
+    path,
+    content,
+  }));
 }
 
 export async function createChat(data: {
@@ -670,7 +701,10 @@ export async function getReadySiteAssetsByChatId(chatId: string) {
     .orderBy(asc(siteAssets.createdAt), asc(siteAssets.id));
 }
 
-export async function getSiteAssetAliasesByChatId(chatId: string, userId: number) {
+export async function getSiteAssetAliasesByChatId(
+  chatId: string,
+  userId: number,
+) {
   const rows = await db
     .select({ alias: siteAssets.alias })
     .from(siteAssets)
@@ -708,8 +742,8 @@ export async function updateSiteAsset(data: {
       and(
         eq(siteAssets.id, data.id),
         eq(siteAssets.chatId, data.chatId),
-        eq(siteAssets.userId, data.userId)
-      )
+        eq(siteAssets.userId, data.userId),
+      ),
     )
     .returning();
 
@@ -736,7 +770,7 @@ const CHATS_PAGE_SIZE = 12;
 /** Cursor format: "updatedAt_id" (ISO date_id) for stable pagination */
 export async function getChatsByUserPaginated(
   userId: number,
-  opts: { cursor?: string; limit?: number } = {}
+  opts: { cursor?: string; limit?: number } = {},
 ) {
   const limit = Math.min(opts.limit ?? CHATS_PAGE_SIZE, 50);
   const conditions = [eq(chats.userId, userId)];
@@ -749,8 +783,8 @@ export async function getChatsByUserPaginated(
       conditions.push(
         or(
           lt(chats.updatedAt, cursorDate),
-          and(eq(chats.updatedAt, cursorDate), lt(chats.id, cursorId))
-        )!
+          and(eq(chats.updatedAt, cursorDate), lt(chats.id, cursorId)),
+        )!,
       );
     }
   }
@@ -766,9 +800,7 @@ export async function getChatsByUserPaginated(
   const chatsPage = hasMore ? rows.slice(0, limit) : rows;
   const last = chatsPage[chatsPage.length - 1];
   const nextCursor =
-    hasMore && last
-      ? `${last.updatedAt.toISOString()}_${last.id}`
-      : undefined;
+    hasMore && last ? `${last.updatedAt.toISOString()}_${last.id}` : undefined;
 
   return { chats: chatsPage, nextCursor };
 }
@@ -776,7 +808,7 @@ export async function getChatsByUserPaginated(
 export async function updateChatByPublicId(
   chatPublicId: string,
   userId: number,
-  data: { title?: string; screenshotUrl?: string | null }
+  data: { title?: string; screenshotUrl?: string | null },
 ) {
   const result = await db
     .update(chats)
@@ -793,7 +825,7 @@ export async function updateChatByPublicId(
 export async function updateChatScreenshotUrl(
   chatPublicId: string,
   userId: number,
-  screenshotUrl: string
+  screenshotUrl: string,
 ) {
   return updateChatByPublicId(chatPublicId, userId, { screenshotUrl });
 }
@@ -824,7 +856,7 @@ export async function createChatMessage(data: {
 
 export async function getChatMessagesByPublicId(
   chatPublicId: string,
-  userId: number
+  userId: number,
 ) {
   const chat = await getChatByPublicId(chatPublicId, userId);
   if (!chat) return null;
@@ -845,7 +877,7 @@ export async function createChatToolCall(data: {
   toolName: string;
   toolCallId?: string | null;
   input?: unknown;
-  output?: unknown;    
+  output?: unknown;
 }) {
   const result = await db
     .insert(chatToolCalls)
@@ -860,7 +892,10 @@ export async function createChatToolCall(data: {
     })
     .returning();
 
-  await db.update(chats).set({ updatedAt: new Date() }).where(eq(chats.id, data.chatId));
+  await db
+    .update(chats)
+    .set({ updatedAt: new Date() })
+    .where(eq(chats.id, data.chatId));
 
   return result[0];
 }
@@ -869,10 +904,31 @@ export async function getRunningChatTurnRun(chatId: number) {
   const rows = await db
     .select()
     .from(chatTurnRuns)
-    .where(and(eq(chatTurnRuns.chatId, chatId), eq(chatTurnRuns.status, "running")))
+    .where(
+      and(eq(chatTurnRuns.chatId, chatId), eq(chatTurnRuns.status, "running")),
+    )
     .limit(1);
 
   return rows[0] ?? null;
+}
+
+export async function countActiveChatTurnRunsByUser(userId: number) {
+  const rows = await db
+    .select({
+      count: sql<number>`count(*)::int`,
+    })
+    .from(chatTurnRuns)
+    .where(
+      and(
+        eq(chatTurnRuns.userId, userId),
+        or(
+          eq(chatTurnRuns.status, "pending"),
+          eq(chatTurnRuns.status, "running"),
+        ),
+      ),
+    );
+
+  return Number(rows[0]?.count ?? 0);
 }
 
 export async function getChatTurnRunByIdempotencyKey(idempotencyKey: string) {
@@ -940,7 +996,9 @@ export async function claimNextPendingChatTurnRun(chatId: number) {
   const nextPending = await db
     .select()
     .from(chatTurnRuns)
-    .where(and(eq(chatTurnRuns.chatId, chatId), eq(chatTurnRuns.status, "pending")))
+    .where(
+      and(eq(chatTurnRuns.chatId, chatId), eq(chatTurnRuns.status, "pending")),
+    )
     .orderBy(asc(chatTurnRuns.sequence))
     .limit(1);
 
@@ -954,7 +1012,10 @@ export async function claimNextPendingChatTurnRun(chatId: number) {
       startedAt: new Date(),
     })
     .where(
-      and(eq(chatTurnRuns.id, candidate.id), eq(chatTurnRuns.status, "pending"))
+      and(
+        eq(chatTurnRuns.id, candidate.id),
+        eq(chatTurnRuns.status, "pending"),
+      ),
     )
     .returning();
 
@@ -1009,7 +1070,7 @@ export async function markChatTurnRunFailed(params: {
 /** Cancels a single turn run if it is still pending or running (e.g. user stop). */
 export async function cancelChatTurnRunIfActive(
   runId: string,
-  scope: { chatId: number; userId: number }
+  scope: { chatId: number; userId: number },
 ) {
   const [row] = await db
     .update(chatTurnRuns)
@@ -1023,8 +1084,11 @@ export async function cancelChatTurnRunIfActive(
         eq(chatTurnRuns.id, runId),
         eq(chatTurnRuns.chatId, scope.chatId),
         eq(chatTurnRuns.userId, scope.userId),
-        or(eq(chatTurnRuns.status, "pending"), eq(chatTurnRuns.status, "running"))
-      )
+        or(
+          eq(chatTurnRuns.status, "pending"),
+          eq(chatTurnRuns.status, "running"),
+        ),
+      ),
     )
     .returning();
 
@@ -1034,7 +1098,7 @@ export async function cancelChatTurnRunIfActive(
 /** Cancels all pending/running turn runs for a chat (covers race before run id is known). */
 export async function cancelAllActiveChatTurnRunsForChat(
   chatId: number,
-  userId: number
+  userId: number,
 ) {
   return db
     .update(chatTurnRuns)
@@ -1047,8 +1111,11 @@ export async function cancelAllActiveChatTurnRunsForChat(
       and(
         eq(chatTurnRuns.chatId, chatId),
         eq(chatTurnRuns.userId, userId),
-        or(eq(chatTurnRuns.status, "pending"), eq(chatTurnRuns.status, "running"))
-      )
+        or(
+          eq(chatTurnRuns.status, "pending"),
+          eq(chatTurnRuns.status, "running"),
+        ),
+      ),
     )
     .returning({ id: chatTurnRuns.id });
 }
@@ -1121,7 +1188,7 @@ export async function appendChatStreamEvents(data: {
           logicalEventId: nextLogicalEventId + index,
           eventType: event.eventType,
           payload: event.payload,
-        }))
+        })),
       )
       .returning();
 
@@ -1136,7 +1203,10 @@ export async function getChatStreamEventsAfter(data: {
 }) {
   const limit = Math.min(data.limit ?? 100, 500);
   const conditions = [eq(chatStreamEvents.chatId, data.chatId)];
-  if (typeof data.afterEventId === "number" && Number.isFinite(data.afterEventId)) {
+  if (
+    typeof data.afterEventId === "number" &&
+    Number.isFinite(data.afterEventId)
+  ) {
     conditions.push(gt(chatStreamEvents.logicalEventId, data.afterEventId));
   }
 
@@ -1169,8 +1239,11 @@ export async function getChatTurnRunQueueSummary(chatId: number) {
     .where(
       and(
         eq(chatTurnRuns.chatId, chatId),
-        or(eq(chatTurnRuns.status, "pending"), eq(chatTurnRuns.status, "running"))
-      )
+        or(
+          eq(chatTurnRuns.status, "pending"),
+          eq(chatTurnRuns.status, "running"),
+        ),
+      ),
     )
     .groupBy(chatTurnRuns.status);
 
@@ -1221,7 +1294,9 @@ export async function getPublishedSiteByChatId(chatId: string, userId: number) {
   const result = await db
     .select()
     .from(publishedSites)
-    .where(and(eq(publishedSites.chatId, chatId), eq(publishedSites.userId, userId)))
+    .where(
+      and(eq(publishedSites.chatId, chatId), eq(publishedSites.userId, userId)),
+    )
     .orderBy(desc(publishedSites.createdAt))
     .limit(1);
 
@@ -1231,7 +1306,7 @@ export async function getPublishedSiteByChatId(chatId: string, userId: number) {
 export async function updatePublishedSite(
   publicId: string,
   userId: number,
-  data: { revisionNumber: number }
+  data: { revisionNumber: number },
 ) {
   const result = await db
     .update(publishedSites)
@@ -1239,7 +1314,12 @@ export async function updatePublishedSite(
       ...data,
       updatedAt: new Date(),
     })
-    .where(and(eq(publishedSites.publicId, publicId), eq(publishedSites.userId, userId)))
+    .where(
+      and(
+        eq(publishedSites.publicId, publicId),
+        eq(publishedSites.userId, userId),
+      ),
+    )
     .returning();
 
   return result.length > 0 ? result[0] : null;
@@ -1284,7 +1364,10 @@ export async function deleteInspirationById(id: number) {
   return result[0] ?? null;
 }
 
-export async function updateInspirationEmbedding(id: number, embedding: number[]) {
+export async function updateInspirationEmbedding(
+  id: number,
+  embedding: number[],
+) {
   const result = await db
     .update(inspirations)
     .set({

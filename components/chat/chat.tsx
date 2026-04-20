@@ -18,10 +18,10 @@ import {
 } from "@/lib/preview/update-preview";
 import { usePendingMessageStore } from "@/lib/stores/usePendingMessageStore";
 import type { BillingApiResponse } from "@/app/api/billing/route";
+import { toast } from "sonner";
 
 const billingFetcher = (url: string) => fetch(url).then((res) => res.json());
 const MIN_CREDITS_TO_SEND = 0.5;
-
 type PendingAttachment = {
   localId: string;
   id: number | null;
@@ -378,12 +378,32 @@ function ChatInner({
 
         if (!response.ok) {
           const data = await response.json().catch(() => null);
-          if (response.status === 402 || data?.code === "INSUFFICIENT_CREDITS") {
+          if (
+            response.status === 402 ||
+            data?.code === "INSUFFICIENT_CREDITS"
+          ) {
             setMessages((prev) =>
-              prev.filter((m) => m.id !== userMessageId && m.id !== assistantMessageId)
+              prev.filter(
+                (m) => m.id !== userMessageId && m.id !== assistantMessageId
+              )
             );
             setShowCreditsLimitModal(true);
             void mutateBilling();
+            setStatus("ready");
+            return;
+          }
+          if (
+            response.status === 429 ||
+            data?.code === "TOO_MANY_ACTIVE_REQUESTS"
+          ) {
+            setMessages((prev) =>
+              prev.filter(
+                (m) => m.id !== userMessageId && m.id !== assistantMessageId
+              )
+            );
+            toast.warning(
+              "Max 3 requests at once. Please wait for one to finish."
+            );
             setStatus("ready");
             return;
           }
@@ -426,7 +446,9 @@ function ChatInner({
             // ignore
           }
           setMessages((prev) =>
-            prev.filter((m) => m.id !== userMessageId && m.id !== assistantMessageId)
+            prev.filter(
+              (m) => m.id !== userMessageId && m.id !== assistantMessageId
+            )
           );
           setStatus("ready");
           activeAssistantMessageIdRef.current = null;
@@ -940,7 +962,8 @@ function ChatInner({
       toolName: string,
       destination?: string
     ): ProgressStepKind => {
-      const d = typeof destination === "string" ? destination.toLowerCase() : "";
+      const d =
+        typeof destination === "string" ? destination.toLowerCase() : "";
       if (toolName === "create_site") {
         return "section";
       }
@@ -1132,10 +1155,15 @@ function ChatInner({
         const kind = stepKindByKey.get(activeStepKey) ?? "other";
         const startedAt = stepStartedAtByKey.get(activeStepKey) ?? Date.now();
         const elapsed = Math.max(0, Date.now() - startedAt);
-        const fractional = Math.min(0.92, clamp01(elapsed / STEP_DURATION_MS[kind]));
+        const fractional = Math.min(
+          0.92,
+          clamp01(elapsed / STEP_DURATION_MS[kind])
+        );
         inFlightWeight = getStepWeight(activeStepKey) * fractional;
       }
-      const progress = clamp01((completedWeight + inFlightWeight) / totalWeight);
+      const progress = clamp01(
+        (completedWeight + inFlightWeight) / totalWeight
+      );
       const completedSteps = Math.min(completedStepSet.size, discoveredSteps);
       const currentStepLabel =
         messageOverride ||
