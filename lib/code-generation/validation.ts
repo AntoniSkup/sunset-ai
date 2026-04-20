@@ -49,6 +49,9 @@ const ANIMATE_PRESENCE_RE = /<AnimatePresence\b/g;
 const TAILWIND_ANIMATION_RE = /\banimate-[\w:-]+/g;
 const ARBITRARY_ANIMATION_RE = /\[animation:[^\]]+\]/g;
 const INLINE_ANIMATION_STYLE_RE = /\banimation\s*:/g;
+const INLINE_FONT_FAMILY_RE = /\bfontFamily\s*:/g;
+const ARBITRARY_FONT_CLASS_RE = /\bfont-\[[^\]]+\]/g;
+const THEME_FILE_PATH = "landing/theme.tsx";
 
 function normalizePath(input: string): string {
   return input.replace(/\\/g, "/").replace(/\/{2,}/g, "/");
@@ -341,6 +344,7 @@ export async function validateCompleteness(params: {
     const homePage = findFile(files, "landing/pages/Home.tsx");
     const navbar = findFile(files, "landing/sections/Navbar.tsx");
     const footer = findFile(files, "landing/sections/Footer.tsx");
+    const themeFile = findFile(files, THEME_FILE_PATH);
 
     if (!indexFile) {
       findings.push({
@@ -376,6 +380,17 @@ export async function validateCompleteness(params: {
         path: "landing/sections/Footer.tsx",
       });
     }
+    if (!themeFile) {
+      findings.push({
+        severity: "warning",
+        issueCode: "MISSING_THEME_TOKENS",
+        message:
+          "Missing landing/theme.tsx. Reusable typography and global Google Font loading should be centralized there.",
+        path: THEME_FILE_PATH,
+        suggestedFix:
+          "Create landing/theme.tsx with shared typography tokens and an idempotent ensureThemeFonts() helper.",
+      });
+    }
 
     const allPaths = new Set([
       ...files.map((f) => f.path.toLowerCase()),
@@ -383,6 +398,7 @@ export async function validateCompleteness(params: {
       IMAGE_ASSET_MAP_PATH.toLowerCase(),
     ]);
     const unresolvedImports: Array<{ from: string; target: string }> = [];
+    const hardcodedFontFiles = new Set<string>();
     for (const file of files) {
       if (!file.path.startsWith("landing/")) continue;
       if (/<style[\s>\/]/.test(file.content)) {
@@ -397,6 +413,14 @@ export async function validateCompleteness(params: {
         });
       }
       const imports = extractRelativeImports(file.content);
+      if (file.path !== THEME_FILE_PATH) {
+        const hardcodedFontCount =
+          countMatches(file.content, INLINE_FONT_FAMILY_RE) +
+          countMatches(file.content, ARBITRARY_FONT_CLASS_RE);
+        if (hardcodedFontCount > 0) {
+          hardcodedFontFiles.add(file.path);
+        }
+      }
       for (const spec of imports) {
         const resolved = resolveImportPath(file.path, spec);
         if (!resolved) continue;
@@ -412,6 +436,17 @@ export async function validateCompleteness(params: {
         message: `Unresolved import reference to ${missing.target}.`,
         path: missing.from,
         suggestedFix: `Create ${missing.target} or update imports in ${missing.from}.`,
+      });
+    }
+    if (hardcodedFontFiles.size >= 3) {
+      findings.push({
+        severity: "warning",
+        issueCode: "DUPLICATED_FONT_DECLARATIONS",
+        message:
+          "Font declarations appear in many files. Prefer centralizing typography in landing/theme.tsx and only override locally when necessary.",
+        path: Array.from(hardcodedFontFiles)[0],
+        suggestedFix:
+          "Move shared font declarations to landing/theme.tsx tokens and keep section-level overrides intentional and rare.",
       });
     }
 

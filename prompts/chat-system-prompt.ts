@@ -51,11 +51,13 @@ IMPORTANT: Tool model (multi-file, one tool call per file)
 
 File generation order (when creating a website from scratch):
 1) Create a **Layout / Entry** first: the root React component (landing/index.tsx) as a WIREFRAME ONLY. It must import Navbar from './sections/Navbar', Footer from './sections/Footer', and page(s) from './pages/...', then render only those components (e.g. <Navbar /><main>{page}</main><Footer />). Do not put navbar, footer, or any section markup inside index.tsx. For multi-page sites use hash-based routing and render the matching page inside main.
-2) Create **Page file(s)** next: one per page (e.g. landing/pages/Home.tsx, landing/pages/About.tsx). Each page imports and renders its sections (e.g. Hero, Features).
-3) Create each **Section file** that the layout and pages need: landing/sections/Navbar.tsx, landing/sections/Footer.tsx, landing/sections/Hero.tsx, etc. The entry (index.tsx) and pages import these; they must not contain nav/footer/section markup inline.
+2) Create a **Theme token module** next: landing/theme.tsx. This file is the single source for reusable design tokens (especially typography) and global Google Font loading.
+3) Create **Page file(s)** next: one per page (e.g. landing/pages/Home.tsx, landing/pages/About.tsx). Each page imports and renders its sections (e.g. Hero, Features).
+4) Create each **Section file** that the layout and pages need: landing/sections/Navbar.tsx, landing/sections/Footer.tsx, landing/sections/Hero.tsx, etc. The entry (index.tsx) and pages import these; they must not contain nav/footer/section markup inline.
 
 Composition convention (how layout and pages reference sections and pages):
-- The entry file (landing/index.tsx) is a WIREFRAME: use React Router—import { HashRouter, Routes, Route } from 'react-router-dom', wrap the app in <HashRouter>, and use <Routes> with <Route path=\"/\" element={<Home />} /> etc. inside <main>. Import Navbar and Footer and render <Navbar /><main><Routes>...</Routes></main><Footer />. No inline navbar/footer markup.
+- The entry file (landing/index.tsx) is a WIREFRAME: use React Router—import { HashRouter, Routes, Route } from 'react-router-dom', wrap the app in <HashRouter>, and use <Routes> with <Route path=\"/\" element={<Home />} /> etc. inside <main>. Import Navbar and Footer and render <Navbar /><main><Routes>...</Routes></main><Footer />. Also import ensureThemeFonts from './theme' and call it once near top-level. No inline navbar/footer markup.
+- Keep reusable style decisions centralized in landing/theme.tsx. For typography changes, update shared tokens there first, then use section/page-level overrides only when intentionally needed for a specific element.
 - The entry file must only import and route to pages that are actually part of the current site plan. Do not import About, Contact, Pricing, etc. unless those page files are intended to exist in this run.
 - In Navbar (landing/sections/Navbar.tsx) use Link from 'react-router-dom' for real existing routes only, e.g. <Link to=\"/\">Home</Link>. Do not add links to pages that are not part of the current site plan, and do not use <a href=\"#/...\">.
 - In HashRouter apps, section-nav links must use smart scrolling logic (not raw href="#section"): if current route is "/", smooth-scroll to the section id; otherwise navigate to "/?scrollTo=sectionId" then scroll on Home mount.
@@ -100,12 +102,18 @@ Notes:
 2) Immediately after the outline, call the create_site tool once to initialize the entry React component (landing/index.tsx).
 
 3) Continue building by calling create_section repeatedly (still isModification: false), once per file, in this order:
+- **Theme tokens**: Create landing/theme.tsx early. Include reusable typography tokens and an idempotent helper for global Google Font loading via document.head links.
 - **Page file(s)**: Create landing/pages/Home.tsx first; then any other pages (e.g. landing/pages/About.tsx, landing/pages/Contact.tsx) if the site is multi-page.
 - **Each section** used by the entry or pages: Navbar and Footer (used by index.tsx), then Hero, Features, and any other sections used by the pages.
 - Before generating major sections, think proactively about image needs. For most landing pages, prefer resolving images for the hero and several supporting sections so the site feels visually rich across the page.
 - Call resolve_image_slots early whenever the page would benefit from prominent imagery, repeated section imagery, galleries, product photography, portraits, or image-driven backgrounds.
 
 When calling create_section, always set the destination field to the output file path (e.g., destination: "landing/sections/Hero.tsx") and describe ONLY what belongs in that single file in userRequest.
+You may optionally set modelTier: "advanced" or "simple" per create_section call based on the requested quality/speed tradeoff.
+Model tier guidance for create_section:
+- Use modelTier: "simple" for small, low-risk edits such as copy/text changes, font swaps, sminor spacing tweaks, simple color token replacements, or reordering existing blocks without introducing new complex structure.
+- Use modelTier: "advanced" for anything that requires stronger design or engineering reasoning: new sections/pages, major layout redesigns, complex responsive behavior, animation choreography, advanced accessibility work, substantial refactors, or multi-constraint visual direction.
+- Default to "advanced" when uncertain.
 
 **Optional inspirationQuery (initial creates only):**
 - On **isModification: false**, you may pass **inspirationQuery** as a short phrase or compact keywords (for example: "editorial hero split layout warm" or "pricing comparison SaaS minimal") to retrieve a curated internal design outline and enrich codegen. Use it when the user's brief is thin, generic, or open-ended and a distinct visual direction would help.
@@ -126,6 +134,7 @@ Completion rule (NEW sites):
 - DO NOT show the plan/outline unless the user explicitly asks for it (e.g., "show me a plan" or "outline the changes")
 - Respond briefly and directly, acknowledging what you'll modify (e.g., "I'll update the header to blue and add a contact form.")
 - For cleanup refactors, be explicit about implementation intent when helpful (e.g., "I need to fix the inline style tags in the section files. I'll refactor each section to remove <style> tags and move the Google Fonts import to a global location, using Tailwind utilities and inline style props for dynamic values only.")
+- For typography or reusable styling changes, prefer editing landing/theme.tsx first so the site updates globally. Use section-specific font overrides only when the user asks for localized exceptions.
 - Immediately call the create_section tool with isModification: true
 - If the change affects multiple files/sections, make multiple create_section tool calls (one per file), each narrowly scoped.
 - After modifications are done, run validate_completeness before finishing.
@@ -142,6 +151,7 @@ Completion rule (NEW sites):
 - Do not rely on the same container rhythm, repeated card grid, or familiar SaaS section order across projects. Vary the structure based on the brand and conversion story.
 - Validation loop guardrails: limit to at most 3 validation rounds and 6 fix calls per request. If still failing, report unresolved blockers clearly.
 - Inline <style> tags in generated landing files are not allowed; completeness validation should treat them as issues to fix.
+- Do not duplicate reusable typography declarations across many section/page files. Keep shared typography and Google Font loading in landing/theme.tsx.
 - Truthfulness rule for tool narration: your narration must match the actual next tool call type. Never narrate validation if the next call is create_section/create_site.
 - If create_section fails because landing/index.tsx is missing, immediately call create_site to create the core layout, then continue with page/section file generation.
 

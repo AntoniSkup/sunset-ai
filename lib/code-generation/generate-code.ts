@@ -3,6 +3,7 @@ import { z } from "zod";
 import { transform } from "esbuild";
 import {
   getAIModel,
+  getAIModelId,
   isAnthropicCodegenPromptCachingEnabled,
 } from "@/lib/ai/get-ai-model";
 import { getOrCreateAccountForUser } from "@/lib/billing/accounts";
@@ -259,6 +260,7 @@ async function generateAndSaveSingleFile(params: {
   userRequest: string;
   isModification?: boolean;
   inspirationQuery?: string;
+  modelTier?: "advanced" | "simple";
   /** Legacy: charge incrementally (non-chat callers). */
   ensureChargedForAction?: EnsureChargedForAction;
   /** Chat turn: no per-file debit; parent charges once on stream success. */
@@ -414,7 +416,17 @@ async function generateAndSaveSingleFile(params: {
       const dynamicCodegenPrompt =
         buildCodeGenerationDynamicPrompt(promptParams);
 
-      const model = await getAIModel();
+      const useLighterModel = params.modelTier === "simple";
+      const [model, modelId] = await Promise.all([
+        getAIModel(useLighterModel),
+        getAIModelId(useLighterModel),
+      ]);
+      console.log("[codegen] selected model", {
+        chatId: params.chatId,
+        destination: normalizedDestination,
+        modelTier: params.modelTier ?? "advanced",
+        modelId,
+      });
 
       const telemetry = {
         isEnabled: true,
@@ -603,7 +615,7 @@ const createSectionSchema = z.object({
     .string()
     .min(1, "Destination is required")
     .describe(
-      "Relative .tsx file path for this file (e.g. landing/sections/Hero.tsx, landing/pages/Home.tsx)"
+      "Relative .tsx file path for this file (e.g. landing/theme.tsx, landing/sections/Hero.tsx, landing/pages/Home.tsx)"
     ),
   userRequest: z
     .string()
@@ -619,6 +631,12 @@ const createSectionSchema = z.object({
     .optional()
     .describe(
       "Optional short phrase or keywords to retrieve a curated design-inspiration outline from the library. Omit when the brief is already very specific. Do not pass when isModification is true."
+    ),
+  modelTier: z
+    .enum(["advanced", "simple"])
+    .optional()
+    .describe(
+      "Optional model complexity tier for this file generation. Use advanced for higher quality and simple for faster/lighter generations."
     ),
 });
 
@@ -700,7 +718,7 @@ const createSiteToolExecute = async (
     destination: "landing/index.tsx",
     userRequest:
       userRequest +
-      "\n\nCreate the entry React component for the site (landing/index.tsx) as a WIREFRAME ONLY.\n\nHard requirements:\n- Use React Router: import { HashRouter, Routes, Route } from 'react-router-dom'. Wrap the whole app in <HashRouter>.\n- Put page content inside <Routes>. Only create Route entries for pages that are actually part of the current site plan. If only Home exists, include only <Route path=\"/\" element={<Home />} />.\n- Import and render ONLY: Navbar from './sections/Navbar', Footer from './sections/Footer', and the page components that really exist under './pages/...'. Do not import About, Contact, or any other page unless that page is part of the current site plan.\n- Structure: <HashRouter><div><Navbar /><main><Routes>...</Routes></main><Footer /></div></HashRouter>.\n- Do NOT use window.location.hash or manual switch; use HashRouter and Routes only.\n- Do NOT output <!DOCTYPE html>, <html>, <head>, or <body>; the app wraps your component.\n- Use Tailwind utility classes (className).",
+      "\n\nCreate the entry React component for the site (landing/index.tsx) as a WIREFRAME ONLY.\n\nHard requirements:\n- Use React Router: import { HashRouter, Routes, Route } from 'react-router-dom'. Wrap the whole app in <HashRouter>.\n- Put page content inside <Routes>. Only create Route entries for pages that are actually part of the current site plan. If only Home exists, include only <Route path=\"/\" element={<Home />} />.\n- Import and render ONLY: Navbar from './sections/Navbar', Footer from './sections/Footer', and the page components that really exist under './pages/...'. Do not import About, Contact, or any other page unless that page is part of the current site plan.\n- Import { ensureThemeFonts } from './theme' and call ensureThemeFonts() once near the top-level so Google Fonts/theme font links are loaded globally and centrally.\n- Structure: <HashRouter><div><Navbar /><main><Routes>...</Routes></main><Footer /></div></HashRouter>.\n- Do NOT use window.location.hash or manual switch; use HashRouter and Routes only.\n- Do NOT output <!DOCTYPE html>, <html>, <head>, or <body>; the app wraps your component.\n- Use Tailwind utility classes (className).",
     isModification: false,
     deferredChatTurnBilling,
   });
@@ -725,6 +743,7 @@ const createSectionToolExecute = async (
     userRequest,
     isModification,
     inspirationQuery,
+    modelTier,
   }: z.infer<typeof createSectionSchema>,
   chatId: string,
   userId: number,
@@ -761,6 +780,7 @@ const createSectionToolExecute = async (
     userRequest,
     isModification,
     inspirationQuery,
+    modelTier,
     deferredChatTurnBilling,
   });
 
@@ -880,7 +900,7 @@ export function createSectionTool(
   const deferredChatTurnBilling = Boolean(options?.deferredChatTurnBilling);
   return tool({
     description:
-      "Create or modify exactly one React/TSX file (layout, page, or section) for the landing site. One tool call writes exactly one file. Use .tsx paths (e.g. landing/sections/Hero.tsx, landing/pages/Home.tsx). For landing/pages/* and landing/sections/*, landing/index.tsx must already exist (create it first with create_site). Optionally pass inspirationQuery (short keywords or phrase) on initial creates to pull a curated design-inspiration outline into the codegen prompt; omit when the user brief is already very specific or when isModification is true.",
+      "Create or modify exactly one React/TSX file (layout, theme, page, or section) for the landing site. One tool call writes exactly one file. Use .tsx paths (e.g. landing/theme.tsx, landing/sections/Hero.tsx, landing/pages/Home.tsx). For landing/pages/* and landing/sections/*, landing/index.tsx must already exist (create it first with create_site). Optionally pass inspirationQuery (short keywords or phrase) on initial creates to pull a curated design-inspiration outline into the codegen prompt; omit when the user brief is already very specific or when isModification is true. Optionally pass modelTier: 'advanced' | 'simple' to choose section generation model complexity.",
     inputSchema: createSectionSchema,
     execute: async (input: z.infer<typeof createSectionSchema>) => {
       return createSectionToolExecute(

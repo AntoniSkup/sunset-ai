@@ -2,7 +2,7 @@ const FRONTEND_AESTHETICS_GUIDANCE = `
 Frontend aesthetics:
 - Avoid generic, "on distribution" frontend outputs and the common "AI slop" aesthetic.
 - Make the UI feel distinctive, creative, and context-specific rather than like a cookie-cutter SaaS template.
-- Typography is a primary design tool: choose beautiful, interesting font combinations and avoid defaulting to Inter, Roboto, Arial, system fonts, or the same overused choices repeatedly. Load custom web fonts via <link> elements (for example <link rel="stylesheet" href="https://fonts.googleapis.com/css2?...">) in the global HTML <head>, not inside section/page TSX.
+- Typography is a primary design tool: choose beautiful, interesting font combinations and avoid defaulting to Inter, Roboto, Arial, system fonts, or the same overused choices repeatedly. Keep reusable typography in landing/theme.tsx tokens. Load Google Fonts globally via an idempotent helper in landing/theme.tsx (append <link rel="preconnect"> and <link rel="stylesheet"> to document.head), not inside section/page components.
 - Commit to a cohesive color story. Use CSS variables when defining theme values or repeated colors. Prefer strong dominant tones with sharp accents over timid, evenly distributed palettes.
 - Draw inspiration from IDE themes, editorial layouts, cultural aesthetics, music scenes, fashion, print design, and other unexpected references when appropriate.
 - Use motion deliberately: prioritize a few memorable animation beats like staggered entrances, reveal effects, scroll-triggered entrances, and tactile hover states. Default to Motion for React via 'motion/react' for primary animation work. Use CSS/Tailwind animation only as a fallback for tiny ambient loops or very simple effects that do not warrant Motion.
@@ -39,7 +39,8 @@ Requirements:
 - Make the design modern, responsive, and visually appealing
 - Output MUST be raw React/JSX/TSX only (no markdown code fences, no backticks, no \`\`\`jsx)
 - Do NOT include <!DOCTYPE html>, <html>, <head>, or <body> in section/page files
-- Custom web fonts belong in the global HTML <head> via <link rel="stylesheet" href="..."> (never embedded font imports or @font-face blocks inside generated components)
+- Global reusable style tokens must live in landing/theme.tsx (typography, colors, shared spacing/constants).
+- Google Fonts are allowed, but font loading must be centralized in landing/theme.tsx via a single idempotent helper (never embedded font imports or @font-face blocks inside section/page components).
 
 ${FRONTEND_AESTHETICS_GUIDANCE}
 
@@ -65,7 +66,8 @@ Generate exactly ONE React/TSX file for a landing site. Each tool call creates/u
 **Output requirements**
 - Output RAW React/JSX/TSX ONLY (no markdown, no explanations, no code fences).
 - Use Tailwind CSS utility classes for ALL styling (no <style> tags, no external CSS). Use the className prop.
-- Do not import Google Fonts or define @font-face rules inside section/page files. Keep font loading global: add stylesheets with <link rel="stylesheet" ...> (and preconnect <link>s when appropriate) in the document <head>, not @import or font imports inside TSX. Use inline style props only for truly dynamic values that cannot be expressed cleanly with Tailwind utilities.
+- Reusable design values must come from landing/theme.tsx. Prefer importing typography tokens from that file instead of hardcoding fonts repeatedly in sections/pages.
+- Do not import Google Fonts or define @font-face rules inside section/page files. Keep font loading global through landing/theme.tsx by exposing an idempotent helper that appends preconnect + stylesheet links into document.head. Use inline style props only for truly dynamic values that cannot be expressed cleanly with Tailwind utilities.
 - When the section uses meaningful animation, import from 'motion/react' and implement the main entrances, reveals, staggers, or hover choreography with motion components/variants. Do not rely on custom CSS animation or Tailwind 'animate-*' classes for the primary animated experience.
 - For real imagery, render only resolved site assets with ImageAsset aliases. Never invent raw image URLs, placeholder CDN URLs, or direct stock-provider URLs in the generated TSX.
 - When site assets are provided in context, copy the alias exactly as given in the manifest. Never rewrite "hero.jpg" into something like "hero-warm-and-cozy.jpg".
@@ -73,7 +75,8 @@ Generate exactly ONE React/TSX file for a landing site. Each tool call creates/u
 - Do not create custom inline SVG artwork, decorative SVG backgrounds, or hand-written SVG illustrations unless the user explicitly requests SVG-based graphics.
 - The code must be valid JSX/TSX and self-contained for this file.
 - **File structure (strict)**: Put ALL import statements at the very top of the file. Then output exactly ONE default-export component. Do NOT repeat the component, do NOT put imports after the component, and do NOT duplicate any part of the file. Correct order: first every import line, then the single export default function ... { ... }. Example for a page file: first line "import Hero from '../sections/Hero';", then blank line, then "export default function Home() { return (...); }" once only.
-- If destination is exactly "landing/index.tsx", output a WIREFRAME ONLY: import { HashRouter, Routes, Route } from 'react-router-dom', plus Navbar, Footer, and only the page components that are actually part of the current site plan. Wrap everything in <HashRouter>. Use <Routes> and include only the real planned routes, e.g. just <Route path=\"/\" element={<Home />} /> for a single-page site. Do NOT import or route to About/Contact/etc. unless those page files are meant to exist. Do NOT use window.location.hash or manual switch. Do NOT put navbar/footer markup inline. Do NOT output <!DOCTYPE html>, <html>, <head>, or <body>.
+- If destination is exactly "landing/index.tsx", output a WIREFRAME ONLY: import { HashRouter, Routes, Route } from 'react-router-dom', plus Navbar, Footer, and only the page components that are actually part of the current site plan. Also import { ensureThemeFonts } from './theme' and call ensureThemeFonts() once near top-level so global Google Font links are applied from a single source. Wrap everything in <HashRouter>. Use <Routes> and include only the real planned routes, e.g. just <Route path=\"/\" element={<Home />} /> for a single-page site. Do NOT import or route to About/Contact/etc. unless those page files are meant to exist. Do NOT use window.location.hash or manual switch. Do NOT put navbar/footer markup inline. Do NOT output <!DOCTYPE html>, <html>, <head>, or <body>.
+- If destination is exactly "landing/theme.tsx", output a single token module for reusable design values. Include exported typography tokens (for example heading/body/font class mappings or font-family strings), optional shared color tokens, and an exported idempotent helper named ensureThemeFonts() that loads Google Fonts globally via document.head links.
 - If destination is under "landing/pages/", output a single default-export React component (e.g. export default function Home() { ... }). Import section components from '../sections/...' and render them. Do NOT include document structure.
 - If destination is under "landing/sections/", output a single default-export React component (e.g. export default function Hero() { ... }). Do NOT include document structure or import other landing sections unless needed.
 - Do NOT include scripts or useEffect for non-routing logic unless explicitly requested.
@@ -111,6 +114,7 @@ ${LANDING_PAGE_ART_DIRECTION_GUIDANCE}
 - Match the design of that section: same colors, typography, spacing, button styles, and container patterns.
 - Use the same Tailwind classes for similar elements (e.g., if headings use text-2xl font-serif, use the same).
 - Keep the visual language consistent with the rest of the site even if only one prior section file is shown for reference.
+- Prefer global typography from landing/theme.tsx. Section-level font overrides are allowed only when intentional (for example a logo wordmark or a special quote), while the default should come from shared theme tokens.
 
 **Multi-page sites**
 - For the entry (landing/index.tsx), use React Router: import { HashRouter, Routes, Route } from 'react-router-dom'. Wrap the app in <HashRouter>, put <Routes> and <Route path=\"/\" element={<Home />} /> etc. inside <main>. Do not use window.location.hash.
