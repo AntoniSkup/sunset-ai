@@ -511,13 +511,19 @@ export async function validateCompleteness(params: {
       }
     }
 
-    const llmResult = await runLlmCompletenessCheck({
-      files,
-      siteSpec: params.siteSpec,
-    });
-    if (llmResult.ok) {
+    const preLlmCriticalCount = findings.filter(
+      (finding) => finding.severity === "critical"
+    ).length;
+    const shouldRunLlmCompleteness = preLlmCriticalCount === 0;
+    const llmResult = shouldRunLlmCompleteness
+      ? await runLlmCompletenessCheck({
+          files,
+          siteSpec: params.siteSpec,
+        })
+      : null;
+    if (llmResult?.ok) {
       findings.push(...llmResult.findings);
-    } else {
+    } else if (llmResult && !llmResult.ok) {
       findings.push({
         severity: "warning",
         issueCode: "LLM_COMPLETENESS_UNAVAILABLE",
@@ -540,16 +546,23 @@ export async function validateCompleteness(params: {
         fileCount: files.length,
         unresolvedImportCount: unresolvedImports.length,
         animationStrategy,
-        llmCompleteness: llmResult.ok
-          ? {
-              status: llmResult.status,
-              confidence: llmResult.confidence,
-              summary: llmResult.summary,
-            }
-          : {
-              status: "error",
-              error: llmResult.error,
-            },
+        llmCompleteness:
+          llmResult?.ok === true
+            ? {
+                status: llmResult.status,
+                confidence: llmResult.confidence,
+                summary: llmResult.summary,
+              }
+            : llmResult && !llmResult.ok
+              ? {
+                  status: "error",
+                  error: llmResult.error,
+                }
+              : {
+                  status: "skipped_due_to_deterministic_failures",
+                  skipped: true,
+                  preLlmCriticalCount,
+                },
       },
     };
   } catch (error) {

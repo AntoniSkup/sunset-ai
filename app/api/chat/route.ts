@@ -71,6 +71,7 @@ const TEXT_DELTA_FLUSH_MS = 30;
 const TEXT_DELTA_FLUSH_CHARS = 8;
 const TURN_EVENT_FLUSH_MS = 60;
 const TURN_EVENT_BATCH_SIZE = 24;
+const MAX_CHAT_STEPS_PER_TURN = 20;
 
 function normalizeErrorMessage(
   value: unknown,
@@ -575,7 +576,7 @@ async function chatHandler(request: NextRequest) {
       messages: modelMessages,
       tools,
       abortSignal: turnRunAbortController?.signal,
-      stopWhen: stepCountIs(20),
+      stopWhen: stepCountIs(MAX_CHAT_STEPS_PER_TURN),
       experimental_telemetry: {
         isEnabled: true,
         functionId: "chat-stream",

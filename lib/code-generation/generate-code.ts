@@ -1,6 +1,7 @@
 import { generateText, tool } from "ai";
 import { z } from "zod";
 import { transform } from "esbuild";
+import { createHash } from "node:crypto";
 import {
   getAIModel,
   getAIModelId,
@@ -253,6 +254,72 @@ type GenerateAndSaveSingleFileResult =
     })
   | { success: false; error: string };
 
+function buildCodeArtifactMeta(codeContent: unknown): {
+  bytes: number;
+  lines: number;
+  sha256: string | null;
+} {
+  if (typeof codeContent !== "string") {
+    return { bytes: 0, lines: 0, sha256: null };
+  }
+
+  const bytes = Buffer.byteLength(codeContent, "utf8");
+  const lines = codeContent.length > 0 ? codeContent.split(/\r?\n/).length : 0;
+  const sha256 = createHash("sha256").update(codeContent, "utf8").digest("hex");
+  return { bytes, lines, sha256 };
+}
+
+function chooseModelTier(params: {
+  userRequest: string;
+  isModification?: boolean;
+  modelTier?: "advanced" | "simple";
+}): "advanced" | "simple" {
+  if (params.modelTier) return params.modelTier;
+  if (!params.isModification) return "advanced";
+
+  const normalizedRequest = params.userRequest.toLowerCase();
+  const simpleEditSignal =
+    /\b(copy|text|wording|typo|rename|replace|color|font|spacing|padding|margin|align|alignment|rounded|border|shadow)\b/.test(
+      normalizedRequest
+    ) ||
+    /\b(change|update|adjust|tweak|polish)\b/.test(normalizedRequest);
+  const complexEditSignal =
+    /\b(add|create|new|section|page|layout|redesign|responsive|animation|motion|refactor|restructure|flow|navigation|router|form|hero|pricing|comparison|features)\b/.test(
+      normalizedRequest
+    );
+
+  return simpleEditSignal && !complexEditSignal ? "simple" : "advanced";
+}
+
+function ensureThemeTypographyCompatExports(code: string): string {
+  const hasFontSans = /\bexport\s+(?:const|let|var|function)\s+fontSans\b/.test(
+    code
+  );
+  const hasFontSerif = /\bexport\s+(?:const|let|var|function)\s+fontSerif\b/.test(
+    code
+  );
+  if (hasFontSans && hasFontSerif) {
+    return code;
+  }
+
+  const compatLines: string[] = [];
+  if (!hasFontSans) {
+    compatLines.push(
+      "export const fontSans = (typeof THEME !== 'undefined' && THEME?.typography?.fontBody) ? THEME.typography.fontBody : \"system-ui, sans-serif\";"
+    );
+  }
+  if (!hasFontSerif) {
+    compatLines.push(
+      "export const fontSerif = (typeof THEME !== 'undefined' && THEME?.typography?.fontHeading) ? THEME.typography.fontHeading : \"Georgia, serif\";"
+    );
+  }
+  if (compatLines.length === 0) {
+    return code;
+  }
+
+  return `${code.trimEnd()}\n\n${compatLines.join("\n")}\n`;
+}
+
 async function generateAndSaveSingleFile(params: {
   chatId: string;
   userId: number;
@@ -416,7 +483,12 @@ async function generateAndSaveSingleFile(params: {
       const dynamicCodegenPrompt =
         buildCodeGenerationDynamicPrompt(promptParams);
 
-      const useLighterModel = params.modelTier === "simple";
+      const selectedModelTier = chooseModelTier({
+        userRequest: params.userRequest,
+        isModification: shouldModify,
+        modelTier: params.modelTier,
+      });
+      const useLighterModel = selectedModelTier === "simple";
       const [model, modelId] = await Promise.all([
         getAIModel(useLighterModel),
         getAIModelId(useLighterModel),
@@ -424,7 +496,7 @@ async function generateAndSaveSingleFile(params: {
       console.log("[codegen] selected model", {
         chatId: params.chatId,
         destination: normalizedDestination,
-        modelTier: params.modelTier ?? "advanced",
+        modelTier: selectedModelTier,
         modelId,
       });
 
@@ -497,6 +569,10 @@ async function generateAndSaveSingleFile(params: {
       }
 
       let finalCode = validationResult.fixedCode;
+
+      if (normalizedDestination.toLowerCase() === "landing/theme.tsx") {
+        finalCode = ensureThemeTypographyCompatExports(finalCode);
+      }
 
       if (isIndexDestination(normalizedDestination) && !isTsx) {
         finalCode = enforceIndexShell(finalCode);
@@ -724,13 +800,14 @@ const createSiteToolExecute = async (
   });
 
   if (result.success) {
+    const artifact = buildCodeArtifactMeta((result as any).codeContent);
     return {
       success: true,
       chatId,
       destination: result.destination,
       revisionId: (result as any).revisionId,
       revisionNumber: (result as any).revisionNumber,
-      codeContent: (result as any).codeContent,
+      artifact,
     };
   }
 
@@ -785,13 +862,14 @@ const createSectionToolExecute = async (
   });
 
   if (result.success) {
+    const artifact = buildCodeArtifactMeta((result as any).codeContent);
     return {
       success: true,
       chatId,
       destination: (result as any).destination,
       revisionId: (result as any).revisionId,
       revisionNumber: (result as any).revisionNumber,
-      codeContent: (result as any).codeContent,
+      artifact,
     };
   }
 
@@ -917,12 +995,34 @@ export function createValidateCompletenessTool(
   chatId: string,
   userId: number
 ) {
+  let hasCompletedSuccessfulValidation = false;
   return tool({
     description:
       "Validate generated landing site completeness after all files are created. Uses deterministic checks plus an LLM semantic review to detect missing files, unresolved imports, missing requested sections/pages, and composition gaps.",
     inputSchema: validateCompletenessSchema,
     execute: async (input: z.infer<typeof validateCompletenessSchema>) => {
-      return validateCompletenessToolExecute(input, chatId, userId);
+      if (hasCompletedSuccessfulValidation) {
+        return {
+          success: true,
+          status: "pass",
+          reportType: "completeness",
+          summary:
+            "Skipped duplicate completeness validation in the same turn to reduce cost.",
+          criticalFindings: [],
+          warningFindings: [],
+          nextAction: "finish",
+          metadata: {
+            skipped: true,
+            reason: "duplicate_validation_in_same_turn",
+          },
+        };
+      }
+
+      const result = await validateCompletenessToolExecute(input, chatId, userId);
+      if (result?.success === true && result?.status === "pass") {
+        hasCompletedSuccessfulValidation = true;
+      }
+      return result;
     },
   } as any);
 }

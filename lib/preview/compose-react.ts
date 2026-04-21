@@ -16,6 +16,7 @@ import {
 import { firstHttpOriginFromCandidates } from "@/lib/url/resolve-http-origin";
 
 const ENTRY_PATH = "landing/index.tsx";
+const THEME_PATH = "landing/theme.tsx";
 const MAX_FILES = 50;
 const MAX_DEPTH = 10;
 const COMPOSE_REACT_DEBUG = process.env.COMPOSE_REACT_DEBUG === "1";
@@ -152,6 +153,35 @@ function wrapInHtml(bodyHtml: string): string {
 
 function escapeForJsString(value: string): string {
   return JSON.stringify(value);
+}
+
+function ensureThemeTypographyCompatExports(content: string): string {
+  const hasFontSans = /\bexport\s+(?:const|let|var|function)\s+fontSans\b/.test(
+    content
+  );
+  const hasFontSerif = /\bexport\s+(?:const|let|var|function)\s+fontSerif\b/.test(
+    content
+  );
+  if (hasFontSans && hasFontSerif) {
+    return content;
+  }
+
+  const compatLines: string[] = [];
+  if (!hasFontSans) {
+    compatLines.push(
+      "export const fontSans = (typeof THEME !== 'undefined' && THEME?.typography?.fontBody) ? THEME.typography.fontBody : \"system-ui, sans-serif\";"
+    );
+  }
+  if (!hasFontSerif) {
+    compatLines.push(
+      "export const fontSerif = (typeof THEME !== 'undefined' && THEME?.typography?.fontHeading) ? THEME.typography.fontHeading : \"Georgia, serif\";"
+    );
+  }
+  if (compatLines.length === 0) {
+    return content;
+  }
+
+  return `${content.trimEnd()}\n\n${compatLines.join("\n")}\n`;
 }
 
 function buildRuntimeAssetMapModule(
@@ -426,8 +456,12 @@ export async function getPreviewBrowserBundle(params: {
             build.onLoad({ filter: /.*/, namespace: "landing" }, (args) => {
               const content = fileMap.get(args.path);
               if (content == null) return null;
+              const patchedContent =
+                args.path === THEME_PATH
+                  ? ensureThemeTypographyCompatExports(content)
+                  : content;
               return {
-                contents: content,
+                contents: patchedContent,
                 loader: "tsx",
                 resolveDir: process.cwd(),
               };
@@ -550,8 +584,12 @@ export async function getComposedReactHtml(params: {
             build.onLoad({ filter: /.*/, namespace: "landing" }, (args) => {
               const content = fileMap.get(args.path);
               if (content == null) return null;
+              const patchedContent =
+                args.path === THEME_PATH
+                  ? ensureThemeTypographyCompatExports(content)
+                  : content;
               return {
-                contents: content,
+                contents: patchedContent,
                 loader: "tsx",
                 resolveDir: process.cwd(),
               };
