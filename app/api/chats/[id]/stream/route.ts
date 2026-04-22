@@ -14,6 +14,7 @@ const SSE_POLL_INTERVAL_MAX_MS = 500;
 const SSE_HEARTBEAT_INTERVAL_MS = 15000;
 const SSE_ERROR_RETRY_BASE_MS = 500;
 const SSE_ERROR_RETRY_MAX_MS = 3000;
+const SSE_CONNECTION_MAX_MS = 240000;
 
 function sseFrame(params: {
   id?: number;
@@ -107,6 +108,18 @@ export async function GET(
         let lastHeartbeatAtMs = 0;
         let idlePolls = 0;
         while (!closed) {
+          if (Date.now() - connectionStartedAt >= SSE_CONNECTION_MAX_MS) {
+            logChatStreamDiagnostic("SSE connection recycled before runtime timeout", {
+              chatId: chat.id,
+              chatPublicId,
+              userId: user.id,
+              afterEventId,
+              connectedForMs: Date.now() - connectionStartedAt,
+              maxConnectionMs: SSE_CONNECTION_MAX_MS,
+            });
+            close();
+            return;
+          }
           try {
             const readStartedAt = Date.now();
             const events = await readStreamEventsAfter({
