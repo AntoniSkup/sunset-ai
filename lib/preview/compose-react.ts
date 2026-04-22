@@ -326,6 +326,92 @@ if (root) {
 }
 `.trim();
 
+const PREVIEW_SHIM_MODULES = new Set(["react-router-dom", "motion/react"]);
+const PREVIEW_SHIM_NAMESPACE = "preview-shim";
+
+function getPreviewShimModule(specifier: string): string | null {
+  if (specifier === "react-router-dom") {
+    return `
+import React from "react";
+
+const Fragment = React.Fragment;
+
+export function HashRouter({ children }) {
+  return React.createElement(Fragment, null, children);
+}
+
+export function BrowserRouter({ children }) {
+  return React.createElement(Fragment, null, children);
+}
+
+export function MemoryRouter({ children }) {
+  return React.createElement(Fragment, null, children);
+}
+
+export function Routes({ children }) {
+  return React.createElement(Fragment, null, children);
+}
+
+export function Route({ element = null, children = null }) {
+  return element ?? children ?? null;
+}
+
+export function Outlet() {
+  return null;
+}
+
+export function Link({ to = "#", children, ...props }) {
+  const href = typeof to === "string" ? to : "#";
+  return React.createElement("a", { ...props, href }, children);
+}
+
+export function NavLink({ to = "#", children, ...props }) {
+  const href = typeof to === "string" ? to : "#";
+  return React.createElement("a", { ...props, href }, children);
+}
+
+export function useLocation() {
+  return { pathname: "/", search: "", hash: "", state: null, key: "preview" };
+}
+
+export function useNavigate() {
+  return () => {};
+}
+
+export function useParams() {
+  return {};
+}
+`.trim();
+  }
+
+  if (specifier === "motion/react") {
+    return `
+import React from "react";
+
+function passthrough(tag) {
+  return function MotionComponent(props) {
+    return React.createElement(tag, props, props?.children);
+  };
+}
+
+export const AnimatePresence = ({ children }) =>
+  React.createElement(React.Fragment, null, children);
+
+export const motion = new Proxy(
+  {},
+  {
+    get(_target, prop) {
+      if (typeof prop !== "string") return passthrough("div");
+      return passthrough(prop);
+    },
+  }
+);
+`.trim();
+  }
+
+  return null;
+}
+
 export async function getPreviewBrowserBundle(params: {
   chatId: string;
   revisionNumber: number;
@@ -376,6 +462,9 @@ export async function getPreviewBrowserBundle(params: {
             build.onResolve(
               { filter: /^(react|react-dom|react-router-dom)(\/.*)?$/ },
               (args) => {
+                if (PREVIEW_SHIM_MODULES.has(args.path)) {
+                  return { path: args.path, namespace: PREVIEW_SHIM_NAMESPACE };
+                }
                 try {
                   const p = runtimeRequire.resolve(args.path, {
                     paths: [process.cwd()],
@@ -418,6 +507,10 @@ export async function getPreviewBrowserBundle(params: {
                 }
               }
             );
+            build.onResolve({ filter: /^motion\/react$/ }, () => ({
+              path: "motion/react",
+              namespace: PREVIEW_SHIM_NAMESPACE,
+            }));
             build.onResolve({ filter: /^\.\.?\// }, (args) => {
               const importerPath =
                 args.importer && args.importer.startsWith("landing/")
@@ -462,6 +555,15 @@ export async function getPreviewBrowserBundle(params: {
                   : content;
               return {
                 contents: patchedContent,
+                loader: "tsx",
+                resolveDir: process.cwd(),
+              };
+            });
+            build.onLoad({ filter: /.*/, namespace: PREVIEW_SHIM_NAMESPACE }, (args) => {
+              const contents = getPreviewShimModule(args.path);
+              if (!contents) return null;
+              return {
+                contents,
                 loader: "tsx",
                 resolveDir: process.cwd(),
               };
@@ -549,6 +651,10 @@ export async function getComposedReactHtml(params: {
         {
           name: "landing-resolve",
           setup(build) {
+            build.onResolve({ filter: /^(react-router-dom|motion\/react)$/ }, (args) => ({
+              path: args.path,
+              namespace: PREVIEW_SHIM_NAMESPACE,
+            }));
             build.onResolve({ filter: /^\.\.?\// }, (args) => {
               const importerPath =
                 args.importer && args.importer.startsWith("landing/")
@@ -590,6 +696,15 @@ export async function getComposedReactHtml(params: {
                   : content;
               return {
                 contents: patchedContent,
+                loader: "tsx",
+                resolveDir: process.cwd(),
+              };
+            });
+            build.onLoad({ filter: /.*/, namespace: PREVIEW_SHIM_NAMESPACE }, (args) => {
+              const contents = getPreviewShimModule(args.path);
+              if (!contents) return null;
+              return {
+                contents,
                 loader: "tsx",
                 resolveDir: process.cwd(),
               };
