@@ -24,6 +24,7 @@ const REDIS_STREAM_COOLDOWN_MS = Number(
 
 let redisReadUnavailableUntilMs = 0;
 let redisWriteUnavailableUntilMs = 0;
+let hasLoggedRedisDisabled = false;
 
 function hasUpstashEnv(): boolean {
   return Boolean(
@@ -60,6 +61,18 @@ function markRedisTemporarilyUnavailable() {
   markRedisWriteUnavailable();
 }
 
+function logRedisUnavailable(reason: string) {
+  if (process.env.NODE_ENV !== "production") return;
+  if (hasLoggedRedisDisabled) return;
+  hasLoggedRedisDisabled = true;
+  console.warn("[stream-bus] Redis stream bus unavailable, using DB fallback", {
+    reason,
+    streamBusEnabled: ENABLE_REDIS_STREAM_BUS,
+    hasUpstashEnv: hasUpstashEnv(),
+    dbFallbackEnabled: STREAM_BUS_DB_FALLBACK,
+  });
+}
+
 function isRedisTimeoutError(error: unknown): boolean {
   return (
     error instanceof Error &&
@@ -90,6 +103,11 @@ export async function publishStreamEvents(
   const redisWriteUnavailable = isRedisWriteTemporarilyUnavailable();
 
   if (!redisEnabled || redisWriteUnavailable) {
+    if (!redisEnabled) {
+      logRedisUnavailable("redis disabled or env missing");
+    } else if (redisWriteUnavailable) {
+      logRedisUnavailable("redis write cooldown active");
+    }
     if (!STREAM_BUS_DB_FALLBACK) {
       throw new Error(
         !redisEnabled
@@ -122,6 +140,13 @@ export async function publishStreamEvents(
     return dbEvents;
   } catch (error) {
     markRedisTemporarilyUnavailable();
+    if (process.env.NODE_ENV === "production") {
+      console.error("[stream-bus] Redis publish failed, switched to cooldown", {
+        dbFallbackEnabled: STREAM_BUS_DB_FALLBACK,
+        cooldownMs: REDIS_STREAM_COOLDOWN_MS,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
     if (!STREAM_BUS_DB_FALLBACK) {
       throw error;
     }
@@ -135,6 +160,11 @@ export async function readStreamEventsAfter(
   const redisTemporarilyUnavailable = isRedisReadTemporarilyUnavailable();
   const redisEnabled = shouldUseRedisStreamBus();
   if (!redisEnabled || redisTemporarilyUnavailable) {
+    if (!redisEnabled) {
+      logRedisUnavailable("redis disabled or env missing");
+    } else if (redisTemporarilyUnavailable) {
+      logRedisUnavailable("redis read cooldown active");
+    }
     if (!STREAM_BUS_DB_FALLBACK) {
       throw new Error(
         !redisEnabled
@@ -161,6 +191,14 @@ export async function readStreamEventsAfter(
     // Only enter read cooldown for transient infra failures.
     if (isRedisTimeoutError(error)) {
       markRedisReadUnavailable();
+    }
+    if (process.env.NODE_ENV === "production") {
+      console.error("[stream-bus] Redis read failed, using DB fallback", {
+        dbFallbackEnabled: STREAM_BUS_DB_FALLBACK,
+        readCooldownMs: REDIS_STREAM_COOLDOWN_MS,
+        timeout: isRedisTimeoutError(error),
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
     if (!STREAM_BUS_DB_FALLBACK) {
       throw error;

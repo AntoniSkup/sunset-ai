@@ -35,6 +35,66 @@ return streamId
 `;
 
 let redisClient: Redis | null = null;
+let redisConnectivityCheck: Promise<void> | null = null;
+
+function getRedisUrlAndSource(): { url: string | null; source: string } {
+  if (process.env.STORAGE_KV_REST_API_URL) {
+    return { url: process.env.STORAGE_KV_REST_API_URL, source: "STORAGE_KV_REST_API_URL" };
+  }
+  if (process.env.UPSTASH_REDIS_REST_URL) {
+    return { url: process.env.UPSTASH_REDIS_REST_URL, source: "UPSTASH_REDIS_REST_URL" };
+  }
+  if (process.env.KV_REST_API_URL) {
+    return { url: process.env.KV_REST_API_URL, source: "KV_REST_API_URL" };
+  }
+  return { url: null, source: "fromEnv" };
+}
+
+function getRedisHostLabel(url: string | null): string {
+  if (!url) return "unknown";
+  try {
+    return new URL(url).host;
+  } catch {
+    return "invalid-url";
+  }
+}
+
+async function logRedisConnectivityOnce(redis: Redis): Promise<void> {
+  if (process.env.NODE_ENV !== "production") return;
+  if (redisConnectivityCheck) {
+    await redisConnectivityCheck;
+    return;
+  }
+
+  redisConnectivityCheck = (async () => {
+    const startedAt = Date.now();
+    const { url, source } = getRedisUrlAndSource();
+    const host = getRedisHostLabel(url);
+    try {
+      if (typeof (redis as any).ping === "function") {
+        await (redis as any).ping();
+        console.info("[stream-bus] Redis connectivity check passed", {
+          source,
+          host,
+          latencyMs: Date.now() - startedAt,
+        });
+      } else {
+        console.info("[stream-bus] Redis client initialized (ping unavailable)", {
+          source,
+          host,
+        });
+      }
+    } catch (error) {
+      console.error("[stream-bus] Redis connectivity check failed", {
+        source,
+        host,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  })();
+
+  await redisConnectivityCheck;
+}
 
 function getRedis(): Redis {
   if (redisClient) return redisClient;
@@ -177,6 +237,7 @@ async function publishEvents(
   params: PublishEventsParams
 ): Promise<StreamEventEnvelope[]> {
   const redis = getRedis();
+  await logRedisConnectivityOnce(redis);
   const streamKey = getStreamKey(params.chatId);
   const streamIndexKey = getStreamIndexKey(params.chatId);
   const streamPayloadKey = getStreamPayloadKey(params.chatId);
@@ -241,6 +302,7 @@ async function readEventsAfter(
   params: ReadEventsAfterParams
 ): Promise<StreamEventEnvelope[]> {
   const redis = getRedis();
+  await logRedisConnectivityOnce(redis);
   const streamKey = getStreamKey(params.chatId);
   const streamIndexKey = getStreamIndexKey(params.chatId);
   const streamPayloadKey = getStreamPayloadKey(params.chatId);
