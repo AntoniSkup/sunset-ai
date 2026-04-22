@@ -5,6 +5,7 @@ import {
   getChatTurnRunById,
   markChatTurnRunFailed,
 } from "@/lib/db/queries";
+import { diffMs, logChatStreamDiagnostic } from "@/lib/chat/stream-diagnostics";
 import { publishStreamEvents } from "@/lib/chat/stream-bus";
 import { triggerChatTurnTask } from "@/lib/chat/trigger-chat-turn-task";
 
@@ -62,6 +63,7 @@ export const runChatTurnTask = task({
   id: "run-chat-turn",
   maxDuration: 900,
   run: async (payload: { turnRunId: string }, { ctx }) => {
+    const taskStartedAt = Date.now();
     const turnRunId = payload?.turnRunId;
     if (!turnRunId) {
       throw new Error("turnRunId is required");
@@ -93,6 +95,17 @@ export const runChatTurnTask = task({
         chatId: claimed.chatId,
       });
     }
+
+    logChatStreamDiagnostic("Trigger claimed turn run", {
+      requestedRunId: turnRunId,
+      claimedRunId: claimed.id,
+      triggerRunId: String(ctx.run.id),
+      chatId: claimed.chatId,
+      queueDelayMs: diffMs(claimed.startedAt, claimed.createdAt),
+      taskStartupMs: Date.now() - taskStartedAt,
+      requestedStatus: existingRun.status,
+      claimedSequence: claimed.sequence,
+    });
 
     await attachTriggerRunIdToChatTurnRun({
       runId: claimed.id,
@@ -126,6 +139,7 @@ export const runChatTurnTask = task({
     }
 
     try {
+      const requestStartedAt = Date.now();
       const response = await fetch(`${appBaseUrl}/api/chat`, {
         method: "POST",
         headers: {
@@ -140,6 +154,14 @@ export const runChatTurnTask = task({
         }),
       });
 
+      logChatStreamDiagnostic("Trigger /api/chat responded", {
+        triggerRunId: String(ctx.run.id),
+        chatTurnRunId: claimed.id,
+        chatId: claimed.chatId,
+        status: response.status,
+        responseHeadersMs: Date.now() - requestStartedAt,
+      });
+
       if (!response.ok) {
         const text = await response.text().catch(() => "");
         throw new Error(
@@ -151,19 +173,55 @@ export const runChatTurnTask = task({
       // Drain incrementally to avoid buffering large generations into memory.
       if (response.body) {
         const reader = response.body.getReader();
+        let totalBytes = 0;
+        let chunkCount = 0;
+        let firstChunkLatencyMs: number | null = null;
         while (true) {
-          const { done } = await reader.read();
+          const { done, value } = await reader.read();
           if (done) break;
+          chunkCount += 1;
+          totalBytes += value?.byteLength ?? 0;
+          if (firstChunkLatencyMs == null) {
+            firstChunkLatencyMs = Date.now() - requestStartedAt;
+            logChatStreamDiagnostic("Trigger received first chat chunk", {
+              triggerRunId: String(ctx.run.id),
+              chatTurnRunId: claimed.id,
+              chatId: claimed.chatId,
+              firstChunkLatencyMs,
+            });
+          }
         }
+        logChatStreamDiagnostic("Trigger drained chat response stream", {
+          triggerRunId: String(ctx.run.id),
+          chatTurnRunId: claimed.id,
+          chatId: claimed.chatId,
+          totalDurationMs: Date.now() - requestStartedAt,
+          firstChunkLatencyMs,
+          chunkCount,
+          totalBytes,
+        });
       } else {
         // Some runtimes expose no stream reader; this still waits for completion.
         await response.arrayBuffer();
+        logChatStreamDiagnostic("Trigger completed non-streaming chat response", {
+          triggerRunId: String(ctx.run.id),
+          chatTurnRunId: claimed.id,
+          chatId: claimed.chatId,
+          totalDurationMs: Date.now() - requestStartedAt,
+        });
       }
     } catch (error) {
       const message = normalizeErrorMessage(
         error,
         "Unknown trigger execution error"
       );
+      logChatStreamDiagnostic("Trigger execution failed", {
+        triggerRunId: String(ctx.run.id),
+        chatTurnRunId: claimed.id,
+        chatId: claimed.chatId,
+        elapsedMs: Date.now() - taskStartedAt,
+        error: message,
+      });
       await markChatTurnRunFailed({
         runId: claimed.id,
         errorMessage: message,
@@ -184,6 +242,13 @@ export const runChatTurnTask = task({
       throw error;
     } finally {
       const nextPending = await claimNextPendingChatTurnRun(claimed.chatId);
+      logChatStreamDiagnostic("Trigger run finished", {
+        triggerRunId: String(ctx.run.id),
+        chatTurnRunId: claimed.id,
+        chatId: claimed.chatId,
+        elapsedMs: Date.now() - taskStartedAt,
+        nextPendingRunId: nextPending?.id ?? null,
+      });
       if (nextPending) {
         await triggerChatTurnTask(nextPending.id);
       }

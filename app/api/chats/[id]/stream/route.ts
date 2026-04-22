@@ -6,6 +6,7 @@ import {
 import {
   readStreamEventsAfter,
 } from "@/lib/chat/stream-bus";
+import { diffMs, logChatStreamDiagnostic } from "@/lib/chat/stream-diagnostics";
 
 export const dynamic = "force-dynamic";
 const SSE_POLL_INTERVAL_BASE_MS = 100;
@@ -70,10 +71,25 @@ export async function GET(
     start(controller) {
       let closed = false;
       let consecutiveReadErrors = 0;
+      const connectionStartedAt = Date.now();
+
+      logChatStreamDiagnostic("SSE connection opened", {
+        chatId: chat.id,
+        chatPublicId,
+        userId: user.id,
+        afterEventId,
+      });
 
       const close = () => {
         if (closed) return;
         closed = true;
+        logChatStreamDiagnostic("SSE connection closed", {
+          chatId: chat.id,
+          chatPublicId,
+          userId: user.id,
+          afterEventId,
+          connectedForMs: Date.now() - connectionStartedAt,
+        });
         try {
           controller.close();
         } catch {
@@ -92,16 +108,38 @@ export async function GET(
         let idlePolls = 0;
         while (!closed) {
           try {
+            const readStartedAt = Date.now();
             const events = await readStreamEventsAfter({
               chatId: chat.id,
               afterLogicalEventId: afterEventId,
               limit: 100,
             });
+            const readDurationMs = Date.now() - readStartedAt;
             consecutiveReadErrors = 0;
             if (events.length > 0) {
               idlePolls = 0;
             } else {
               idlePolls += 1;
+            }
+
+            if (
+              events.length > 0 ||
+              readDurationMs >= 250 ||
+              idlePolls === 1 ||
+              idlePolls % 20 === 0
+            ) {
+              const newestEvent = events[events.length - 1];
+              logChatStreamDiagnostic("SSE poll completed", {
+                chatId: chat.id,
+                afterEventId,
+                eventCount: events.length,
+                idlePolls,
+                pollIntervalMs,
+                readDurationMs,
+                newestEventLagMs: newestEvent
+                  ? diffMs(Date.now(), newestEvent.createdAt)
+                  : null,
+              });
             }
 
             for (const event of events) {
@@ -155,6 +193,12 @@ export async function GET(
               SSE_ERROR_RETRY_MAX_MS,
               SSE_ERROR_RETRY_BASE_MS * Math.max(1, consecutiveReadErrors)
             );
+            logChatStreamDiagnostic("SSE poll failed", {
+              chatId: chat.id,
+              afterEventId,
+              consecutiveReadErrors,
+              retryDelayMs,
+            });
             if (closed || request.signal.aborted) {
               close();
               return;

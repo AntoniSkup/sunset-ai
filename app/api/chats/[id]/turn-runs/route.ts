@@ -15,6 +15,7 @@ import {
   getUser,
 } from "@/lib/db/queries";
 import { publishStreamEvents } from "@/lib/chat/stream-bus";
+import { diffMs, logChatStreamDiagnostic } from "@/lib/chat/stream-diagnostics";
 import { triggerChatTurnTask } from "@/lib/chat/trigger-chat-turn-task";
 import {
   extractTextFromMessageParts,
@@ -39,6 +40,7 @@ export async function POST(
     params: Promise<{ id: string }>;
   },
 ) {
+  const requestStartedAt = Date.now();
   const user = await getUser();
   if (!user) {
     return NextResponse.json(
@@ -151,6 +153,17 @@ export async function POST(
     payload: payloadObj,
   });
 
+  logChatStreamDiagnostic("Chat turn run enqueued", {
+    chatId: chat.id,
+    chatPublicId,
+    runId: run.id,
+    userId: user.id,
+    sequence: run.sequence,
+    hadRunning,
+    enqueueLatencyMs: Date.now() - requestStartedAt,
+    createdToNowMs: diffMs(Date.now(), run.createdAt),
+  });
+
   await publishStreamEvents({
     chatId: chat.id,
     runId: run.id,
@@ -171,6 +184,15 @@ export async function POST(
   if (!hadRunning && processingEnabled) {
     void triggerChatTurnTask(run.id);
   }
+
+  logChatStreamDiagnostic("Chat turn run request completed", {
+    chatId: chat.id,
+    chatPublicId,
+    runId: run.id,
+    queued: hadRunning,
+    processingEnabled,
+    totalRequestMs: Date.now() - requestStartedAt,
+  });
 
   return NextResponse.json(
     {
