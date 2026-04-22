@@ -77,8 +77,24 @@ export async function GET(
       }
 
       if (!composed) {
+        console.warn(
+          `[preview] Missing composed revision output for chat=${chatId} revision=${requestedRevision}; falling back to legacy version table if available`
+        );
+        const legacyVersion = await getLatestVersion(chatId);
+        if (legacyVersion && legacyVersion.userId === user.id) {
+          return new NextResponse(legacyVersion.codeContent, {
+            headers: {
+              "Content-Type": "text/html; charset=utf-8",
+              "Cache-Control": "no-cache, no-store, must-revalidate",
+            },
+          });
+        }
         return NextResponse.json(
-          { error: "Entry file not found", code: "NOT_FOUND" },
+          {
+            error:
+              "Preview entry file not found for this revision and no legacy preview is available",
+            code: "NOT_FOUND",
+          },
           { status: 404 }
         );
       }
