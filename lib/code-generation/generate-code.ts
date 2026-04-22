@@ -34,6 +34,10 @@ import {
   buildUserRequestSection,
   createSectionPrompt,
 } from "@/prompts/tool-generate-code-prompt";
+import {
+  extractSectionStyleSnapshot,
+  type ExistingSectionStyleSnapshot,
+} from "@/lib/code-generation/extract-style-profile";
 import { retrieveInspirationForQuery } from "@/lib/inspirations/retrieve-for-query";
 import {
   buildSiteAssetPromptContextForCodegen,
@@ -186,7 +190,7 @@ export type CodeGenerationPromptParams = {
   userRequest: string;
   previousCodeVersion?: string;
   isModification?: boolean;
-  existingSections?: Array<{ path: string; content: string }>;
+  existingSectionStyles?: ExistingSectionStyleSnapshot[];
   layoutContext?: string;
   siteAssetContext?: string;
   inspirationContext?: string;
@@ -213,8 +217,8 @@ export function buildCodeGenerationDynamicPrompt(params: CodeGenerationPromptPar
       ? buildModificationContext(cleanedPreviousCodeVersion)
       : "";
 
-  const existingSectionsContext = params.existingSections?.length
-    ? buildExistingSectionsContext(params.existingSections)
+  const existingSectionsContext = params.existingSectionStyles?.length
+    ? buildExistingSectionsContext(params.existingSectionStyles)
     : "";
   const layoutContext = params.layoutContext?.trim() ?? "";
   const siteAssetContext = buildSiteAssetContextSection(params.siteAssetContext);
@@ -396,14 +400,16 @@ async function generateAndSaveSingleFile(params: {
       if (latest?.content) previousCode = latest.content;
     }
 
-    let existingSections: Array<{ path: string; content: string }> = [];
+    let existingSectionStyles: ExistingSectionStyleSnapshot[] = [];
     if (!shouldModify) {
       const previousSection = await getPreviousLandingSectionContentForCodegen(
         params.chatId,
         normalizedDestination
       );
       if (previousSection) {
-        existingSections = [previousSection];
+        existingSectionStyles = [
+          extractSectionStyleSnapshot(previousSection.path, previousSection.content),
+        ];
       }
     }
 
@@ -471,8 +477,8 @@ async function generateAndSaveSingleFile(params: {
         userRequest: params.userRequest,
         previousCodeVersion: previousCode,
         isModification: shouldModify,
-        existingSections:
-          existingSections.length > 0 ? existingSections : undefined,
+        existingSectionStyles:
+          existingSectionStyles.length > 0 ? existingSectionStyles : undefined,
         layoutContext: layoutContextForPrompt || undefined,
         siteAssetContext,
         inspirationContext: inspirationContextForPrompt || undefined,

@@ -58,7 +58,7 @@ Generate exactly ONE React/TSX file for a landing site. Each tool call creates/u
 **Input (from the tool call)**
 - destination: where this file will be saved (use it only to understand what you are building)
 - userRequest: freeform instructions describing this file (content + style + any constraints)
-- inspirationQuery (optional): when present, the server may inject a curated design-inspiration outline into this prompt. Treat that block as the preferred art-direction starting point for this file unless it conflicts with explicit user instructions, destination-specific requirements, or the established site design.
+- inspirationQuery (optional): when present, the server may inject a curated design-inspiration outline into this prompt. Treat that block as a **layout/composition reference** (structure, hierarchy, spacing rhythm, placement, motif flow), not as a mandate for colors, typography families, or copy.
 
 **Instruction priority (resolve conflicts in this order)**
 1) Explicit user instructions in userRequest
@@ -79,7 +79,9 @@ Conflict handling rules:
 **Output requirements**
 - Output RAW React/JSX/TSX ONLY (no markdown, no explanations, no code fences).
 - Use Tailwind CSS utility classes for ALL styling (no <style> tags, no external CSS). Use the className prop.
-- Reusable design values must come from landing/theme.tsx. Prefer importing typography tokens from that file instead of hardcoding fonts repeatedly in sections/pages. Use semantic theme token names for typography (for example fontDisplay/fontBody/fontHeading) instead of family-specific export names.
+- Reusable design values must come from landing/theme.tsx.
+- In section/page files, do NOT define new colors or font families. Do not introduce hex/rgb/hsl color literals, ad-hoc font-family strings, or new one-off color/font decisions in those files.
+- In section/page files, consume typography and color values from landing/theme.tsx exports (semantic tokens and helpers). Prefer semantic theme token names for typography (for example fontDisplay/fontBody/fontHeading) and semantic color tokens (for example colorBgBase/colorTextPrimary/colorAccent) instead of hardcoded utilities.
 - Do not import Google Fonts or define @font-face rules inside section/page files. Keep font loading global through landing/theme.tsx by exposing an idempotent helper that appends preconnect + stylesheet links into document.head. Use inline style props only for truly dynamic values that cannot be expressed cleanly with Tailwind utilities.
 - Prioritize responsiveness as a first-class requirement. Build mobile-first, then scale up cleanly for tablet and desktop without overflow, collisions, cramped copy, broken grids, or inaccessible tap targets.
 - When the section uses meaningful animation, import from 'motion/react' and implement the main entrances, reveals, staggers, or hover choreography with motion components/variants. Do not rely on custom CSS animation or Tailwind 'animate-*' classes for the primary animated experience.
@@ -90,9 +92,9 @@ Conflict handling rules:
 - The code must be valid JSX/TSX and self-contained for this file.
 - **File structure (strict)**: Put ALL import statements at the very top of the file. Then output exactly ONE default-export component. Do NOT repeat the component, do NOT put imports after the component, and do NOT duplicate any part of the file. Correct order: first every import line, then the single export default function ... { ... }. Example for a page file: first line "import Hero from '../sections/Hero';", then blank line, then "export default function Home() { return (...); }" once only.
 - If destination is exactly "landing/index.tsx", output a WIREFRAME ONLY: import { HashRouter, Routes, Route } from 'react-router-dom', plus Navbar, Footer, and only the page components that are actually part of the current site plan. Also import { ensureThemeFonts } from './theme' and call ensureThemeFonts() once near top-level so global Google Font links are applied from a single source. Wrap everything in <HashRouter>. Use <Routes> and include only the real planned routes, e.g. just <Route path=\"/\" element={<Home />} /> for a single-page site. Do NOT import or route to About/Contact/etc. unless those page files are meant to exist. Do NOT use window.location.hash or manual switch. Do NOT put navbar/footer markup inline. Do NOT output <!DOCTYPE html>, <html>, <head>, or <body>.
-- If destination is exactly "landing/theme.tsx", output a single token module for reusable design values. Include exported typography tokens using semantic names (for example fontDisplay, fontBody, fontHeading, fontMono, fontAccent plus any heading/body class mappings or font-family strings), optional shared color tokens, and an exported idempotent helper named ensureThemeFonts() that loads Google Fonts globally via document.head links. Also export fontSans and fontSerif names for section compatibility as aliases to the semantic theme typography tokens rather than as the primary naming scheme.
+- If destination is exactly "landing/theme.tsx", output a single token module that is the REQUIRED source of truth for typography and color design values used across the site. Include exported semantic typography tokens (for example fontDisplay, fontBody, fontHeading, fontMono, fontAccent), exported semantic color tokens (for example colorBgBase, colorBgSurface, colorTextPrimary, colorTextMuted, colorBorder, colorAccent), and any shared class/value helpers needed by sections/pages. Also export an idempotent helper named ensureThemeFonts() that loads Google Fonts globally via document.head links. Export fontSans and fontSerif for section compatibility as aliases to semantic typography tokens rather than as the primary naming scheme.
 - If destination is under "landing/pages/", output a single default-export React component (e.g. export default function Home() { ... }). Import section components from '../sections/...' and render them. Do NOT include document structure.
-- If destination is under "landing/sections/", output a single default-export React component (e.g. export default function Hero() { ... }). Do NOT include document structure or import other landing sections unless needed.
+- If destination is under "landing/sections/", output a single default-export React component (e.g. export default function Hero() { ... }). Do NOT include document structure or import other landing sections unless needed. Do NOT define new colors or font families in this file; use only tokens/helpers imported from '../theme' for color/typography decisions.
 - Do NOT include scripts or useEffect for non-routing logic unless explicitly requested.
 
 **Quality rules**
@@ -131,12 +133,12 @@ ${LANDING_PAGE_ART_DIRECTION_GUIDANCE}
 - Do not treat imagery as a one-off accent. If the section can credibly support visuals, prefer a richer composition with photos, product shots, portraits, or supporting images so the page feels visually dense in a polished way.
 - CSS animation is fallback-only. If you need only a tiny ambient loop, keep it secondary and subtle; the section should still rely primarily on 'motion/react' for any notable animation.
 
-**Design consistency (when a previous section is provided in context)**
-- Match the design of that section: same colors, typography, spacing, button styles, and container patterns.
-- Use the same Tailwind classes for similar elements (e.g., if headings use text-2xl font-serif, use the same).
-- Keep the visual language consistent with the rest of the site even if only one prior section file is shown for reference.
-- Prefer global typography from landing/theme.tsx. Section-level font overrides are allowed only when intentional (for example a logo wordmark or a special quote), while the default should come from shared semantic theme tokens.
-- When the previous section uses a strong gradient background, do not use another strong gradient background in this section. Keep continuity via color family/motif, but change surface intensity to avoid gradient-to-gradient seam breaks.
+**Design consistency (when an established style profile is provided in context)**
+- Match the established style profile: same color language, typography system, spacing rhythm, button/surface feel, and container patterns.
+- Keep visual continuity at the system level (tokens and reusable patterns), while still allowing composition differences guided by inspiration.
+- Reuse equivalent Tailwind patterns when they represent shared system choices, not one-off layout specifics.
+- Prefer global typography and color tokens from landing/theme.tsx. Avoid section-level color/font overrides unless the user explicitly asks for a localized exception.
+- When the established style profile indicates a strong gradient treatment, avoid stacking another equally strong gradient immediately after it. Keep continuity via color family/motif, but vary surface intensity to avoid seam breaks.
 
 **Multi-page sites**
 - For the entry (landing/index.tsx), use React Router: import { HashRouter, Routes, Route } from 'react-router-dom'. Wrap the app in <HashRouter>, put <Routes> and <Route path=\"/\" element={<Home />} /> etc. inside <main>. Do not use window.location.hash.
@@ -159,18 +161,40 @@ export function buildModificationContext(previousCodeVersion: string): string {
 }
 
 export function buildExistingSectionsContext(
-  sections: Array<{ path: string; content: string }>
+  sections: Array<{
+    path: string;
+    sectionName: string;
+    themeTokens: string[];
+    typography: string[];
+    colors: string[];
+    layout: string[];
+    surfaces: string[];
+    interactions: string[];
+    usesMotionReact: boolean;
+  }>
 ): string {
   if (sections.length === 0) return "";
 
+  const formatList = (items: string[]) =>
+    items.length > 0 ? items.join(", ") : "none detected";
+
   const blocks = sections
-    .map((s) => `--- ${s.path} ---\n${s.content}`)
+    .map(
+      (s) => `--- ${s.path} (${s.sectionName}) ---
+- Theme tokens: ${formatList(s.themeTokens)}
+- Typography signals: ${formatList(s.typography)}
+- Color signals: ${formatList(s.colors)}
+- Layout rhythm signals: ${formatList(s.layout)}
+- Surface treatment signals: ${formatList(s.surfaces)}
+- Interaction/motion class signals: ${formatList(s.interactions)}
+- Uses motion/react: ${s.usesMotionReact ? "yes" : "no"}`
+    )
     .join("\n\n");
 
   const heading =
     sections.length === 1
-      ? "**Previous section (match its design—colors, typography, spacing, button styles):**"
-      : "**Existing sections (match their design—colors, typography, spacing, button styles):**";
+      ? "**Established style profile (derived from previous section; keep system continuity, not exact markup):**"
+      : "**Established style profiles (derived from previous sections; keep system continuity, not exact markup):**";
 
   return `
 
@@ -224,8 +248,9 @@ The following is a retrieved design outline for a **${match.section}**-style sec
 
 Apply it with this contract:
 - Treat this inspiration as the primary guide for **layout/composition** decisions in this file (content hierarchy, block arrangement, spacing rhythm, visual pacing, asymmetry, framing devices, and motif placement).
-- Keep **established site colors/theme tokens** higher priority than inspiration color hints.
-- If color directions conflict, keep site color consistency and still carry inspiration through structure and composition choices.
+- Use inspiration for structure first. Do **not** treat it as a source of required colors, exact typography families, or exact copy wording.
+- Keep **established site colors/theme tokens** and explicit user color constraints higher priority than inspiration color hints.
+- If color/style directions conflict, keep site/user constraints and still carry inspiration through structure and composition choices.
 - Adapt to destination requirements, explicit user instructions, and site-wide constraints.
 - Do not copy placeholder copy verbatim; translate the ideas into this section's real content and layout.
 ${tagLine}

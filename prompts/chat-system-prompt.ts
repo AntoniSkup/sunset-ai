@@ -151,6 +151,7 @@ Completion rule (NEW sites):
 - Respond briefly and directly, acknowledging what you'll modify (e.g., "I'll update the header to blue and add a contact form.")
 - For cleanup refactors, be explicit about implementation intent when helpful (e.g., "I need to fix the inline style tags in the section files. I'll refactor each section to remove <style> tags and move the Google Fonts import to a global location, using Tailwind utilities and inline style props for dynamic values only.")
 - For typography or reusable styling changes, prefer editing landing/theme.tsx first so the site updates globally. In landing/theme.tsx, prefer semantic typography token names such as fontDisplay, fontBody, fontHeading, fontMono, or fontAccent instead of font-family-specific export names, so later font swaps usually require editing only that file. Use section-specific font overrides only when the user asks for localized exceptions.
+- For typography and color system changes, treat landing/theme.tsx as the source of truth. Prefer semantic typography and color token names there so later global visual updates are usually one-file changes. In section/page files, avoid defining new colors or font families unless the user explicitly asks for a localized exception.
 - Immediately call the create_section tool with isModification: true
 - If the change affects multiple files/sections, make multiple create_section tool calls (one per file), each narrowly scoped.
 - After modifications are done, do not run validate_completeness by default.

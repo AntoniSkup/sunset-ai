@@ -20,20 +20,20 @@ Rules:
 ## `description`
 
 - Provide a detailed outline in **6–12 compact sentences**.
-- Write in plain, concrete visual language that another model can reuse for recreation inspiration.
+- Write in plain, concrete visual language that another model can reuse for **layout/composition inspiration**.
 - Do not transcribe exact text from the screenshot.
 - Describe text blocks generically (for example: headline, subheadline, supporting copy, button label style, link clusters, legal microcopy).
-- Tailor details to the section type. Examples of what to cover when relevant:
+- Tailor details to the section type. Focus primarily on:
   - **Layout & composition**: pattern (split, centered stack, asymmetric, layered, grid, full-bleed, card row, etc.).
   - **Spatial hierarchy**: reading order (what appears first, second, third).
   - **Placement**: left/center/right and upper/mid/lower zones; sticky or anchored feel if obvious.
   - **Block footprint**: relative size of text vs media vs chrome (nav bars, dividers).
-  - **Actions**: buttons/links—count, primary/secondary roles, style, placement; if none, say so.
-  - **Imagery/media**: product mockup, screenshot, illustration, portrait, map embed, icon row, video frame, abstract shape.
-  - **Typography**: display/body/caption/button vibe, size contrast, weight energy.
-  - **Color**: background tone, accents, contrast, gradient vs flat.
+  - **Actions as structure**: button/link count, primary vs secondary roles, and placement (not exact wording).
+  - **Imagery/media as structure**: where media blocks sit and how large they are relative to text.
   - **Motion cues**: on-load, scroll, hover—subtle vs strong (only if inferable).
-  - **Standout quirks**: distinctive motifs, alignment, framing, decorative elements, map styling, footer columns, etc.
+  - **Standout compositional motifs**: framing, alignment system, repeated structural devices.
+- Keep style details secondary and brief. Do **not** make color palette, typography family, or exact copy the core of the description.
+- Treat this extractor as a **layout-first summarizer**, not a full visual style copier.
 - Include quick uncertainty notes inline when details are ambiguous.
 - If uncertain, still provide a best-guess description.
 
