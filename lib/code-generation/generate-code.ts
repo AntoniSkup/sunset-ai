@@ -4,7 +4,6 @@ import { transform } from "esbuild";
 import { createHash } from "node:crypto";
 import {
   getAIModel,
-  getAIModelId,
   isAnthropicCodegenPromptCachingEnabled,
 } from "@/lib/ai/get-ai-model";
 import { getOrCreateAccountForUser } from "@/lib/billing/accounts";
@@ -489,16 +488,7 @@ async function generateAndSaveSingleFile(params: {
         modelTier: params.modelTier,
       });
       const useLighterModel = selectedModelTier === "simple";
-      const [model, modelId] = await Promise.all([
-        getAIModel(useLighterModel),
-        getAIModelId(useLighterModel),
-      ]);
-      console.log("[codegen] selected model", {
-        chatId: params.chatId,
-        destination: normalizedDestination,
-        modelTier: selectedModelTier,
-        modelId,
-      });
+      const model = await getAIModel(useLighterModel);
 
       const telemetry = {
         isEnabled: true,
@@ -830,10 +820,20 @@ const createSectionToolExecute = async (
     return { success: false, error: "Chat ID is required" };
   }
 
+  const trimmedInspirationQuery = inspirationQuery?.trim() || null;
   const normalizedDestination = normalizeDestinationPath(destination);
   if (!normalizedDestination) {
     return { success: false, error: "Invalid destination path" };
   }
+
+  console.log("[tool] create_section called", {
+    chatId,
+    destination: normalizedDestination,
+    isModification,
+    modelTier: modelTier ?? null,
+    hasInspirationQuery: Boolean(trimmedInspirationQuery),
+    inspirationQuery: trimmedInspirationQuery,
+  });
 
   if (isLandingPageOrSectionDestination(normalizedDestination)) {
     const existingIndex = await getLatestLandingSiteFileContent(
@@ -856,7 +856,7 @@ const createSectionToolExecute = async (
     destination: normalizedDestination,
     userRequest,
     isModification,
-    inspirationQuery,
+    inspirationQuery: trimmedInspirationQuery ?? undefined,
     modelTier,
     deferredChatTurnBilling,
   });
@@ -887,10 +887,6 @@ const validateCompletenessToolExecute = async (
   if (!chatId) {
     return { success: false, error: "Chat ID is required" };
   }
-  console.log("[tool] validate_completeness called", {
-    chatId,
-    hasSiteSpec: Boolean(input?.siteSpec?.trim()),
-  });
   return validateCompleteness({
     chatId,
     siteSpec: input?.siteSpec,
