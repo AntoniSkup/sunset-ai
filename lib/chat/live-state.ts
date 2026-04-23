@@ -32,7 +32,7 @@ function upsertToolCallPart(
     toolCallId,
     toolName,
     args: destination ? { destination } : undefined,
-  } as LiveAssistantParts[number];
+  } as unknown as LiveAssistantParts[number];
 
   if (existingIndex === -1) {
     nextParts.push(nextPart);
@@ -45,7 +45,7 @@ function upsertToolCallPart(
         destination && (!existing?.args || !existing.args.destination)
           ? { ...(existing?.args ?? {}), destination }
           : existing?.args,
-    } as LiveAssistantParts[number];
+    } as unknown as LiveAssistantParts[number];
   }
 
   return nextParts;
@@ -70,7 +70,7 @@ function upsertToolResultPart(
     toolCallId,
     toolName,
     result,
-  } as LiveAssistantParts[number];
+  } as unknown as LiveAssistantParts[number];
 
   if (existingIndex === -1) {
     nextParts.push(nextPart);
