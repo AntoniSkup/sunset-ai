@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import type { UIMessage } from "ai";
 import useSWR from "swr";
-import { useRealtimeRunWithStreams } from "@trigger.dev/react-hooks";
+import { useRealtimeStream } from "@trigger.dev/react-hooks";
 import { WelcomeMessage } from "./welcome-message";
 import { MessageList } from "./message-list";
 import { ChatInput } from "./chat-input";
@@ -315,21 +315,16 @@ function ChatInner({
   const lastTextDeltaAtRef = useRef<number | null>(null);
   const textDeltaCounterRef = useRef(0);
   const lastDebugUiUpdateAtRef = useRef(0);
-  const {
-    streams: triggerRealtimeStreams,
-    error: triggerRealtimeError,
-  } = useRealtimeRunWithStreams(triggerRealtime?.runId ?? "", {
-    accessToken: triggerRealtime?.accessToken ?? "",
-    enabled: Boolean(
-      FORCE_TRIGGER_REALTIME_STREAM &&
-        triggerRealtime?.runId &&
-        triggerRealtime?.accessToken
-    ),
-    throttleInMs: 24,
-  });
-  const triggerStreamParts = (
-    triggerRealtimeStreams?.[CHAT_TURN_TRIGGER_STREAM_KEY] ?? []
-  ) as ChatTurnRealtimeStreamPart[];
+  const { parts: triggerStreamParts, error: triggerRealtimeError } =
+    useRealtimeStream<ChatTurnRealtimeStreamPart>(
+      triggerRealtime?.runId ?? "",
+      CHAT_TURN_TRIGGER_STREAM_KEY,
+      {
+        accessToken: triggerRealtime?.accessToken ?? "",
+        startIndex: 0,
+        throttleInMs: 24,
+      }
+    );
   useEffect(() => {
     statusRef.current = status;
   }, [status]);
