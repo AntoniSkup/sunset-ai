@@ -892,8 +892,8 @@ export async function createChatTurnStream({
 
 export async function executeChatTurn(params: CreateChatTurnStreamParams) {
   const result = await createChatTurnStream(params);
-  const streamResult = result as {
-    consumeStream?: () => Promise<void>;
+  const streamResult = result as unknown as {
+    consumeStream?: () => PromiseLike<void>;
     fullStream?: AsyncIterable<unknown>;
     textStream?: AsyncIterable<unknown>;
   };
