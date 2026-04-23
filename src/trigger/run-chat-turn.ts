@@ -15,6 +15,29 @@ import { triggerChatTurnTask } from "@/lib/chat/trigger-chat-turn-task";
 import { executeChatTurn } from "@/lib/chat/execute-chat-turn";
 import { chatTurnEventsStream } from "./chat-turn-stream";
 
+function serializeRealtimeEvent(event: {
+  dbId: number;
+  logicalEventId: number;
+  chatId: number;
+  runId: string;
+  eventType: string;
+  payload: Record<string, unknown>;
+  createdAt: Date | string;
+}): string {
+  return JSON.stringify({
+    dbId: event.dbId,
+    logicalEventId: event.logicalEventId,
+    chatId: event.chatId,
+    runId: event.runId,
+    eventType: event.eventType,
+    payload: event.payload,
+    createdAt:
+      event.createdAt instanceof Date
+        ? event.createdAt.toISOString()
+        : String(event.createdAt),
+  });
+}
+
 function normalizeErrorMessage(
   value: unknown,
   fallback = "Unknown trigger execution error"
@@ -160,18 +183,7 @@ export const runChatTurnTask = task({
         persistIncomingUserMessage: false,
         onPublishedTurnEvents: async (events) => {
           for (const event of events) {
-            await chatTurnEventsStream.append({
-              dbId: event.dbId,
-              logicalEventId: event.logicalEventId,
-              chatId: event.chatId,
-              runId: event.runId,
-              eventType: event.eventType,
-              payload: event.payload,
-              createdAt:
-                event.createdAt instanceof Date
-                  ? event.createdAt.toISOString()
-                  : String(event.createdAt),
-            });
+            await chatTurnEventsStream.append(serializeRealtimeEvent(event));
           }
         },
       });
@@ -216,18 +228,7 @@ export const runChatTurnTask = task({
         ],
       });
       for (const event of publishedEvents) {
-        await chatTurnEventsStream.append({
-          dbId: event.dbId,
-          logicalEventId: event.logicalEventId,
-          chatId: event.chatId,
-          runId: event.runId,
-          eventType: event.eventType,
-          payload: event.payload,
-          createdAt:
-            event.createdAt instanceof Date
-              ? event.createdAt.toISOString()
-              : String(event.createdAt),
-        });
+        await chatTurnEventsStream.append(serializeRealtimeEvent(event));
       }
       await applyStreamEventsToChatTurnRunLiveState({
         runId: claimed.id,

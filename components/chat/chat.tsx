@@ -29,7 +29,6 @@ const billingFetcher = (url: string) => fetch(url).then((res) => res.json());
 const MIN_CREDITS_TO_SEND = 0.5;
 const CHAT_STREAM_DEBUG_ENABLED = true;
 const FORCE_TRIGGER_REALTIME_STREAM = true;
-const TRIGGER_ACCESS_TOKEN_PLACEHOLDER = "__trigger_access_token_pending__";
 type PendingAttachment = {
   localId: string;
   id: number | null;
@@ -81,6 +80,80 @@ function buildTriggerRealtimeSessionStorageKey(
   runId: string
 ): string {
   return `chat-trigger-realtime:${chatId}:${runId}`;
+}
+
+function toDebugSnippet(value: unknown): string {
+  try {
+    return JSON.stringify(value).slice(0, 400);
+  } catch {
+    return "[unserializable]";
+  }
+}
+
+function normalizeRealtimeChunk(
+  value: unknown
+): Record<string, unknown> | null {
+  if (!value) return null;
+
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      return normalizeRealtimeChunk(parsed);
+    } catch {
+      return null;
+    }
+  }
+
+  if (typeof value !== "object") return null;
+
+  const record = value as Record<string, unknown>;
+
+  if (record.value !== undefined) {
+    const normalizedValue = normalizeRealtimeChunk(record.value);
+    if (normalizedValue) return normalizedValue;
+  }
+
+  if (typeof record.data === "string") {
+    try {
+      const parsed = JSON.parse(record.data) as unknown;
+      const normalizedData = normalizeRealtimeChunk(parsed);
+      if (normalizedData) return normalizedData;
+    } catch {
+      // ignore
+    }
+  }
+
+  return record;
+}
+
+function TriggerRealtimeBridge({
+  session,
+  onParts,
+  onError,
+}: {
+  session: TriggerRealtimeSession;
+  onParts: (parts: ChatTurnRealtimeStreamPart[]) => void;
+  onError: (error: Error) => void;
+}) {
+  const { parts, error } = useRealtimeStream<ChatTurnRealtimeStreamPart>(
+    session.runId,
+    CHAT_TURN_TRIGGER_STREAM_KEY,
+    {
+      accessToken: session.accessToken,
+      startIndex: 0,
+      throttleInMs: 24,
+    }
+  );
+
+  useEffect(() => {
+    onParts(Array.isArray(parts) ? parts : []);
+  }, [parts, onParts]);
+
+  useEffect(() => {
+    if (error) onError(error);
+  }, [error, onError]);
+
+  return null;
 }
 
 function normalizeErrorMessage(
@@ -299,6 +372,7 @@ function ChatInner({
     "ready"
   );
   const [streamDebugText, setStreamDebugText] = useState<string>("");
+  const [isClientMounted, setIsClientMounted] = useState(false);
   const [triggerRealtime, setTriggerRealtime] =
     useState<TriggerRealtimeSession | null>(null);
   const activeAssistantMessageIdRef = useRef<string | null>(null);
@@ -319,20 +393,12 @@ function ChatInner({
   const lastTextDeltaAtRef = useRef<number | null>(null);
   const textDeltaCounterRef = useRef(0);
   const lastDebugUiUpdateAtRef = useRef(0);
-  const { parts: triggerStreamParts, error: triggerRealtimeError } =
-    useRealtimeStream<ChatTurnRealtimeStreamPart>(
-      triggerRealtime?.runId ?? "",
-      CHAT_TURN_TRIGGER_STREAM_KEY,
-      {
-        accessToken:
-          triggerRealtime?.accessToken ?? TRIGGER_ACCESS_TOKEN_PLACEHOLDER,
-        startIndex: 0,
-        throttleInMs: 24,
-      }
-    );
   useEffect(() => {
     statusRef.current = status;
   }, [status]);
+  useEffect(() => {
+    setIsClientMounted(true);
+  }, []);
   useEffect(() => {
     chatIdRef.current = chatId;
   }, [chatId]);
@@ -375,22 +441,37 @@ function ChatInner({
     const note = event.note ? ` ${event.note}` : "";
     setStreamDebugText(`${part}${note}`);
   }, []);
-  useEffect(() => {
-    triggerStreamPartsRef.current = Array.isArray(triggerStreamParts)
-      ? triggerStreamParts
-      : [];
-    if (drainTriggerStreamRef.current) {
-      drainTriggerStreamRef.current();
-    }
-  }, [triggerStreamParts]);
-  useEffect(() => {
-    if (triggerRealtimeError) {
+  const onTriggerRealtimeParts = useCallback(
+    (parts: ChatTurnRealtimeStreamPart[]) => {
+      if (parts.length > 0) {
+        const firstPart = parts[0] as unknown;
+        pushStreamDebug({
+          eventType: "trigger_realtime_first_part",
+          note: `type=${typeof firstPart} snippet=${toDebugSnippet(firstPart)}`,
+        });
+      }
+      triggerStreamPartsRef.current = parts;
+      if (parts.length > 0) {
+        pushStreamDebug({
+          eventType: "trigger_realtime_parts",
+          note: `count=${parts.length}`,
+        });
+      }
+      if (drainTriggerStreamRef.current) {
+        drainTriggerStreamRef.current();
+      }
+    },
+    [pushStreamDebug]
+  );
+  const onTriggerRealtimeError = useCallback(
+    (error: Error) => {
       pushStreamDebug({
         eventType: "trigger_realtime_error",
-        note: triggerRealtimeError.message,
+        note: error.message,
       });
-    }
-  }, [triggerRealtimeError, pushStreamDebug]);
+    },
+    [pushStreamDebug]
+  );
 
   const buildUserMessageParts = (
     text: string,
@@ -1781,18 +1862,44 @@ function ChatInner({
 
       for (let i = processedTriggerParts; i < parts.length; i += 1) {
         const chunk = parts[i];
-        if (!chunk || typeof chunk !== "object") continue;
-        handleEnvelope({
-          logicalEventId: Number(chunk.logicalEventId ?? 0),
-          chatId: Number(chunk.chatId ?? 0),
-          runId: String(chunk.runId ?? ""),
-          eventType: String(chunk.eventType ?? ""),
+        const maybeEnvelope = normalizeRealtimeChunk(chunk);
+        if (!maybeEnvelope) {
+          pushStreamDebug({
+            eventType: "trigger_realtime_unhandled_part",
+            note: `type=${typeof chunk} snippet=${toDebugSnippet(chunk)}`,
+          });
+          continue;
+        }
+
+        if (i === 0) {
+          pushStreamDebug({
+            eventType: "trigger_realtime_raw_part",
+            note: toDebugSnippet(chunk),
+          });
+        }
+
+        const normalizedEnvelope: StreamEnvelope = {
+          logicalEventId: Number(maybeEnvelope.logicalEventId ?? 0),
+          chatId: Number(maybeEnvelope.chatId ?? 0),
+          runId: String(maybeEnvelope.runId ?? ""),
+          eventType: String(maybeEnvelope.eventType ?? ""),
           payload:
-            chunk.payload && typeof chunk.payload === "object"
-              ? chunk.payload
+            maybeEnvelope.payload && typeof maybeEnvelope.payload === "object"
+              ? (maybeEnvelope.payload as Record<string, any>)
               : {},
-          createdAt: String(chunk.createdAt ?? new Date().toISOString()),
-        });
+          createdAt: String(
+            maybeEnvelope.createdAt ?? new Date().toISOString()
+          ),
+        };
+
+        if (i === 0) {
+          pushStreamDebug({
+            eventType: "trigger_realtime_normalized",
+            note: toDebugSnippet(normalizedEnvelope),
+          });
+        }
+
+        handleEnvelope(normalizedEnvelope);
       }
 
       processedTriggerParts = parts.length;
@@ -1926,7 +2033,10 @@ function ChatInner({
               const recoveredAccessToken =
                 realtimeAccessTokenFromLive ??
                 window.sessionStorage.getItem(
-                  buildTriggerRealtimeSessionStorageKey(chatId, liveTriggerRunId)
+                  buildTriggerRealtimeSessionStorageKey(
+                    chatId,
+                    liveTriggerRunId
+                  )
                 );
               if (recoveredAccessToken) {
                 setTriggerRealtime({
@@ -1934,7 +2044,10 @@ function ChatInner({
                   accessToken: recoveredAccessToken,
                 });
                 window.sessionStorage.setItem(
-                  buildTriggerRealtimeSessionStorageKey(chatId, liveTriggerRunId),
+                  buildTriggerRealtimeSessionStorageKey(
+                    chatId,
+                    liveTriggerRunId
+                  ),
                   recoveredAccessToken
                 );
                 pushStreamDebug({
@@ -2054,6 +2167,13 @@ function ChatInner({
 
   return (
     <div className="flex flex-col h-full">
+      {isClientMounted && FORCE_TRIGGER_REALTIME_STREAM && triggerRealtime ? (
+        <TriggerRealtimeBridge
+          session={triggerRealtime}
+          onParts={onTriggerRealtimeParts}
+          onError={onTriggerRealtimeError}
+        />
+      ) : null}
       <div className="flex-1 min-h-0 overflow-hidden">
         {messages.length === 0 && errorMessages.length === 0 ? (
           <WelcomeMessage />

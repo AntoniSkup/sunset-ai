@@ -1,6 +1,6 @@
 export const CHAT_TURN_TRIGGER_STREAM_KEY = "chat-turn-events";
 
-export type ChatTurnRealtimeStreamPart = {
+export type ChatTurnRealtimeEnvelope = {
   dbId: number;
   logicalEventId: number;
   chatId: number;
@@ -9,3 +9,5 @@ export type ChatTurnRealtimeStreamPart = {
   payload: Record<string, unknown>;
   createdAt: string;
 };
+
+export type ChatTurnRealtimeStreamPart = string;
