@@ -22,6 +22,7 @@ import { toast } from "sonner";
 
 const billingFetcher = (url: string) => fetch(url).then((res) => res.json());
 const MIN_CREDITS_TO_SEND = 0.5;
+const CHAT_STREAM_DEBUG_ENABLED = true;
 type PendingAttachment = {
   localId: string;
   id: number | null;
@@ -52,6 +53,15 @@ type LiveTurnRunState = {
     revisionNumber?: number;
   } | null;
   lastLogicalEventId: number;
+};
+
+type ChatStreamDebugEvent = {
+  eventType: string;
+  logicalEventId?: number;
+  lagMs?: number | null;
+  gapMs?: number | null;
+  textDeltaChars?: number;
+  note?: string;
 };
 
 function normalizeErrorMessage(
@@ -269,6 +279,7 @@ function ChatInner({
   const [status, setStatus] = useState<"ready" | "submitted" | "streaming">(
     "ready"
   );
+  const [streamDebugText, setStreamDebugText] = useState<string>("");
   const activeAssistantMessageIdRef = useRef<string | null>(null);
   const lastEventIdRef = useRef<number>(0);
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -279,6 +290,10 @@ function ChatInner({
   const turnFetchAbortRef = useRef<AbortController | null>(null);
   const activeTurnRunIdRef = useRef<string | null>(null);
   const reconnectStreamRef = useRef<(() => void) | null>(null);
+  const lastStreamEventAtRef = useRef<number | null>(null);
+  const lastTextDeltaAtRef = useRef<number | null>(null);
+  const textDeltaCounterRef = useRef(0);
+  const lastDebugUiUpdateAtRef = useRef(0);
   const loadMessages = useCallback(async () => {
     if (!chatId) return;
     const res = await fetch(
@@ -290,6 +305,30 @@ function ChatInner({
     const data = await res.json();
     setMessages(Array.isArray(data?.messages) ? data.messages : []);
   }, [chatId]);
+
+  const pushStreamDebug = useCallback((event: ChatStreamDebugEvent) => {
+    if (!CHAT_STREAM_DEBUG_ENABLED) return;
+
+    const details = {
+      chatId,
+      status,
+      runId: activeTurnRunIdRef.current,
+      ...event,
+    };
+    console.debug("[chat-stream-debug:client]", details);
+
+    const now = Date.now();
+    if (now - lastDebugUiUpdateAtRef.current < 220) return;
+    lastDebugUiUpdateAtRef.current = now;
+
+    const lagPart =
+      typeof event.lagMs === "number" ? `lag=${event.lagMs}ms` : "lag=n/a";
+    const gapPart =
+      typeof event.gapMs === "number" ? `gap=${event.gapMs}ms` : "gap=n/a";
+    const part = `[${event.eventType}] ${lagPart} ${gapPart}`;
+    const note = event.note ? ` ${event.note}` : "";
+    setStreamDebugText(`${part}${note}`);
+  }, [chatId, status]);
 
   const buildUserMessageParts = (
     text: string,
@@ -363,6 +402,7 @@ function ChatInner({
       const idempotencyKey = `turn-${chatId}-${Date.now()}-${Math.random()
         .toString(36)
         .slice(2, 10)}`;
+      const enqueueStartedAt = Date.now();
 
       const ac = new AbortController();
       turnFetchAbortRef.current = ac;
@@ -445,6 +485,10 @@ function ChatInner({
         if (runId) {
           activeTurnRunIdRef.current = runId;
         }
+        pushStreamDebug({
+          eventType: "turn_run_accepted",
+          note: `requestMs=${Date.now() - enqueueStartedAt}`,
+        });
         setStatus("streaming");
       } catch (err) {
         if (err instanceof Error && err.name === "AbortError") {
@@ -467,6 +511,10 @@ function ChatInner({
           return;
         }
         const errMsg = normalizeErrorMessage(err, "Failed to queue generation");
+        pushStreamDebug({
+          eventType: "turn_run_failed",
+          note: errMsg,
+        });
         setErrorMessages((prev) => [
           ...prev,
           {
@@ -480,7 +528,7 @@ function ChatInner({
         turnFetchAbortRef.current = null;
       }
     },
-    [chatId, mutateBilling]
+    [chatId, mutateBilling, pushStreamDebug]
   );
 
   useEffect(() => {
@@ -876,12 +924,16 @@ function ChatInner({
       reconnectTimerRef.current = null;
     }
     reconnectStreamRef.current?.();
+    pushStreamDebug({
+      eventType: "stop_generation",
+      note: "User canceled generation",
+    });
 
     setStatus("ready");
     hidePreviewLoader();
     activeAssistantMessageIdRef.current = null;
     void loadMessages();
-  }, [chatId, loadMessages]);
+  }, [chatId, loadMessages, pushStreamDebug]);
 
   useEffect(() => {
     if (!chatId) return;
@@ -891,6 +943,13 @@ function ChatInner({
     let pendingFailureMessage: string | null = null;
     streamInitializedRef.current = false;
     lastEventIdRef.current = 0;
+    lastStreamEventAtRef.current = null;
+    lastTextDeltaAtRef.current = null;
+    textDeltaCounterRef.current = 0;
+    pushStreamDebug({
+      eventType: "stream_bootstrap",
+      note: "Initializing SSE stream lifecycle",
+    });
 
     const TRACKED_PROGRESS_TOOLS = new Set([
       "create_site",
@@ -1413,10 +1472,54 @@ function ChatInner({
 
     const handleEnvelope = (envelope: StreamEnvelope) => {
       if (envelope.logicalEventId <= lastEventIdRef.current) return;
+
+      const now = Date.now();
+      const parsedCreatedAtMs = Date.parse(String(envelope.createdAt));
+      const lagMs = Number.isFinite(parsedCreatedAtMs)
+        ? Math.max(0, now - parsedCreatedAtMs)
+        : null;
+      const gapMs =
+        lastStreamEventAtRef.current == null
+          ? null
+          : Math.max(0, now - lastStreamEventAtRef.current);
+      lastStreamEventAtRef.current = now;
+
       lastEventIdRef.current = envelope.logicalEventId;
 
       const payload = envelope.payload ?? {};
       const eventType = envelope.eventType;
+      if (eventType === "text_delta") {
+        textDeltaCounterRef.current += 1;
+        const textPart = String(payload.text ?? "");
+        const textGapMs =
+          lastTextDeltaAtRef.current == null
+            ? null
+            : Math.max(0, now - lastTextDeltaAtRef.current);
+        lastTextDeltaAtRef.current = now;
+        const shouldReportTextDelta =
+          textDeltaCounterRef.current % 8 === 0 ||
+          (typeof textGapMs === "number" && textGapMs >= 1000);
+        if (shouldReportTextDelta) {
+          pushStreamDebug({
+            eventType,
+            logicalEventId: envelope.logicalEventId,
+            lagMs,
+            gapMs: textGapMs,
+            textDeltaChars: textPart.length,
+            note:
+              typeof textGapMs === "number" && textGapMs >= 1800
+                ? "Large text gap detected"
+                : undefined,
+          });
+        }
+      } else {
+        pushStreamDebug({
+          eventType,
+          logicalEventId: envelope.logicalEventId,
+          lagMs,
+          gapMs,
+        });
+      }
 
       if (eventType === "run_enqueued") {
         return;
@@ -1571,6 +1674,10 @@ function ChatInner({
         `/api/chats/${encodeURIComponent(chatId)}/stream?afterEventId=${afterEventId}`
       );
       eventSourceRef.current = source;
+      pushStreamDebug({
+        eventType: "sse_connect",
+        note: `connectionId=${connectionId}, afterEventId=${afterEventId}`,
+      });
 
       const eventTypes = [
         "run_enqueued",
@@ -1590,7 +1697,10 @@ function ChatInner({
           const envelope = JSON.parse(event.data) as StreamEnvelope;
           handleEnvelope(envelope);
         } catch {
-          // ignore malformed event
+          pushStreamDebug({
+            eventType: "sse_parse_error",
+            note: "Malformed SSE event payload",
+          });
         }
       };
 
@@ -1600,10 +1710,18 @@ function ChatInner({
 
       source.onopen = () => {
         if (connectionId !== streamConnectionIdRef.current) return;
+        pushStreamDebug({
+          eventType: "sse_open",
+          note: `connectionId=${connectionId}`,
+        });
       };
 
       source.onerror = () => {
         if (connectionId !== streamConnectionIdRef.current) return;
+        pushStreamDebug({
+          eventType: "sse_error",
+          note: `connectionId=${connectionId}, reconnectInMs=1200`,
+        });
         source.close();
         if (cancelled) return;
         reconnectTimerRef.current = window.setTimeout(() => {
@@ -1615,6 +1733,7 @@ function ChatInner({
     const bootstrap = async () => {
       if (!streamInitializedRef.current) {
         try {
+          const bootstrapStartedAt = Date.now();
           const liveRes = await fetch(
             `/api/chats/${encodeURIComponent(chatId)}/turn-runs/live`
           );
@@ -1647,6 +1766,11 @@ function ChatInner({
               };
             }
             setStatus("streaming");
+            pushStreamDebug({
+              eventType: "live_state_bootstrap",
+              logicalEventId: lastEventIdRef.current,
+              note: `recovered=true requestMs=${Date.now() - bootstrapStartedAt}`,
+            });
           } else {
             const res = await fetch(
               `/api/chats/${encodeURIComponent(chatId)}/turn-runs?latest=1`
@@ -1656,8 +1780,17 @@ function ChatInner({
             if (Number.isFinite(latestId) && latestId > 0) {
               lastEventIdRef.current = latestId;
             }
+            pushStreamDebug({
+              eventType: "live_state_bootstrap",
+              logicalEventId: lastEventIdRef.current,
+              note: `recovered=false requestMs=${Date.now() - bootstrapStartedAt}`,
+            });
           }
         } catch {
+          pushStreamDebug({
+            eventType: "live_state_bootstrap_error",
+            note: "Failed to bootstrap live state",
+          });
           // fallback to 0 when latest lookup fails
         }
         streamInitializedRef.current = true;
@@ -1675,6 +1808,10 @@ function ChatInner({
       cancelled = true;
       reconnectStreamRef.current = null;
       stopProgressTicker();
+      pushStreamDebug({
+        eventType: "stream_cleanup",
+        note: "Chat stream effect cleanup",
+      });
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
         eventSourceRef.current = null;
@@ -1684,7 +1821,7 @@ function ChatInner({
         reconnectTimerRef.current = null;
       }
     };
-  }, [chatId, loadMessages]);
+  }, [chatId, loadMessages, pushStreamDebug]);
 
   useEffect(() => {
     const lastMessage = messages[messages.length - 1];
@@ -1746,6 +1883,11 @@ function ChatInner({
         captureGlobalTyping={Boolean(providedChatId)}
         onInsertText={insertTextFromGlobalKey}
       />
+      {CHAT_STREAM_DEBUG_ENABLED ? (
+        <div className="px-3 py-1 text-[11px] text-muted-foreground border-t border-border/40 font-mono">
+          {streamDebugText || "stream debug enabled - waiting for events"}
+        </div>
+      ) : null}
       <CreditsLimitModal
         open={showCreditsLimitModal}
         onOpenChange={(open) => {
