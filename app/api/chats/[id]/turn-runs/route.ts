@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { nanoid } from "nanoid";
 import {
-  countActiveChatTurnRunsByUser,
   createChatMessage,
   enqueueChatTurnRun,
   getChatByPublicId,
@@ -29,8 +28,6 @@ import {
 import { ensureDailyCreditsForAccount } from "@/lib/billing/daily-credits";
 import { getCreditsBreakdown } from "@/lib/billing/credits-breakdown";
 import { getCreditsCostForAction } from "@/lib/credits/pricing";
-
-const MAX_CONCURRENT_TURN_RUNS_PER_USER = 3;
 
 export async function POST(
   request: NextRequest,
@@ -82,18 +79,6 @@ export async function POST(
   const existing = await getChatTurnRunByIdempotencyKey(idempotencyKey);
   if (existing && existing.chatId === chat.id && existing.userId === user.id) {
     return NextResponse.json({ run: existing, deduped: true });
-  }
-
-  const activeRuns = await countActiveChatTurnRunsByUser(user.id);
-  if (activeRuns >= MAX_CONCURRENT_TURN_RUNS_PER_USER) {
-    return NextResponse.json(
-      {
-        error: "Too many active generations. Please wait for one to finish.",
-        code: "TOO_MANY_ACTIVE_REQUESTS",
-        maxConcurrent: MAX_CONCURRENT_TURN_RUNS_PER_USER,
-      },
-      { status: 429 },
-    );
   }
 
   const account = await getOrCreateAccountForUser(user.id);

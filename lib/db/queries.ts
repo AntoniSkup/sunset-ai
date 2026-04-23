@@ -25,11 +25,16 @@ import {
   chatMessages,
   chatToolCalls,
   chatTurnRuns,
+  chatTurnRunLiveState,
   chatStreamCursors,
   chatStreamEvents,
   siteAssets,
   publishedSites,
   inspirations,
+} from "./schema";
+import type {
+  ChatTurnRunLivePreviewState,
+  ChatTurnRunLiveState as ChatTurnRunLiveStateRow,
 } from "./schema";
 import { nanoid } from "nanoid";
 import { cookies } from "next/headers";
@@ -1065,6 +1070,74 @@ export async function markChatTurnRunFailed(params: {
     .returning();
 
   return row ?? null;
+}
+
+export async function getChatTurnRunLiveStateByRunId(runId: string) {
+  const rows = await db
+    .select()
+    .from(chatTurnRunLiveState)
+    .where(eq(chatTurnRunLiveState.runId, runId))
+    .limit(1);
+
+  return rows[0] ?? null;
+}
+
+export async function upsertChatTurnRunLiveState(data: {
+  runId: string;
+  chatId: number;
+  userId: number;
+  status: string;
+  assistantParts: ChatTurnRunLiveStateRow["assistantParts"];
+  previewState?: ChatTurnRunLivePreviewState;
+  lastLogicalEventId: number;
+  lastEventCreatedAt?: Date | string | null;
+  completedAt?: Date | null;
+}) {
+  const values = {
+    runId: data.runId,
+    chatId: data.chatId,
+    userId: data.userId,
+    status: data.status,
+    assistantParts: data.assistantParts,
+    previewState: data.previewState ?? null,
+    lastLogicalEventId: data.lastLogicalEventId,
+    lastEventCreatedAt: data.lastEventCreatedAt
+      ? new Date(data.lastEventCreatedAt)
+      : null,
+    updatedAt: new Date(),
+    completedAt: data.completedAt ?? null,
+  };
+
+  const [row] = await db
+    .insert(chatTurnRunLiveState)
+    .values({
+      ...values,
+      startedAt: new Date(),
+    })
+    .onConflictDoUpdate({
+      target: chatTurnRunLiveState.runId,
+      set: values,
+    })
+    .returning();
+
+  return row ?? null;
+}
+
+export async function getRunningChatTurnRunLiveState(chatId: number, userId: number) {
+  const rows = await db
+    .select()
+    .from(chatTurnRunLiveState)
+    .where(
+      and(
+        eq(chatTurnRunLiveState.chatId, chatId),
+        eq(chatTurnRunLiveState.userId, userId),
+        eq(chatTurnRunLiveState.status, "running")
+      )
+    )
+    .orderBy(desc(chatTurnRunLiveState.updatedAt))
+    .limit(1);
+
+  return rows[0] ?? null;
 }
 
 /** Cancels a single turn run if it is still pending or running (e.g. user stop). */

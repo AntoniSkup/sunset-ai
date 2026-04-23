@@ -43,6 +43,17 @@ type StreamEnvelope = {
   createdAt: string;
 };
 
+type LiveTurnRunState = {
+  runId: string;
+  status: string;
+  assistantParts: UIMessage["parts"];
+  previewState?: {
+    revisionId?: number;
+    revisionNumber?: number;
+  } | null;
+  lastLogicalEventId: number;
+};
+
 function normalizeErrorMessage(
   value: unknown,
   fallback = "Generation failed"
@@ -1292,6 +1303,37 @@ function ChatInner({
       });
     };
 
+    const restoreAssistantFromLiveState = (liveState: LiveTurnRunState) => {
+      const assistantId = `live-assistant-${liveState.runId}`;
+      activeAssistantMessageIdRef.current = assistantId;
+      const assistantParts =
+        Array.isArray(liveState.assistantParts) && liveState.assistantParts.length > 0
+          ? liveState.assistantParts
+          : ([{ type: "text", text: "" }] as UIMessage["parts"]);
+
+      setMessages((prev) => {
+        const idx = prev.findIndex((m) => m.id === assistantId);
+        if (idx === -1) {
+          return [
+            ...prev,
+            {
+              id: assistantId,
+              role: "assistant",
+              parts: assistantParts,
+            },
+          ];
+        }
+
+        const next = [...prev];
+        next[idx] = {
+          ...next[idx],
+          role: "assistant",
+          parts: assistantParts,
+        };
+        return next;
+      });
+    };
+
     const upsertAssistantToolCallPart = ({
       toolCallId,
       toolName,
@@ -1572,13 +1614,47 @@ function ChatInner({
     const bootstrap = async () => {
       if (!streamInitializedRef.current) {
         try {
-          const res = await fetch(
-            `/api/chats/${encodeURIComponent(chatId)}/turn-runs?latest=1`
+          const liveRes = await fetch(
+            `/api/chats/${encodeURIComponent(chatId)}/turn-runs/live`
           );
-          const data = await res.json().catch(() => null);
-          const latestId = Number(data?.event?.logicalEventId ?? 0);
-          if (Number.isFinite(latestId) && latestId > 0) {
-            lastEventIdRef.current = latestId;
+          const liveData = await liveRes.json().catch(() => null);
+          const liveState = liveData?.liveState as LiveTurnRunState | null;
+          const liveRunId =
+            liveData?.run && typeof liveData.run.id === "string"
+              ? liveData.run.id
+              : null;
+
+          if (
+            liveRes.ok &&
+            liveState &&
+            liveState.status === "running" &&
+            typeof liveState.runId === "string"
+          ) {
+            restoreAssistantFromLiveState(liveState);
+            activeTurnRunIdRef.current = liveRunId ?? liveState.runId;
+            const snapshotEventId = Number(liveState.lastLogicalEventId ?? 0);
+            if (Number.isFinite(snapshotEventId) && snapshotEventId > 0) {
+              lastEventIdRef.current = snapshotEventId;
+            }
+            if (
+              liveState.previewState?.revisionId &&
+              liveState.previewState?.revisionNumber
+            ) {
+              pendingPreviewUpdateRef.current = {
+                versionId: Number(liveState.previewState.revisionId),
+                versionNumber: Number(liveState.previewState.revisionNumber),
+              };
+            }
+            setStatus("streaming");
+          } else {
+            const res = await fetch(
+              `/api/chats/${encodeURIComponent(chatId)}/turn-runs?latest=1`
+            );
+            const data = await res.json().catch(() => null);
+            const latestId = Number(data?.event?.logicalEventId ?? 0);
+            if (Number.isFinite(latestId) && latestId > 0) {
+              lastEventIdRef.current = latestId;
+            }
           }
         } catch {
           // fallback to 0 when latest lookup fails

@@ -81,6 +81,17 @@ function isRedisTimeoutError(error: unknown): boolean {
   );
 }
 
+function isRedisAuthError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const message = error.message.toUpperCase();
+  return (
+    message.includes("WRONGPASS") ||
+    message.includes("NOAUTH") ||
+    message.includes("INVALID USERNAME-PASSWORD PAIR") ||
+    message.includes("USER IS DISABLED")
+  );
+}
+
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   let timeoutId: ReturnType<typeof setTimeout> | null = null;
   const timeout = new Promise<never>((_, reject) => {
@@ -164,11 +175,15 @@ export async function publishStreamEvents(
       console.error("[stream-bus] Redis publish failed, switched to cooldown", {
         dbFallbackEnabled: STREAM_BUS_DB_FALLBACK,
         cooldownMs: REDIS_STREAM_COOLDOWN_MS,
+        auth: isRedisAuthError(error),
         error: error instanceof Error ? error.message : String(error),
       });
     }
-    if (!STREAM_BUS_DB_FALLBACK) {
+    if (!STREAM_BUS_DB_FALLBACK && !isRedisAuthError(error)) {
       throw error;
+    }
+    if (isRedisAuthError(error)) {
+      logRedisUnavailable("redis auth failed");
     }
     logStreamBusDiagnostic("Redis publish failed and fell back to DB", {
       chatId: params.chatId,
@@ -176,6 +191,7 @@ export async function publishStreamEvents(
       eventCount: dbEvents.length,
       durationMs: Date.now() - startedAt,
       cooldownMs: REDIS_STREAM_COOLDOWN_MS,
+      auth: isRedisAuthError(error),
       error: error instanceof Error ? error.message : String(error),
     });
     return dbEvents;
@@ -241,8 +257,8 @@ export async function readStreamEventsAfter(
     }
     return events;
   } catch (error) {
-    // Only enter read cooldown for transient infra failures.
-    if (isRedisTimeoutError(error)) {
+    // Enter read cooldown for transient infra failures and auth/config errors.
+    if (isRedisTimeoutError(error) || isRedisAuthError(error)) {
       markRedisReadUnavailable();
     }
     if (process.env.NODE_ENV === "production") {
@@ -250,11 +266,15 @@ export async function readStreamEventsAfter(
         dbFallbackEnabled: STREAM_BUS_DB_FALLBACK,
         readCooldownMs: REDIS_STREAM_COOLDOWN_MS,
         timeout: isRedisTimeoutError(error),
+        auth: isRedisAuthError(error),
         error: error instanceof Error ? error.message : String(error),
       });
     }
-    if (!STREAM_BUS_DB_FALLBACK) {
+    if (!STREAM_BUS_DB_FALLBACK && !isRedisAuthError(error)) {
       throw error;
+    }
+    if (isRedisAuthError(error)) {
+      logRedisUnavailable("redis auth failed");
     }
     const events = await dbStreamBusAdapter.readEventsAfter(params);
     logStreamBusDiagnostic("Redis read failed and used DB fallback", {
@@ -263,6 +283,7 @@ export async function readStreamEventsAfter(
       eventCount: events.length,
       durationMs: Date.now() - startedAt,
       timeout: isRedisTimeoutError(error),
+      auth: isRedisAuthError(error),
       error: error instanceof Error ? error.message : String(error),
     });
     return events;

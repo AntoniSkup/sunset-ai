@@ -148,6 +148,13 @@
       "when": 1775600000000,
       "tag": "0020_inspirations_section",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1776900000000,
+      "tag": "0021_calm_stream_anchor",
+      "breakpoints": true
     }
   ]
 }

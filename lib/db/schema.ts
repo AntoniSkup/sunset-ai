@@ -14,6 +14,7 @@ import {
   numeric,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
+import type { UIMessage } from "ai";
 
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
@@ -418,6 +419,45 @@ export const chatStreamEvents = pgTable(
   })
 );
 
+export type ChatTurnRunLivePreviewState = {
+  revisionId?: number;
+  revisionNumber?: number;
+} | null;
+
+export const chatTurnRunLiveState = pgTable(
+  "chat_turn_run_live_state",
+  {
+    runId: uuid("run_id")
+      .primaryKey()
+      .references(() => chatTurnRuns.id),
+    chatId: integer("chat_id")
+      .notNull()
+      .references(() => chats.id),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id),
+    status: varchar("status", { length: 20 }).notNull(),
+    assistantParts: jsonb("assistant_parts")
+      .$type<UIMessage["parts"]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    previewState: jsonb("preview_state").$type<ChatTurnRunLivePreviewState>(),
+    lastLogicalEventId: integer("last_logical_event_id").notNull().default(0),
+    lastEventCreatedAt: timestamp("last_event_created_at"),
+    startedAt: timestamp("started_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+    completedAt: timestamp("completed_at"),
+  },
+  (table) => ({
+    chatIdIdx: index("chat_turn_run_live_state_chat_id_idx").on(table.chatId),
+    userIdIdx: index("chat_turn_run_live_state_user_id_idx").on(table.userId),
+    chatStatusIdx: index("chat_turn_run_live_state_chat_id_status_idx").on(
+      table.chatId,
+      table.status
+    ),
+  })
+);
+
 export const siteAssets = pgTable(
   "site_assets",
   {
@@ -527,6 +567,10 @@ export const chatTurnRunsRelations = relations(chatTurnRuns, ({ one, many }) => 
     references: [users.id],
   }),
   streamEvents: many(chatStreamEvents),
+  liveState: one(chatTurnRunLiveState, {
+    fields: [chatTurnRuns.id],
+    references: [chatTurnRunLiveState.runId],
+  }),
 }));
 
 export const chatStreamCursorsRelations = relations(
@@ -549,6 +593,24 @@ export const chatStreamEventsRelations = relations(chatStreamEvents, ({ one }) =
     references: [chatTurnRuns.id],
   }),
 }));
+
+export const chatTurnRunLiveStateRelations = relations(
+  chatTurnRunLiveState,
+  ({ one }) => ({
+    run: one(chatTurnRuns, {
+      fields: [chatTurnRunLiveState.runId],
+      references: [chatTurnRuns.id],
+    }),
+    chat: one(chats, {
+      fields: [chatTurnRunLiveState.chatId],
+      references: [chats.id],
+    }),
+    user: one(users, {
+      fields: [chatTurnRunLiveState.userId],
+      references: [users.id],
+    }),
+  })
+);
 
 export const siteAssetsRelations = relations(siteAssets, ({ one }) => ({
   chat: one(chats, {
@@ -580,6 +642,8 @@ export type ChatStreamCursor = typeof chatStreamCursors.$inferSelect;
 export type NewChatStreamCursor = typeof chatStreamCursors.$inferInsert;
 export type ChatStreamEvent = typeof chatStreamEvents.$inferSelect;
 export type NewChatStreamEvent = typeof chatStreamEvents.$inferInsert;
+export type ChatTurnRunLiveState = typeof chatTurnRunLiveState.$inferSelect;
+export type NewChatTurnRunLiveState = typeof chatTurnRunLiveState.$inferInsert;
 export type SiteAsset = typeof siteAssets.$inferSelect;
 export type NewSiteAsset = typeof siteAssets.$inferInsert;
 export type Inspiration = typeof inspirations.$inferSelect;

@@ -1,13 +1,18 @@
 import { logger, task } from "@trigger.dev/sdk/v3";
+import type { UIMessage } from "ai";
 import {
   attachTriggerRunIdToChatTurnRun,
   claimNextPendingChatTurnRun,
+  getChatByPublicId,
   getChatTurnRunById,
+  getUserById,
   markChatTurnRunFailed,
 } from "@/lib/db/queries";
 import { diffMs, logChatStreamDiagnostic } from "@/lib/chat/stream-diagnostics";
 import { publishStreamEvents } from "@/lib/chat/stream-bus";
+import { applyStreamEventsToChatTurnRunLiveState } from "@/lib/chat/live-state";
 import { triggerChatTurnTask } from "@/lib/chat/trigger-chat-turn-task";
+import { executeChatTurn } from "@/lib/chat/execute-chat-turn";
 
 function normalizeErrorMessage(
   value: unknown,
@@ -112,109 +117,63 @@ export const runChatTurnTask = task({
       triggerRunId: String(ctx.run.id),
     });
 
-    const appBaseUrl =
-      process.env.APP_BASE_URL ||
-      process.env.NEXT_PUBLIC_APP_URL ||
-      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null);
-
-    if (!appBaseUrl) {
-      throw new Error("Missing APP_BASE_URL (or NEXT_PUBLIC_APP_URL/VERCEL_URL)");
-    }
-
-    const internalSecret = process.env.INTERNAL_JOB_SECRET;
-    if (!internalSecret) {
-      throw new Error("Missing INTERNAL_JOB_SECRET");
-    }
-
     const payloadData = claimed.payload as {
       chatId?: string;
       messages?: unknown[];
       userId?: number;
     };
-    const chatId = payloadData.chatId;
+    const chatPublicId = payloadData.chatId;
     const messages = payloadData.messages;
 
-    if (!chatId || !Array.isArray(messages)) {
+    if (!chatPublicId || !Array.isArray(messages)) {
       throw new Error("Invalid turn-run payload: expected chatId and messages[]");
     }
 
     try {
-      const requestStartedAt = Date.now();
-      const response = await fetch(`${appBaseUrl}/api/chat`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-internal-job-secret": internalSecret,
-        },
-        body: JSON.stringify({
-          chatId,
-          messages,
-          userId: claimed.userId,
-          turnRunId: claimed.id,
-        }),
-      });
+      const executionStartedAt = Date.now();
+      const [user, chat] = await Promise.all([
+        getUserById(claimed.userId),
+        getChatByPublicId(chatPublicId, claimed.userId),
+      ]);
 
-      logChatStreamDiagnostic("Trigger /api/chat responded", {
+      if (!user) {
+        throw new Error(`User not found: ${claimed.userId}`);
+      }
+      if (!chat) {
+        throw new Error(`Chat not found: ${chatPublicId}`);
+      }
+
+      logChatStreamDiagnostic("Trigger direct chat execution starting", {
         triggerRunId: String(ctx.run.id),
         chatTurnRunId: claimed.id,
         chatId: claimed.chatId,
-        status: response.status,
-        responseHeadersMs: Date.now() - requestStartedAt,
+        taskDispatchMs: Date.now() - executionStartedAt,
       });
 
-      if (!response.ok) {
-        const text = await response.text().catch(() => "");
-        throw new Error(
-          `Internal chat execution failed (${response.status}): ${text.slice(0, 500)}`
-        );
-      }
+      await executeChatTurn({
+        user,
+        chat,
+        chatPublicId,
+        messages: messages as Array<Omit<UIMessage, "id">>,
+        turnRunId: claimed.id,
+        persistIncomingUserMessage: false,
+      });
 
-      // Ensure the stream fully completes before chaining the next queue item.
-      // Drain incrementally to avoid buffering large generations into memory.
-      if (response.body) {
-        const reader = response.body.getReader();
-        let totalBytes = 0;
-        let chunkCount = 0;
-        let firstChunkLatencyMs: number | null = null;
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          chunkCount += 1;
-          totalBytes += value?.byteLength ?? 0;
-          if (firstChunkLatencyMs == null) {
-            firstChunkLatencyMs = Date.now() - requestStartedAt;
-            logChatStreamDiagnostic("Trigger received first chat chunk", {
-              triggerRunId: String(ctx.run.id),
-              chatTurnRunId: claimed.id,
-              chatId: claimed.chatId,
-              firstChunkLatencyMs,
-            });
-          }
-        }
-        logChatStreamDiagnostic("Trigger drained chat response stream", {
-          triggerRunId: String(ctx.run.id),
-          chatTurnRunId: claimed.id,
-          chatId: claimed.chatId,
-          totalDurationMs: Date.now() - requestStartedAt,
-          firstChunkLatencyMs,
-          chunkCount,
-          totalBytes,
-        });
-      } else {
-        // Some runtimes expose no stream reader; this still waits for completion.
-        await response.arrayBuffer();
-        logChatStreamDiagnostic("Trigger completed non-streaming chat response", {
-          triggerRunId: String(ctx.run.id),
-          chatTurnRunId: claimed.id,
-          chatId: claimed.chatId,
-          totalDurationMs: Date.now() - requestStartedAt,
-        });
-      }
+      logChatStreamDiagnostic("Trigger direct chat execution completed", {
+        triggerRunId: String(ctx.run.id),
+        chatTurnRunId: claimed.id,
+        chatId: claimed.chatId,
+        totalDurationMs: Date.now() - executionStartedAt,
+      });
     } catch (error) {
       const message = normalizeErrorMessage(
         error,
         "Unknown trigger execution error"
       );
+      const latestRun = await getChatTurnRunById(claimed.id);
+      if (latestRun?.status === "failed" || latestRun?.status === "canceled") {
+        throw error;
+      }
       logChatStreamDiagnostic("Trigger execution failed", {
         triggerRunId: String(ctx.run.id),
         chatTurnRunId: claimed.id,
@@ -226,7 +185,7 @@ export const runChatTurnTask = task({
         runId: claimed.id,
         errorMessage: message,
       });
-      await publishStreamEvents({
+      const publishedEvents = await publishStreamEvents({
         chatId: claimed.chatId,
         runId: claimed.id,
         events: [
@@ -238,6 +197,12 @@ export const runChatTurnTask = task({
             },
           },
         ],
+      });
+      await applyStreamEventsToChatTurnRunLiveState({
+        runId: claimed.id,
+        chatId: claimed.chatId,
+        userId: claimed.userId,
+        events: publishedEvents,
       });
       throw error;
     } finally {
