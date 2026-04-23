@@ -61,8 +61,8 @@ const BUILDER_TOOLS = new Set([
   "resolve_image_slots",
   "validate_completeness",
 ]);
-const TEXT_DELTA_FLUSH_MS = 30;
-const TEXT_DELTA_FLUSH_CHARS = 8;
+const TEXT_DELTA_FLUSH_MS = 60;
+const TEXT_DELTA_FLUSH_CHARS = 32;
 const TURN_EVENT_FLUSH_MS = 60;
 const TURN_EVENT_BATCH_SIZE = 24;
 const MAX_CHAT_STEPS_PER_TURN = 20;

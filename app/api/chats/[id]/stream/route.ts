@@ -9,11 +9,11 @@ import {
 import { diffMs, logChatStreamDiagnostic } from "@/lib/chat/stream-diagnostics";
 
 export const dynamic = "force-dynamic";
-const SSE_POLL_INTERVAL_BASE_MS = 100;
-const SSE_POLL_INTERVAL_MAX_MS = 500;
+const SSE_POLL_INTERVAL_BASE_MS = 40;
+const SSE_POLL_INTERVAL_MAX_MS = 120;
 const SSE_HEARTBEAT_INTERVAL_MS = 15000;
-const SSE_ERROR_RETRY_BASE_MS = 500;
-const SSE_ERROR_RETRY_MAX_MS = 3000;
+const SSE_ERROR_RETRY_BASE_MS = 150;
+const SSE_ERROR_RETRY_MAX_MS = 800;
 const SSE_CONNECTION_MAX_MS = 240000;
 
 function sseFrame(params: {
@@ -177,10 +177,10 @@ export async function GET(
             }
 
             if (events.length === 0) {
-              // Back off polling when idle to reduce DB pressure.
+              // Keep tight polling in strict Redis mode for smooth delivery.
               pollIntervalMs = Math.min(
                 SSE_POLL_INTERVAL_MAX_MS,
-                Math.floor(pollIntervalMs * 1.5)
+                Math.max(SSE_POLL_INTERVAL_BASE_MS, pollIntervalMs + 10)
               );
               const nowMs = Date.now();
               if (nowMs - lastHeartbeatAtMs >= SSE_HEARTBEAT_INTERVAL_MS) {
@@ -188,7 +188,7 @@ export async function GET(
                 lastHeartbeatAtMs = nowMs;
               }
             } else {
-              // Reset to low latency when there is activity.
+              // Reset to lowest latency when there is activity.
               pollIntervalMs = SSE_POLL_INTERVAL_BASE_MS;
 
               // If we hit batch limit there may be more rows queued; poll again immediately.
