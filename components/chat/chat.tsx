@@ -1878,6 +1878,15 @@ function ChatInner({
             liveData?.run && typeof liveData.run.id === "string"
               ? liveData.run.id
               : null;
+          const liveRealtime =
+            liveData?.triggerRealtime &&
+            typeof liveData.triggerRealtime.runId === "string" &&
+            typeof liveData.triggerRealtime.accessToken === "string"
+              ? (liveData.triggerRealtime as {
+                  runId: string;
+                  accessToken: string;
+                })
+              : null;
           const liveTriggerRunId =
             liveData?.run && typeof liveData.run.triggerRunId === "string"
               ? liveData.run.triggerRunId
@@ -1910,14 +1919,24 @@ function ChatInner({
               liveTriggerRunId &&
               typeof window !== "undefined"
             ) {
-              const storedAccessToken = window.sessionStorage.getItem(
-                buildTriggerRealtimeSessionStorageKey(chatId, liveTriggerRunId)
-              );
-              if (storedAccessToken) {
+              const realtimeAccessTokenFromLive =
+                liveRealtime && liveRealtime.runId === liveTriggerRunId
+                  ? liveRealtime.accessToken
+                  : null;
+              const recoveredAccessToken =
+                realtimeAccessTokenFromLive ??
+                window.sessionStorage.getItem(
+                  buildTriggerRealtimeSessionStorageKey(chatId, liveTriggerRunId)
+                );
+              if (recoveredAccessToken) {
                 setTriggerRealtime({
                   runId: liveTriggerRunId,
-                  accessToken: storedAccessToken,
+                  accessToken: recoveredAccessToken,
                 });
+                window.sessionStorage.setItem(
+                  buildTriggerRealtimeSessionStorageKey(chatId, liveTriggerRunId),
+                  recoveredAccessToken
+                );
                 pushStreamDebug({
                   eventType: "trigger_realtime_recovered",
                   note: `runId=${liveTriggerRunId}`,

@@ -5,6 +5,7 @@ import {
   getRunningChatTurnRunLiveState,
   getUser,
 } from "@/lib/db/queries";
+import { createTriggerRealtimeSessionForRun } from "@/lib/chat/trigger-realtime-auth";
 
 export async function GET(
   _request: Request,
@@ -35,9 +36,13 @@ export async function GET(
     getRunningChatTurnRun(chat.id),
     getRunningChatTurnRunLiveState(chat.id, user.id),
   ]);
+  const triggerRealtime = run?.triggerRunId
+    ? await createTriggerRealtimeSessionForRun(run.triggerRunId)
+    : null;
 
   return NextResponse.json({
     run: run ?? null,
     liveState: liveState ?? null,
+    triggerRealtime,
   });
 }

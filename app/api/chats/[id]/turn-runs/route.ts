@@ -17,6 +17,7 @@ import {
 import { publishStreamEvents } from "@/lib/chat/stream-bus";
 import { diffMs, logChatStreamDiagnostic } from "@/lib/chat/stream-diagnostics";
 import { triggerChatTurnTask } from "@/lib/chat/trigger-chat-turn-task";
+import { createTriggerRealtimeSessionForRun } from "@/lib/chat/trigger-realtime-auth";
 import {
   extractTextFromMessageParts,
   hasDisplayableMessageParts,
@@ -101,7 +102,8 @@ export async function POST(
     );
   }
 
-  const hadRunning = Boolean(await getRunningChatTurnRun(chat.id));
+  const runningRun = await getRunningChatTurnRun(chat.id);
+  const hadRunning = Boolean(runningRun);
   const payloadObj = payload as Record<string, unknown>;
   const payloadMessages = Array.isArray(payloadObj.messages)
     ? (payloadObj.messages as Array<{ role?: string; parts?: unknown }>)
@@ -174,12 +176,17 @@ export async function POST(
       runId: run.id,
       triggerRunId: String(handle.id),
     });
-    if (typeof handle.publicAccessToken === "string") {
-      triggerRealtime = {
-        runId: String(handle.id),
-        accessToken: handle.publicAccessToken,
-      };
-    }
+    triggerRealtime =
+      typeof handle.publicAccessToken === "string"
+        ? {
+            runId: String(handle.id),
+            accessToken: handle.publicAccessToken,
+          }
+        : await createTriggerRealtimeSessionForRun(String(handle.id));
+  } else if (runningRun?.triggerRunId) {
+    triggerRealtime = await createTriggerRealtimeSessionForRun(
+      runningRun.triggerRunId
+    );
   }
 
   logChatStreamDiagnostic("Chat turn run request completed", {
