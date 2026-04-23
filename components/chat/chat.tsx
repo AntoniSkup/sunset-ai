@@ -290,10 +290,18 @@ function ChatInner({
   const turnFetchAbortRef = useRef<AbortController | null>(null);
   const activeTurnRunIdRef = useRef<string | null>(null);
   const reconnectStreamRef = useRef<(() => void) | null>(null);
+  const statusRef = useRef(status);
+  const chatIdRef = useRef(chatId);
   const lastStreamEventAtRef = useRef<number | null>(null);
   const lastTextDeltaAtRef = useRef<number | null>(null);
   const textDeltaCounterRef = useRef(0);
   const lastDebugUiUpdateAtRef = useRef(0);
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
+  useEffect(() => {
+    chatIdRef.current = chatId;
+  }, [chatId]);
   const loadMessages = useCallback(async () => {
     if (!chatId) return;
     const res = await fetch(
@@ -310,12 +318,16 @@ function ChatInner({
     if (!CHAT_STREAM_DEBUG_ENABLED) return;
 
     const details = {
-      chatId,
-      status,
+      chatId: chatIdRef.current,
+      status: statusRef.current,
       runId: activeTurnRunIdRef.current,
       ...event,
     };
-    console.debug("[chat-stream-debug:client]", details);
+    try {
+      console.debug(`[chat-stream-debug:client] ${JSON.stringify(details)}`);
+    } catch {
+      console.debug("[chat-stream-debug:client]", details);
+    }
 
     const now = Date.now();
     if (now - lastDebugUiUpdateAtRef.current < 220) return;
@@ -328,7 +340,7 @@ function ChatInner({
     const part = `[${event.eventType}] ${lagPart} ${gapPart}`;
     const note = event.note ? ` ${event.note}` : "";
     setStreamDebugText(`${part}${note}`);
-  }, [chatId, status]);
+  }, []);
 
   const buildUserMessageParts = (
     text: string,
