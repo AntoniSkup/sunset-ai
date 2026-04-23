@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import type { UIMessage } from "ai";
 import useSWR from "swr";
+import { useRealtimeRunWithStreams } from "@trigger.dev/react-hooks";
 import { WelcomeMessage } from "./welcome-message";
 import { MessageList } from "./message-list";
 import { ChatInput } from "./chat-input";
@@ -19,10 +20,15 @@ import {
 import { usePendingMessageStore } from "@/lib/stores/usePendingMessageStore";
 import type { BillingApiResponse } from "@/app/api/billing/route";
 import { toast } from "sonner";
+import {
+  CHAT_TURN_TRIGGER_STREAM_KEY,
+  type ChatTurnRealtimeStreamPart,
+} from "@/lib/chat/realtime-stream";
 
 const billingFetcher = (url: string) => fetch(url).then((res) => res.json());
 const MIN_CREDITS_TO_SEND = 0.5;
 const CHAT_STREAM_DEBUG_ENABLED = true;
+const FORCE_TRIGGER_REALTIME_STREAM = true;
 type PendingAttachment = {
   localId: string;
   id: number | null;
@@ -55,6 +61,11 @@ type LiveTurnRunState = {
   lastLogicalEventId: number;
 };
 
+type TriggerRealtimeSession = {
+  runId: string;
+  accessToken: string;
+};
+
 type ChatStreamDebugEvent = {
   eventType: string;
   logicalEventId?: number;
@@ -63,6 +74,10 @@ type ChatStreamDebugEvent = {
   textDeltaChars?: number;
   note?: string;
 };
+
+function buildTriggerRealtimeSessionStorageKey(chatId: string, runId: string): string {
+  return `chat-trigger-realtime:${chatId}:${runId}`;
+}
 
 function normalizeErrorMessage(
   value: unknown,
@@ -280,6 +295,8 @@ function ChatInner({
     "ready"
   );
   const [streamDebugText, setStreamDebugText] = useState<string>("");
+  const [triggerRealtime, setTriggerRealtime] =
+    useState<TriggerRealtimeSession | null>(null);
   const activeAssistantMessageIdRef = useRef<string | null>(null);
   const lastEventIdRef = useRef<number>(0);
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -290,12 +307,29 @@ function ChatInner({
   const turnFetchAbortRef = useRef<AbortController | null>(null);
   const activeTurnRunIdRef = useRef<string | null>(null);
   const reconnectStreamRef = useRef<(() => void) | null>(null);
+  const drainTriggerStreamRef = useRef<(() => void) | null>(null);
+  const triggerStreamPartsRef = useRef<ChatTurnRealtimeStreamPart[]>([]);
   const statusRef = useRef(status);
   const chatIdRef = useRef(chatId);
   const lastStreamEventAtRef = useRef<number | null>(null);
   const lastTextDeltaAtRef = useRef<number | null>(null);
   const textDeltaCounterRef = useRef(0);
   const lastDebugUiUpdateAtRef = useRef(0);
+  const {
+    streams: triggerRealtimeStreams,
+    error: triggerRealtimeError,
+  } = useRealtimeRunWithStreams(triggerRealtime?.runId ?? "", {
+    accessToken: triggerRealtime?.accessToken ?? "",
+    enabled: Boolean(
+      FORCE_TRIGGER_REALTIME_STREAM &&
+        triggerRealtime?.runId &&
+        triggerRealtime?.accessToken
+    ),
+    throttleInMs: 24,
+  });
+  const triggerStreamParts = (
+    triggerRealtimeStreams?.[CHAT_TURN_TRIGGER_STREAM_KEY] ?? []
+  ) as ChatTurnRealtimeStreamPart[];
   useEffect(() => {
     statusRef.current = status;
   }, [status]);
@@ -341,6 +375,22 @@ function ChatInner({
     const note = event.note ? ` ${event.note}` : "";
     setStreamDebugText(`${part}${note}`);
   }, []);
+  useEffect(() => {
+    triggerStreamPartsRef.current = Array.isArray(triggerStreamParts)
+      ? triggerStreamParts
+      : [];
+    if (drainTriggerStreamRef.current) {
+      drainTriggerStreamRef.current();
+    }
+  }, [triggerStreamParts]);
+  useEffect(() => {
+    if (triggerRealtimeError) {
+      pushStreamDebug({
+        eventType: "trigger_realtime_error",
+        note: triggerRealtimeError.message,
+      });
+    }
+  }, [triggerRealtimeError, pushStreamDebug]);
 
   const buildUserMessageParts = (
     text: string,
@@ -496,6 +546,34 @@ function ChatInner({
             : null;
         if (runId) {
           activeTurnRunIdRef.current = runId;
+        }
+        const realtime =
+          data &&
+          typeof data === "object" &&
+          data.triggerRealtime &&
+          typeof (data as { triggerRealtime?: { runId?: unknown } })
+            .triggerRealtime?.runId === "string" &&
+          typeof (data as { triggerRealtime?: { accessToken?: unknown } })
+            .triggerRealtime?.accessToken === "string"
+            ? (data as {
+                triggerRealtime: { runId: string; accessToken: string };
+              }).triggerRealtime
+            : null;
+        if (realtime && chatId) {
+          setTriggerRealtime(realtime);
+          window.sessionStorage.setItem(
+            buildTriggerRealtimeSessionStorageKey(chatId, realtime.runId),
+            realtime.accessToken
+          );
+          pushStreamDebug({
+            eventType: "trigger_realtime_armed",
+            note: `runId=${realtime.runId}`,
+          });
+        } else {
+          pushStreamDebug({
+            eventType: "trigger_realtime_missing",
+            note: "No realtime credentials returned; fallback to SSE",
+          });
         }
         pushStreamDebug({
           eventType: "turn_run_accepted",
@@ -941,16 +1019,24 @@ function ChatInner({
       note: "User canceled generation",
     });
 
+    setTriggerRealtime(null);
     setStatus("ready");
     hidePreviewLoader();
     activeAssistantMessageIdRef.current = null;
     void loadMessages();
-  }, [chatId, loadMessages, pushStreamDebug]);
+  }, [
+    chatId,
+    loadMessages,
+    pushStreamDebug,
+    triggerRealtime?.runId,
+    triggerRealtime?.accessToken,
+  ]);
 
   useEffect(() => {
     if (!chatId) return;
 
     let cancelled = false;
+    let processedTriggerParts = 0;
     let terminalEventPending: null | "completed" | "failed" | "canceled" = null;
     let pendingFailureMessage: string | null = null;
     streamInitializedRef.current = false;
@@ -962,6 +1048,11 @@ function ChatInner({
       eventType: "stream_bootstrap",
       note: "Initializing SSE stream lifecycle",
     });
+    const shouldUseTriggerRealtime = Boolean(
+      FORCE_TRIGGER_REALTIME_STREAM &&
+        triggerRealtime?.runId &&
+        triggerRealtime?.accessToken
+    );
 
     const TRACKED_PROGRESS_TOOLS = new Set([
       "create_site",
@@ -1307,6 +1398,7 @@ function ChatInner({
 
       if (terminalType === "completed") {
         activeTurnRunIdRef.current = null;
+        setTriggerRealtime(null);
         const pendingPreview = pendingPreviewUpdateRef.current;
         if (
           pendingPreview &&
@@ -1329,6 +1421,7 @@ function ChatInner({
 
       if (terminalType === "canceled") {
         activeTurnRunIdRef.current = null;
+        setTriggerRealtime(null);
         pendingPreviewUpdateRef.current = null;
         setStatus("ready");
         activeAssistantMessageIdRef.current = null;
@@ -1338,6 +1431,7 @@ function ChatInner({
 
       pendingPreviewUpdateRef.current = null;
       activeTurnRunIdRef.current = null;
+      setTriggerRealtime(null);
       setStatus("ready");
       activeAssistantMessageIdRef.current = null;
       const err = normalizeErrorMessage(
@@ -1675,6 +1769,33 @@ function ChatInner({
       }
     };
 
+    const drainTriggerStream = () => {
+      if (!shouldUseTriggerRealtime || cancelled) return;
+      const parts = triggerStreamPartsRef.current;
+      if (!Array.isArray(parts) || parts.length === 0) return;
+      if (processedTriggerParts < 0 || processedTriggerParts > parts.length) {
+        processedTriggerParts = 0;
+      }
+
+      for (let i = processedTriggerParts; i < parts.length; i += 1) {
+        const chunk = parts[i];
+        if (!chunk || typeof chunk !== "object") continue;
+        handleEnvelope({
+          logicalEventId: Number(chunk.logicalEventId ?? 0),
+          chatId: Number(chunk.chatId ?? 0),
+          runId: String(chunk.runId ?? ""),
+          eventType: String(chunk.eventType ?? ""),
+          payload:
+            chunk.payload && typeof chunk.payload === "object"
+              ? chunk.payload
+              : {},
+          createdAt: String(chunk.createdAt ?? new Date().toISOString()),
+        });
+      }
+
+      processedTriggerParts = parts.length;
+    };
+
     const connect = (afterEventId: number) => {
       streamConnectionIdRef.current += 1;
       const connectionId = streamConnectionIdRef.current;
@@ -1755,6 +1876,10 @@ function ChatInner({
             liveData?.run && typeof liveData.run.id === "string"
               ? liveData.run.id
               : null;
+          const liveTriggerRunId =
+            liveData?.run && typeof liveData.run.triggerRunId === "string"
+              ? liveData.run.triggerRunId
+              : null;
 
           if (
             liveRes.ok &&
@@ -1778,6 +1903,30 @@ function ChatInner({
               };
             }
             setStatus("streaming");
+            if (
+              FORCE_TRIGGER_REALTIME_STREAM &&
+              liveTriggerRunId &&
+              typeof window !== "undefined"
+            ) {
+              const storedAccessToken = window.sessionStorage.getItem(
+                buildTriggerRealtimeSessionStorageKey(chatId, liveTriggerRunId)
+              );
+              if (storedAccessToken) {
+                setTriggerRealtime({
+                  runId: liveTriggerRunId,
+                  accessToken: storedAccessToken,
+                });
+                pushStreamDebug({
+                  eventType: "trigger_realtime_recovered",
+                  note: `runId=${liveTriggerRunId}`,
+                });
+              } else {
+                pushStreamDebug({
+                  eventType: "trigger_realtime_missing",
+                  note: `Missing token for runId=${liveTriggerRunId}; fallback SSE`,
+                });
+              }
+            }
             pushStreamDebug({
               eventType: "live_state_bootstrap",
               logicalEventId: lastEventIdRef.current,
@@ -1807,7 +1956,15 @@ function ChatInner({
         }
         streamInitializedRef.current = true;
       }
-      connect(lastEventIdRef.current);
+      if (shouldUseTriggerRealtime) {
+        pushStreamDebug({
+          eventType: "trigger_realtime_connected",
+          note: `runId=${triggerRealtime?.runId}`,
+        });
+        drainTriggerStream();
+      } else {
+        connect(lastEventIdRef.current);
+      }
     };
 
     void bootstrap();
@@ -1815,10 +1972,13 @@ function ChatInner({
     reconnectStreamRef.current = () => {
       void bootstrap();
     };
+    drainTriggerStreamRef.current = drainTriggerStream;
+    drainTriggerStream();
 
     return () => {
       cancelled = true;
       reconnectStreamRef.current = null;
+      drainTriggerStreamRef.current = null;
       stopProgressTicker();
       pushStreamDebug({
         eventType: "stream_cleanup",

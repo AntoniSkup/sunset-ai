@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { nanoid } from "nanoid";
 import {
+  attachTriggerRunIdToChatTurnRun,
   createChatMessage,
   enqueueChatTurnRun,
   getChatByPublicId,
@@ -166,8 +167,19 @@ export async function POST(
 
   // Trigger processing if there isn't already an active run for this chat.
   const processingEnabled = process.env.ENABLE_TRIGGER_CHAT_QUEUE === "1";
+  let triggerRealtime: { runId: string; accessToken: string } | null = null;
   if (!hadRunning && processingEnabled) {
-    void triggerChatTurnTask(run.id);
+    const handle = await triggerChatTurnTask(run.id);
+    await attachTriggerRunIdToChatTurnRun({
+      runId: run.id,
+      triggerRunId: String(handle.id),
+    });
+    if (typeof handle.publicAccessToken === "string") {
+      triggerRealtime = {
+        runId: String(handle.id),
+        accessToken: handle.publicAccessToken,
+      };
+    }
   }
 
   logChatStreamDiagnostic("Chat turn run request completed", {
@@ -184,6 +196,7 @@ export async function POST(
       run,
       queued: hadRunning,
       processingEnabled,
+      triggerRealtime,
     },
     { status: 202 },
   );

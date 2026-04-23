@@ -54,6 +54,7 @@ import {
 } from "@/lib/site-assets/prompt-manifest";
 import { publishStreamEvents } from "@/lib/chat/stream-bus";
 import { applyStreamEventsToChatTurnRunLiveState } from "@/lib/chat/live-state";
+import type { StreamEventEnvelope } from "@/lib/chat/stream-bus/types";
 
 const BUILDER_TOOLS = new Set([
   "create_site",
@@ -255,6 +256,7 @@ export type CreateChatTurnStreamParams = {
   messages: Array<Omit<UIMessage, "id">>;
   turnRunId?: string;
   persistIncomingUserMessage?: boolean;
+  onPublishedTurnEvents?: (events: StreamEventEnvelope[]) => Promise<void> | void;
 };
 
 export async function createChatTurnStream({
@@ -264,6 +266,7 @@ export async function createChatTurnStream({
   messages,
   turnRunId,
   persistIncomingUserMessage = false,
+  onPublishedTurnEvents,
 }: CreateChatTurnStreamParams) {
   const publishTurnEvents = async (
     events: Array<{
@@ -283,6 +286,9 @@ export async function createChatTurnStream({
       userId: user.id,
       events: publishedEvents,
     });
+    if (onPublishedTurnEvents) {
+      await onPublishedTurnEvents(publishedEvents);
+    }
   };
 
   const pendingTurnEvents: Array<{

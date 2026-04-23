@@ -13,6 +13,7 @@ import { publishStreamEvents } from "@/lib/chat/stream-bus";
 import { applyStreamEventsToChatTurnRunLiveState } from "@/lib/chat/live-state";
 import { triggerChatTurnTask } from "@/lib/chat/trigger-chat-turn-task";
 import { executeChatTurn } from "@/lib/chat/execute-chat-turn";
+import { chatTurnEventsStream } from "./chat-turn-stream";
 
 function normalizeErrorMessage(
   value: unknown,
@@ -157,6 +158,22 @@ export const runChatTurnTask = task({
         messages: messages as Array<Omit<UIMessage, "id">>,
         turnRunId: claimed.id,
         persistIncomingUserMessage: false,
+        onPublishedTurnEvents: async (events) => {
+          for (const event of events) {
+            await chatTurnEventsStream.append({
+              dbId: event.dbId,
+              logicalEventId: event.logicalEventId,
+              chatId: event.chatId,
+              runId: event.runId,
+              eventType: event.eventType,
+              payload: event.payload,
+              createdAt:
+                event.createdAt instanceof Date
+                  ? event.createdAt.toISOString()
+                  : String(event.createdAt),
+            });
+          }
+        },
       });
 
       logChatStreamDiagnostic("Trigger direct chat execution completed", {
@@ -198,6 +215,20 @@ export const runChatTurnTask = task({
           },
         ],
       });
+      for (const event of publishedEvents) {
+        await chatTurnEventsStream.append({
+          dbId: event.dbId,
+          logicalEventId: event.logicalEventId,
+          chatId: event.chatId,
+          runId: event.runId,
+          eventType: event.eventType,
+          payload: event.payload,
+          createdAt:
+            event.createdAt instanceof Date
+              ? event.createdAt.toISOString()
+              : String(event.createdAt),
+        });
+      }
       await applyStreamEventsToChatTurnRunLiveState({
         runId: claimed.id,
         chatId: claimed.chatId,
