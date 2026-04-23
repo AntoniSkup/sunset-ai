@@ -29,6 +29,7 @@ const billingFetcher = (url: string) => fetch(url).then((res) => res.json());
 const MIN_CREDITS_TO_SEND = 0.5;
 const CHAT_STREAM_DEBUG_ENABLED = true;
 const FORCE_TRIGGER_REALTIME_STREAM = true;
+const TRIGGER_ACCESS_TOKEN_PLACEHOLDER = "__trigger_access_token_pending__";
 type PendingAttachment = {
   localId: string;
   id: number | null;
@@ -75,7 +76,10 @@ type ChatStreamDebugEvent = {
   note?: string;
 };
 
-function buildTriggerRealtimeSessionStorageKey(chatId: string, runId: string): string {
+function buildTriggerRealtimeSessionStorageKey(
+  chatId: string,
+  runId: string
+): string {
   return `chat-trigger-realtime:${chatId}:${runId}`;
 }
 
@@ -320,7 +324,8 @@ function ChatInner({
       triggerRealtime?.runId ?? "",
       CHAT_TURN_TRIGGER_STREAM_KEY,
       {
-        accessToken: triggerRealtime?.accessToken ?? "",
+        accessToken:
+          triggerRealtime?.accessToken ?? TRIGGER_ACCESS_TOKEN_PLACEHOLDER,
         startIndex: 0,
         throttleInMs: 24,
       }
@@ -550,9 +555,11 @@ function ChatInner({
             .triggerRealtime?.runId === "string" &&
           typeof (data as { triggerRealtime?: { accessToken?: unknown } })
             .triggerRealtime?.accessToken === "string"
-            ? (data as {
-                triggerRealtime: { runId: string; accessToken: string };
-              }).triggerRealtime
+            ? (
+                data as {
+                  triggerRealtime: { runId: string; accessToken: string };
+                }
+              ).triggerRealtime
             : null;
         if (realtime && chatId) {
           setTriggerRealtime(realtime);
@@ -1045,8 +1052,8 @@ function ChatInner({
     });
     const shouldUseTriggerRealtime = Boolean(
       FORCE_TRIGGER_REALTIME_STREAM &&
-        triggerRealtime?.runId &&
-        triggerRealtime?.accessToken
+      triggerRealtime?.runId &&
+      triggerRealtime?.accessToken
     );
 
     const TRACKED_PROGRESS_TOOLS = new Set([
