@@ -1993,7 +1993,13 @@ function ChatInner({
         reconnectTimerRef.current = null;
       }
     };
-  }, [chatId, loadMessages, pushStreamDebug]);
+  }, [
+    chatId,
+    loadMessages,
+    pushStreamDebug,
+    triggerRealtime?.runId,
+    triggerRealtime?.accessToken,
+  ]);
 
   useEffect(() => {
     const lastMessage = messages[messages.length - 1];
