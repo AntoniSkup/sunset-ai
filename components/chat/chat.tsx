@@ -1307,7 +1307,8 @@ function ChatInner({
       const assistantId = `live-assistant-${liveState.runId}`;
       activeAssistantMessageIdRef.current = assistantId;
       const assistantParts =
-        Array.isArray(liveState.assistantParts) && liveState.assistantParts.length > 0
+        Array.isArray(liveState.assistantParts) &&
+        liveState.assistantParts.length > 0
           ? liveState.assistantParts
           : ([{ type: "text", text: "" }] as UIMessage["parts"]);
 
