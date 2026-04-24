@@ -403,7 +403,30 @@ function ChatInner({
       throw new Error("Failed to load chat messages");
     }
     const data = await res.json();
-    setMessages(Array.isArray(data?.messages) ? data.messages : []);
+    const dbMessages: UIMessage[] = Array.isArray(data?.messages)
+      ? data.messages
+      : [];
+    setMessages((prev) => {
+      // MessageList keys items by `message.id`. A wholesale replace at the
+      // end of a streaming turn swaps local ids (`local-assistant-…`) for DB
+      // ids (`db-…`), which makes React remount every MessageItem and the
+      // user sees the chat visibly "jump" — streamed markdown/code blocks
+      // rebuild from scratch, layout reflows, scroll position shifts.
+      //
+      // When the DB snapshot lines up structurally with what's already on
+      // screen (same length, same roles in the same order) the streamed
+      // state is already the canonical content, so keep the existing
+      // references verbatim and let React reconcile nothing. We still fall
+      // back to the DB snapshot when they diverge (e.g. dropped events or
+      // changes made in another tab) so state stays correct.
+      if (
+        prev.length === dbMessages.length &&
+        dbMessages.every((m, i) => m.role === prev[i]?.role)
+      ) {
+        return prev;
+      }
+      return dbMessages;
+    });
   }, [chatId]);
 
   const onTriggerRealtimeParts = useCallback(

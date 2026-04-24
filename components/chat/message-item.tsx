@@ -16,6 +16,18 @@ import {
   ValidationReportCard,
   type ValidationReportPayload,
 } from "./validation-report-card";
+import { useTypewriter } from "./use-typewriter";
+
+function StreamedText({
+  text,
+  isStreaming,
+}: {
+  text: string;
+  isStreaming: boolean;
+}) {
+  const visible = useTypewriter(text, { enabled: isStreaming });
+  return <MessageResponse>{visible}</MessageResponse>;
+}
 
 interface MessageItemProps {
   message: UIMessage;
@@ -288,6 +300,12 @@ export const MessageItem = React.memo(function MessageItem({
   const tokens = !isUser ? buildRenderTokens(message) : [];
   const content = isUser ? getTextContent(message) : "";
   const attachments = isUser ? getFileParts(message) : [];
+  // The pulse dot is a "thinking" indicator shown while we're still waiting
+  // for the first token. Once any actual text has streamed in, the user can
+  // see text growing in place, so the dot becomes redundant and distracting.
+  const hasStreamedText =
+    !isUser &&
+    tokens.some((t) => t.type === "text" && t.text.trim().length > 0);
 
   return (
     <Message from={message.role}>
@@ -311,7 +329,11 @@ export const MessageItem = React.memo(function MessageItem({
               switch (t.type) {
                 case "text":
                   return (
-                    <MessageResponse key={`t-${idx}`}>{t.text}</MessageResponse>
+                    <StreamedText
+                      key={`t-${idx}`}
+                      text={t.text}
+                      isStreaming={!!isStreaming}
+                    />
                   );
                 case "tool-marker":
                   if (isValidationTool(t.toolName)) {
@@ -378,7 +400,7 @@ export const MessageItem = React.memo(function MessageItem({
               }
             })}
 
-            {isStreaming && (
+            {isStreaming && !hasStreamedText && (
               <span className="inline-block h-4 w-4 rounded-full bg-current animate-pulse ml-1" />
             )}
           </>
