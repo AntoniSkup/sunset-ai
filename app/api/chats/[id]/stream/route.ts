@@ -195,6 +195,12 @@ export async function GET(
                     id: event.logicalEventId,
                     event: event.eventType,
                     data: {
+                      // dbId is the globally monotonic postgres SERIAL id and
+                      // is the client's primary dedupe/ordering key.
+                      // logicalEventId is per-chat and has been observed to
+                      // collide across distinct events in production, so we
+                      // keep it purely for SSE `afterEventId` resume cursors.
+                      dbId: event.dbId,
                       logicalEventId: event.logicalEventId,
                       chatId: event.chatId,
                       runId: event.runId,

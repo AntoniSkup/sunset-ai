@@ -43,6 +43,10 @@ type PendingAttachment = {
 };
 
 type StreamEnvelope = {
+  // Globally monotonic postgres SERIAL id. Preferred dedupe/ordering key because
+  // `logicalEventId` is per-chat and has historically exhibited collisions
+  // (same logicalEventId on distinct events); dbId never repeats.
+  dbId?: number;
   logicalEventId: number;
   chatId: number;
   runId: string;
@@ -382,6 +386,11 @@ function ChatInner({
     useState<TriggerRealtimeSession | null>(null);
   const activeAssistantMessageIdRef = useRef<string | null>(null);
   const lastEventIdRef = useRef<number>(0);
+  // Globally monotonic postgres SERIAL id of the last processed event.
+  // Used as the primary dedupe/ordering key because `logicalEventId` is
+  // per-chat and has exhibited collisions (same logicalEventId across
+  // distinct dbIds), which previously caused silent drops of text deltas.
+  const lastDbIdRef = useRef<number>(0);
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimerRef = useRef<number | null>(null);
   const streamInitializedRef = useRef(false);
@@ -1797,7 +1806,22 @@ function ChatInner({
       envelope: StreamEnvelope,
       source: StreamTransport
     ) => {
-      if (envelope.logicalEventId <= lastEventIdRef.current) return;
+      // Dedupe by dbId (postgres SERIAL, globally monotonic) when available.
+      // Fall back to logicalEventId only for envelopes produced by older code
+      // paths that don't yet include dbId. Previously we deduped purely on
+      // logicalEventId with `<=`, which dropped any event that shared a
+      // logicalEventId with a prior event (observed in production: run_started
+      // + the first two text_deltas all landed on logicalEventId=7, so the
+      // two text_deltas vanished from the UI).
+      const envelopeDbId =
+        typeof envelope.dbId === "number" && envelope.dbId > 0
+          ? envelope.dbId
+          : null;
+      if (envelopeDbId != null) {
+        if (envelopeDbId <= lastDbIdRef.current) return;
+      } else {
+        if (envelope.logicalEventId <= lastEventIdRef.current) return;
+      }
 
       const now = Date.now();
       activeTransportRef.current = source;
@@ -1811,7 +1835,16 @@ function ChatInner({
           : Math.max(0, now - lastStreamEventAtRef.current);
       lastStreamEventAtRef.current = now;
 
-      lastEventIdRef.current = envelope.logicalEventId;
+      if (envelopeDbId != null) {
+        lastDbIdRef.current = envelopeDbId;
+      }
+      // Keep `lastEventIdRef` advancing too so the SSE `afterEventId` resume
+      // cursor and any logicalEventId-based diagnostics stay correct. Use
+      // Math.max so an out-of-order envelope (dbId advanced but logicalEventId
+      // duplicated) never rewinds the SSE cursor.
+      if (envelope.logicalEventId > lastEventIdRef.current) {
+        lastEventIdRef.current = envelope.logicalEventId;
+      }
 
       const payload = envelope.payload ?? {};
       const eventType = envelope.eventType;
@@ -2079,7 +2112,9 @@ function ChatInner({
           });
         }
 
+        const rawDbId = Number(maybeEnvelope.dbId ?? 0);
         const normalizedEnvelope: StreamEnvelope = {
+          dbId: Number.isFinite(rawDbId) && rawDbId > 0 ? rawDbId : undefined,
           logicalEventId: Number(maybeEnvelope.logicalEventId ?? 0),
           chatId: Number(maybeEnvelope.chatId ?? 0),
           runId: String(maybeEnvelope.runId ?? ""),
@@ -2201,6 +2236,10 @@ function ChatInner({
               ? liveData.run.triggerRunId
               : null;
 
+          const liveLastDbId = Number(liveData?.lastDbId ?? 0);
+          if (Number.isFinite(liveLastDbId) && liveLastDbId > 0) {
+            lastDbIdRef.current = liveLastDbId;
+          }
           if (
             liveRes.ok &&
             liveState &&
@@ -2276,6 +2315,11 @@ function ChatInner({
             const latestId = Number(data?.event?.logicalEventId ?? 0);
             if (Number.isFinite(latestId) && latestId > 0) {
               lastEventIdRef.current = latestId;
+            }
+            // event.id is the postgres SERIAL pk => dbId for dedupe.
+            const latestDbId = Number(data?.event?.id ?? 0);
+            if (Number.isFinite(latestDbId) && latestDbId > 0) {
+              lastDbIdRef.current = latestDbId;
             }
             pushStreamDebug({
               eventType: "live_state_bootstrap",

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import {
   getChatByPublicId,
+  getLatestChatStreamEvent,
   getRunningChatTurnRun,
   getRunningChatTurnRunLiveState,
   getUser,
@@ -35,11 +36,16 @@ export async function GET(
   }
 
   const fetchStartedAt = Date.now();
-  const [run, liveState] = await Promise.all([
+  const [run, liveState, latestEvent] = await Promise.all([
     getRunningChatTurnRun(chat.id),
     getRunningChatTurnRunLiveState(chat.id, user.id),
+    // dbId of the most recent persisted event. Client uses this to seed its
+    // dedupe cursor (lastDbIdRef) so a running-run recovery doesn't re-process
+    // events we already rendered before reconnecting.
+    getLatestChatStreamEvent(chat.id),
   ]);
   const queryMs = Date.now() - fetchStartedAt;
+  const lastDbId = latestEvent?.id ?? 0;
   const tokenStartedAt = Date.now();
   const triggerRealtime = run?.triggerRunId
     ? await createTriggerRealtimeSessionForRun(run.triggerRunId)
@@ -60,5 +66,6 @@ export async function GET(
     run: run ?? null,
     liveState: liveState ?? null,
     triggerRealtime,
+    lastDbId,
   });
 }
