@@ -17,6 +17,8 @@ const SSE_HEARTBEAT_INTERVAL_MS = 15000;
 const SSE_ERROR_RETRY_BASE_MS = 150;
 const SSE_ERROR_RETRY_MAX_MS = 800;
 const SSE_CONNECTION_MAX_MS = 240000;
+const SSE_IDLE_NO_EVENTS_CLOSE_MS = 20000;
+const SSE_IDLE_POST_EVENT_CLOSE_MS = 10000;
 
 function sseFrame(params: {
   id?: number;
@@ -109,7 +111,12 @@ export async function GET(
         let pollIntervalMs = SSE_POLL_INTERVAL_BASE_MS;
         let lastHeartbeatAtMs = 0;
         let idlePolls = 0;
+        let lastEventAtMs = 0;
         while (!closed) {
+          if (request.signal.aborted) {
+            close();
+            return;
+          }
           if (Date.now() - connectionStartedAt >= SSE_CONNECTION_MAX_MS) {
             logChatStreamDiagnostic("SSE connection recycled before runtime timeout", {
               chatId: chat.id,
@@ -118,6 +125,27 @@ export async function GET(
               afterEventId,
               connectedForMs: Date.now() - connectionStartedAt,
               maxConnectionMs: SSE_CONNECTION_MAX_MS,
+            });
+            close();
+            return;
+          }
+          const idleForMs =
+            lastEventAtMs === 0
+              ? Date.now() - connectionStartedAt
+              : Date.now() - lastEventAtMs;
+          const idleThresholdMs =
+            lastEventAtMs === 0
+              ? SSE_IDLE_NO_EVENTS_CLOSE_MS
+              : SSE_IDLE_POST_EVENT_CLOSE_MS;
+          if (idleForMs >= idleThresholdMs) {
+            logChatStreamDiagnostic("SSE connection closing on idle threshold", {
+              chatId: chat.id,
+              chatPublicId,
+              userId: user.id,
+              afterEventId,
+              idleForMs,
+              idleThresholdMs,
+              hasReceivedEvents: lastEventAtMs > 0,
             });
             close();
             return;
@@ -133,6 +161,7 @@ export async function GET(
             consecutiveReadErrors = 0;
             if (events.length > 0) {
               idlePolls = 0;
+              lastEventAtMs = Date.now();
             } else {
               idlePolls += 1;
             }

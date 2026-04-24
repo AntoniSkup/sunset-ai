@@ -2229,6 +2229,25 @@ function ChatInner({
           note: `runId=${triggerRealtimeRef.current?.runId}`,
         });
         drainTriggerStream();
+      } else if (statusRef.current === "submitted") {
+        if (reconnectTimerRef.current != null) {
+          window.clearTimeout(reconnectTimerRef.current);
+          reconnectTimerRef.current = null;
+        }
+        pushStreamDebug({
+          eventType: "sse_defer_for_trigger",
+          note: "Submit in flight; deferring SSE for trigger realtime",
+        });
+        reconnectTimerRef.current = window.setTimeout(() => {
+          reconnectTimerRef.current = null;
+          if (cancelled) return;
+          if (hasTriggerRealtimeSession()) return;
+          pushStreamDebug({
+            eventType: "sse_fallback_after_defer",
+            note: "No trigger realtime within grace; opening SSE fallback",
+          });
+          connect(lastEventIdRef.current);
+        }, 4000);
       } else if (statusRef.current !== "ready" || activeTurnRunIdRef.current) {
         connect(lastEventIdRef.current);
       } else {

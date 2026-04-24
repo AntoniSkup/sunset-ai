@@ -136,9 +136,15 @@ export const runChatTurnTask = task({
       claimedSequence: claimed.sequence,
     });
 
-    await attachTriggerRunIdToChatTurnRun({
+    void attachTriggerRunIdToChatTurnRun({
       runId: claimed.id,
       triggerRunId: String(ctx.run.id),
+    }).catch((error) => {
+      logger.error("Failed to attach trigger run id (deferred)", {
+        runId: claimed.id,
+        triggerRunId: String(ctx.run.id),
+        error: error instanceof Error ? error.message : String(error),
+      });
     });
 
     const payloadData = claimed.payload as {
@@ -187,19 +193,29 @@ export const runChatTurnTask = task({
         eventTypes: publishedRunStartedEvents.map((event) => event.eventType),
         elapsedMs: firstPublishedEventAtMs - executionStartedAt,
       });
-      for (const event of publishedRunStartedEvents) {
-        await chatTurnEventsStream.append(serializeRealtimeEvent(event));
-      }
-      await applyStreamEventsToChatTurnRunLiveState({
-        runId: claimed.id,
-        chatId: claimed.chatId,
-        userId: claimed.userId,
-        events: publishedRunStartedEvents,
-      });
+      const runStartedRealtimeAppend = measure(
+        "runStartedRealtimeAppendMs",
+        async () => {
+          for (const event of publishedRunStartedEvents) {
+            await chatTurnEventsStream.append(serializeRealtimeEvent(event));
+          }
+        }
+      );
+      const runStartedLiveStateApply = measure(
+        "runStartedLiveStateApplyMs",
+        () =>
+          applyStreamEventsToChatTurnRunLiveState({
+            runId: claimed.id,
+            chatId: claimed.chatId,
+            userId: claimed.userId,
+            events: publishedRunStartedEvents,
+          })
+      );
       const [user, chat] = await Promise.all([
         measure("userLookupMs", () => getUserById(claimed.userId)),
         measure("chatLookupMs", () => getChatByPublicId(chatPublicId, claimed.userId)),
       ]);
+      await Promise.all([runStartedRealtimeAppend, runStartedLiveStateApply]);
 
       if (!user) {
         throw new Error(`User not found: ${claimed.userId}`);
