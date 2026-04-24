@@ -6,7 +6,6 @@ import type {
   ReadEventsAfterParams,
   StreamEventEnvelope,
 } from "./types";
-import { logStreamBusDiagnostic } from "../stream-diagnostics";
 
 const ENABLE_REDIS_STREAM_BUS = process.env.ENABLE_REDIS_STREAM_BUS === "1";
 const REDIS_STREAM_READ_TIMEOUT_MS = Number(
@@ -26,15 +25,6 @@ const REDIS_STREAM_COOLDOWN_MS = Number(
 let redisReadUnavailableUntilMs = 0;
 let redisWriteUnavailableUntilMs = 0;
 let hasLoggedRedisDisabled = false;
-
-// Process-local high-watermark of the largest logicalEventId we've handed out
-// for each chat. If a subsequent publishStreamEvents call returns events with
-// logicalEventIds <= the watermark, something is very wrong at the DB layer
-// (FOR UPDATE not serializing, pooler bypass, cursor desync, etc.) and the
-// client will silently drop the colliding events. Log loudly so we can trace
-// the root cause; map never grows unbounded because entries are keyed by
-// chatId and one process only touches a small set of chats.
-const chatLogicalEventHighWatermark = new Map<number, number>();
 
 function hasUpstashEnv(): boolean {
   return Boolean(
@@ -127,52 +117,8 @@ export async function publishStreamEvents(
   params: PublishEventsParams,
   options?: PublishStreamEventsOptions
 ): Promise<StreamEventEnvelope[]> {
-  const startedAt = Date.now();
   assertRedisEnabled();
   const dbEvents = await dbStreamBusAdapter.publishEvents(params);
-
-  // --- logicalEventId sanity / collision detector --------------------------
-  // Within the returned batch, logicalEventIds MUST be strictly ascending and
-  // contiguous. Across calls, the largest id we've seen for this chat MUST
-  // strictly grow. Anything else indicates a cursor race and will cause the
-  // client to drop events (because deduplication keys partially overlap).
-  if (dbEvents.length > 0) {
-    const previousWatermark =
-      chatLogicalEventHighWatermark.get(params.chatId) ?? 0;
-
-    let intraBatchViolation = false;
-    for (let i = 1; i < dbEvents.length; i += 1) {
-      if (dbEvents[i].logicalEventId !== dbEvents[i - 1].logicalEventId + 1) {
-        intraBatchViolation = true;
-        break;
-      }
-    }
-    const firstLogicalEventId = dbEvents[0].logicalEventId;
-    const lastLogicalEventId = dbEvents[dbEvents.length - 1].logicalEventId;
-    const interBatchViolation =
-      previousWatermark > 0 && firstLogicalEventId <= previousWatermark;
-
-    if (intraBatchViolation || interBatchViolation) {
-      console.error("[stream-bus] logicalEventId collision detected", {
-        chatId: params.chatId,
-        runId: params.runId,
-        previousWatermark,
-        firstLogicalEventId,
-        lastLogicalEventId,
-        batchSize: dbEvents.length,
-        logicalEventIds: dbEvents.map((e) => e.logicalEventId),
-        dbIds: dbEvents.map((e) => e.dbId),
-        eventTypes: dbEvents.map((e) => e.eventType),
-        intraBatchViolation,
-        interBatchViolation,
-      });
-    }
-
-    if (lastLogicalEventId > previousWatermark) {
-      chatLogicalEventHighWatermark.set(params.chatId, lastLogicalEventId);
-    }
-  }
-  // -------------------------------------------------------------------------
 
   if (options?.onEventsPersisted) {
     try {
@@ -215,15 +161,6 @@ export async function publishStreamEvents(
       upstashStreamBusAdapter.publishEvents(redisPublishParams),
       REDIS_STREAM_WRITE_TIMEOUT_MS
     );
-    const durationMs = Date.now() - startedAt;
-    if (durationMs >= 250 || dbEvents.length > 1) {
-      logStreamBusDiagnostic("Published events to Redis", {
-        chatId: params.chatId,
-        runId: params.runId,
-        eventCount: dbEvents.length,
-        durationMs,
-      });
-    }
     return dbEvents;
   } catch (error) {
     markRedisTemporarilyUnavailable();
@@ -259,7 +196,6 @@ function assertContiguousEvents(
 export async function readStreamEventsAfter(
   params: ReadEventsAfterParams
 ): Promise<StreamEventEnvelope[]> {
-  const startedAt = Date.now();
   assertRedisEnabled();
   const redisTemporarilyUnavailable = isRedisReadTemporarilyUnavailable();
   if (redisTemporarilyUnavailable) {
@@ -274,15 +210,6 @@ export async function readStreamEventsAfter(
       upstashStreamBusAdapter.readEventsAfter(params),
       REDIS_STREAM_READ_TIMEOUT_MS
     );
-    const durationMs = Date.now() - startedAt;
-    if (durationMs >= 250 || events.length > 0) {
-      logStreamBusDiagnostic("Read events via Redis", {
-        chatId: params.chatId,
-        afterLogicalEventId: params.afterLogicalEventId,
-        eventCount: events.length,
-        durationMs,
-      });
-    }
     if (events.length > 0) {
       assertContiguousEvents(events, params.afterLogicalEventId);
     }

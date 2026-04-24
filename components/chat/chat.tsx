@@ -27,9 +27,7 @@ import {
 
 const billingFetcher = (url: string) => fetch(url).then((res) => res.json());
 const MIN_CREDITS_TO_SEND = 0.5;
-const CHAT_STREAM_DEBUG_ENABLED = true;
 const FORCE_TRIGGER_REALTIME_STREAM = true;
-type StreamTransport = "sse" | "trigger";
 type PendingAttachment = {
   localId: string;
   id: number | null;
@@ -43,9 +41,8 @@ type PendingAttachment = {
 };
 
 type StreamEnvelope = {
-  // Globally monotonic postgres SERIAL id. Preferred dedupe/ordering key because
-  // `logicalEventId` is per-chat and has historically exhibited collisions
-  // (same logicalEventId on distinct events); dbId never repeats.
+  // Globally monotonic postgres SERIAL id used as the primary dedupe/ordering
+  // key (logicalEventId is per-chat and dbId never repeats).
   dbId?: number;
   logicalEventId: number;
   chatId: number;
@@ -71,28 +68,11 @@ type TriggerRealtimeSession = {
   accessToken: string;
 };
 
-type ChatStreamDebugEvent = {
-  eventType: string;
-  logicalEventId?: number;
-  lagMs?: number | null;
-  gapMs?: number | null;
-  textDeltaChars?: number;
-  note?: string;
-};
-
 function buildTriggerRealtimeSessionStorageKey(
   chatId: string,
   runId: string
 ): string {
   return `chat-trigger-realtime:${chatId}:${runId}`;
-}
-
-function toDebugSnippet(value: unknown): string {
-  try {
-    return JSON.stringify(value).slice(0, 400);
-  } catch {
-    return "[unserializable]";
-  }
 }
 
 function normalizeRealtimeChunk(
@@ -380,16 +360,14 @@ function ChatInner({
   const [status, setStatus] = useState<"ready" | "submitted" | "streaming">(
     "ready"
   );
-  const [streamDebugText, setStreamDebugText] = useState<string>("");
   const [isClientMounted, setIsClientMounted] = useState(false);
   const [triggerRealtime, setTriggerRealtime] =
     useState<TriggerRealtimeSession | null>(null);
   const activeAssistantMessageIdRef = useRef<string | null>(null);
   const lastEventIdRef = useRef<number>(0);
-  // Globally monotonic postgres SERIAL id of the last processed event.
-  // Used as the primary dedupe/ordering key because `logicalEventId` is
-  // per-chat and has exhibited collisions (same logicalEventId across
-  // distinct dbIds), which previously caused silent drops of text deltas.
+  // Globally monotonic postgres SERIAL id of the last processed event. Used as
+  // the primary dedupe/ordering key because `logicalEventId` is per-chat and
+  // dbId never repeats.
   const lastDbIdRef = useRef<number>(0);
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimerRef = useRef<number | null>(null);
@@ -401,38 +379,9 @@ function ChatInner({
   const reconnectStreamRef = useRef<(() => void) | null>(null);
   const drainTriggerStreamRef = useRef<(() => void) | null>(null);
   const triggerStreamPartsRef = useRef<ChatTurnRealtimeStreamPart[]>([]);
-  const lastLoggedTriggerPartsCountRef = useRef(0);
   const triggerRealtimeRef = useRef<TriggerRealtimeSession | null>(null);
-  const activeTransportRef = useRef<StreamTransport | null>(null);
-  const activeTurnTimelineRef = useRef<{
-    submitStartedAt: number | null;
-    acceptedAt: number | null;
-    firstEnqueuedAt: number | null;
-    firstRunStartedAt: number | null;
-    firstTextDeltaAt: number | null;
-  }>({
-    submitStartedAt: null,
-    acceptedAt: null,
-    firstEnqueuedAt: null,
-    firstRunStartedAt: null,
-    firstTextDeltaAt: null,
-  });
   const statusRef = useRef(status);
   const chatIdRef = useRef(chatId);
-  const lastStreamEventAtRef = useRef<number | null>(null);
-  const lastTextDeltaAtRef = useRef<number | null>(null);
-  const textDeltaCounterRef = useRef(0);
-  const lastDebugUiUpdateAtRef = useRef(0);
-  // Diagnostic: total chars we painted from text_delta events. Previously we
-  // buffered deltas in a rAF-driven "smoother" to hide bursts, but once the
-  // server-side append chain was fixed (src/trigger/run-chat-turn.ts), the
-  // Realtime transport already delivers deltas at a natural ~300-500 ms
-  // cadence. The smoother's rate cap (500-2500 chars/sec) ended up causing a
-  // visible "tail dump" at run_completed — the last chunk would still be
-  // mid-reveal when the buffer was force-flushed, which looked exactly like
-  // "text only shows up when the stream finishes". We now paint each delta
-  // synchronously and rely on the server pacing.
-  const receivedAssistantCharsRef = useRef(0);
   useEffect(() => {
     statusRef.current = status;
   }, [status]);
@@ -444,9 +393,6 @@ function ChatInner({
   }, [chatId]);
   useEffect(() => {
     triggerRealtimeRef.current = triggerRealtime;
-    if (!triggerRealtime) {
-      lastLoggedTriggerPartsCountRef.current = 0;
-    }
   }, [triggerRealtime]);
   const loadMessages = useCallback(async () => {
     if (!chatId) return;
@@ -460,70 +406,18 @@ function ChatInner({
     setMessages(Array.isArray(data?.messages) ? data.messages : []);
   }, [chatId]);
 
-  const pushStreamDebug = useCallback((event: ChatStreamDebugEvent) => {
-    if (!CHAT_STREAM_DEBUG_ENABLED) return;
-
-    const details = {
-      chatId: chatIdRef.current,
-      status: statusRef.current,
-      runId: activeTurnRunIdRef.current,
-      ...event,
-    };
-    try {
-      console.debug(`[chat-stream-debug:client] ${JSON.stringify(details)}`);
-    } catch {
-      console.debug("[chat-stream-debug:client]", details);
-    }
-
-    const now = Date.now();
-    if (now - lastDebugUiUpdateAtRef.current < 220) return;
-    lastDebugUiUpdateAtRef.current = now;
-
-    const lagPart =
-      typeof event.lagMs === "number" ? `lag=${event.lagMs}ms` : "lag=n/a";
-    const gapPart =
-      typeof event.gapMs === "number" ? `gap=${event.gapMs}ms` : "gap=n/a";
-    const part = `[${event.eventType}] ${lagPart} ${gapPart}`;
-    const note = event.note ? ` ${event.note}` : "";
-    setStreamDebugText(`${part}${note}`);
-  }, []);
   const onTriggerRealtimeParts = useCallback(
     (parts: ChatTurnRealtimeStreamPart[]) => {
-      const previousCount = lastLoggedTriggerPartsCountRef.current;
-      if (parts.length > 0 && previousCount === 0) {
-        const firstPart = parts[0] as unknown;
-        pushStreamDebug({
-          eventType: "trigger_realtime_first_part",
-          note: `type=${typeof firstPart} snippet=${toDebugSnippet(firstPart)}`,
-        });
-      }
       triggerStreamPartsRef.current = parts;
-      if (
-        parts.length > 0 &&
-        parts.length !== previousCount &&
-        (parts.length <= 3 || parts.length % 8 === 0)
-      ) {
-        pushStreamDebug({
-          eventType: "trigger_realtime_parts",
-          note: `count=${parts.length}`,
-        });
-      }
-      lastLoggedTriggerPartsCountRef.current = parts.length;
       if (drainTriggerStreamRef.current) {
         drainTriggerStreamRef.current();
       }
     },
-    [pushStreamDebug]
+    []
   );
-  const onTriggerRealtimeError = useCallback(
-    (error: Error) => {
-      pushStreamDebug({
-        eventType: "trigger_realtime_error",
-        note: error.message,
-      });
-    },
-    [pushStreamDebug]
-  );
+  const onTriggerRealtimeError = useCallback((_error: Error) => {
+    // Errors surface via the terminal-event flow; no client-side log needed.
+  }, []);
 
   const buildUserMessageParts = (
     text: string,
@@ -595,19 +489,10 @@ function ChatInner({
       setStatus("submitted");
       setTriggerRealtime(null);
       triggerRealtimeRef.current = null;
-      activeTransportRef.current = null;
 
       const idempotencyKey = `turn-${chatId}-${Date.now()}-${Math.random()
         .toString(36)
         .slice(2, 10)}`;
-      const enqueueStartedAt = Date.now();
-      activeTurnTimelineRef.current = {
-        submitStartedAt: enqueueStartedAt,
-        acceptedAt: null,
-        firstEnqueuedAt: null,
-        firstRunStartedAt: null,
-        firstTextDeltaAt: null,
-      };
 
       const ac = new AbortController();
       turnFetchAbortRef.current = ac;
@@ -711,21 +596,7 @@ function ChatInner({
             buildTriggerRealtimeSessionStorageKey(chatId, realtime.runId),
             realtime.accessToken
           );
-          pushStreamDebug({
-            eventType: "trigger_realtime_armed",
-            note: `runId=${realtime.runId}`,
-          });
-        } else {
-          pushStreamDebug({
-            eventType: "trigger_realtime_missing",
-            note: "No realtime credentials returned; fallback to SSE",
-          });
         }
-        pushStreamDebug({
-          eventType: "turn_run_accepted",
-          note: `requestMs=${Date.now() - enqueueStartedAt}`,
-        });
-        activeTurnTimelineRef.current.acceptedAt = Date.now();
         setStatus("streaming");
       } catch (err) {
         if (err instanceof Error && err.name === "AbortError") {
@@ -748,10 +619,6 @@ function ChatInner({
           return;
         }
         const errMsg = normalizeErrorMessage(err, "Failed to queue generation");
-        pushStreamDebug({
-          eventType: "turn_run_failed",
-          note: errMsg,
-        });
         setErrorMessages((prev) => [
           ...prev,
           {
@@ -765,7 +632,7 @@ function ChatInner({
         turnFetchAbortRef.current = null;
       }
     },
-    [chatId, mutateBilling, pushStreamDebug]
+    [chatId, mutateBilling]
   );
 
   useEffect(() => {
@@ -1161,21 +1028,13 @@ function ChatInner({
       reconnectTimerRef.current = null;
     }
     reconnectStreamRef.current?.();
-    pushStreamDebug({
-      eventType: "stop_generation",
-      note: "User canceled generation",
-    });
 
     setTriggerRealtime(null);
     setStatus("ready");
     hidePreviewLoader();
     activeAssistantMessageIdRef.current = null;
     void loadMessages();
-  }, [
-    chatId,
-    loadMessages,
-    pushStreamDebug,
-  ]);
+  }, [chatId, loadMessages]);
 
   useEffect(() => {
     if (!chatId) return;
@@ -1185,7 +1044,6 @@ function ChatInner({
       triggerRealtime?.runId &&
       triggerRealtime.accessToken
     ) {
-      activeTransportRef.current = "trigger";
       if (eventSourceRef.current) {
         eventSourceRef.current.onerror = null;
         eventSourceRef.current.onopen = null;
@@ -1196,15 +1054,10 @@ function ChatInner({
         window.clearTimeout(reconnectTimerRef.current);
         reconnectTimerRef.current = null;
       }
-      pushStreamDebug({
-        eventType: "trigger_realtime_connected",
-        note: `runId=${triggerRealtime.runId} transportSwitch=without-bootstrap`,
-      });
       drainTriggerStreamRef.current?.();
       return;
     }
-
-  }, [chatId, pushStreamDebug, triggerRealtime]);
+  }, [chatId, triggerRealtime]);
 
   useEffect(() => {
     if (!chatId) return;
@@ -1215,15 +1068,6 @@ function ChatInner({
     let pendingFailureMessage: string | null = null;
     streamInitializedRef.current = false;
     lastEventIdRef.current = 0;
-    lastStreamEventAtRef.current = null;
-    lastTextDeltaAtRef.current = null;
-    textDeltaCounterRef.current = 0;
-    receivedAssistantCharsRef.current = 0;
-    activeTransportRef.current = null;
-    pushStreamDebug({
-      eventType: "stream_bootstrap",
-      note: "Initializing SSE stream lifecycle",
-    });
     const hasTriggerRealtimeSession = () =>
       Boolean(
       FORCE_TRIGGER_REALTIME_STREAM &&
@@ -1579,7 +1423,6 @@ function ChatInner({
     //    up once the stream is finished".
     const paintAssistantTextDelta = (text: string) => {
       if (!text) return;
-      receivedAssistantCharsRef.current += text.length;
       upsertAssistantText(text);
     };
 
@@ -1588,39 +1431,6 @@ function ChatInner({
 
       const terminalType = terminalEventPending;
       terminalEventPending = null;
-
-      const activeAssistantId = activeAssistantMessageIdRef.current;
-      let stateTextLen = 0;
-      let stateTextHead = "";
-      let stateTextTail = "";
-      let statePartsSummary = "";
-      if (activeAssistantId) {
-        const currentMessages = messagesRef.current;
-        const msg = currentMessages.find((m) => m.id === activeAssistantId);
-        if (msg && Array.isArray(msg.parts)) {
-          statePartsSummary = msg.parts
-            .map((p: any) => {
-              const t = String(p?.type ?? "");
-              if (t === "text") {
-                return `text:${String(p?.text ?? "").length}`;
-              }
-              return t;
-            })
-            .join(",");
-          const joined = msg.parts
-            .filter((p: any) => String(p?.type ?? "") === "text")
-            .map((p: any) => String(p?.text ?? ""))
-            .join("");
-          stateTextLen = joined.length;
-          stateTextHead = joined.slice(0, 60).replace(/\n/g, "\\n");
-          stateTextTail = joined.slice(-60).replace(/\n/g, "\\n");
-        }
-      }
-
-      pushStreamDebug({
-        eventType: "run_terminal",
-        note: `type=${terminalType} receivedAssistantChars=${receivedAssistantCharsRef.current} textDeltaEvents=${textDeltaCounterRef.current} stateTextLen=${stateTextLen} stateParts=[${statePartsSummary}] head="${stateTextHead}" tail="${stateTextTail}"`,
-      });
 
       if (terminalType === "completed") {
         activeTurnRunIdRef.current = null;
@@ -1802,17 +1612,12 @@ function ChatInner({
       });
     };
 
-    const handleEnvelope = (
-      envelope: StreamEnvelope,
-      source: StreamTransport
-    ) => {
+    const handleEnvelope = (envelope: StreamEnvelope) => {
       // Dedupe by dbId (postgres SERIAL, globally monotonic) when available.
       // Fall back to logicalEventId only for envelopes produced by older code
-      // paths that don't yet include dbId. Previously we deduped purely on
-      // logicalEventId with `<=`, which dropped any event that shared a
-      // logicalEventId with a prior event (observed in production: run_started
-      // + the first two text_deltas all landed on logicalEventId=7, so the
-      // two text_deltas vanished from the UI).
+      // paths that don't yet include dbId; deduping purely on logicalEventId
+      // is unsafe because historical bugs have produced events that share the
+      // same logicalEventId on distinct dbIds.
       const envelopeDbId =
         typeof envelope.dbId === "number" && envelope.dbId > 0
           ? envelope.dbId
@@ -1823,131 +1628,23 @@ function ChatInner({
         if (envelope.logicalEventId <= lastEventIdRef.current) return;
       }
 
-      const now = Date.now();
-      activeTransportRef.current = source;
-      const parsedCreatedAtMs = Date.parse(String(envelope.createdAt));
-      const lagMs = Number.isFinite(parsedCreatedAtMs)
-        ? Math.max(0, now - parsedCreatedAtMs)
-        : null;
-      const gapMs =
-        lastStreamEventAtRef.current == null
-          ? null
-          : Math.max(0, now - lastStreamEventAtRef.current);
-      lastStreamEventAtRef.current = now;
-
       if (envelopeDbId != null) {
         lastDbIdRef.current = envelopeDbId;
       }
       // Keep `lastEventIdRef` advancing too so the SSE `afterEventId` resume
-      // cursor and any logicalEventId-based diagnostics stay correct. Use
-      // Math.max so an out-of-order envelope (dbId advanced but logicalEventId
-      // duplicated) never rewinds the SSE cursor.
+      // cursor stays correct. Use Math.max so an out-of-order envelope (dbId
+      // advanced but logicalEventId duplicated) never rewinds the SSE cursor.
       if (envelope.logicalEventId > lastEventIdRef.current) {
         lastEventIdRef.current = envelope.logicalEventId;
       }
 
       const payload = envelope.payload ?? {};
       const eventType = envelope.eventType;
-      const timeline = activeTurnTimelineRef.current;
-      if (eventType === "text_delta") {
-        textDeltaCounterRef.current += 1;
-        const textPart = String(payload.text ?? "");
-        const textGapMs =
-          lastTextDeltaAtRef.current == null
-            ? null
-            : Math.max(0, now - lastTextDeltaAtRef.current);
-        lastTextDeltaAtRef.current = now;
-        const shouldReportTextDelta =
-          textDeltaCounterRef.current % 8 === 0 ||
-          (typeof textGapMs === "number" && textGapMs >= 1000);
-        const snippetPreview = textPart
-          .slice(0, 60)
-          .replace(/\n/g, "\\n");
-        if (timeline.firstTextDeltaAt == null) {
-          timeline.firstTextDeltaAt = now;
-          pushStreamDebug({
-            eventType: "text_delta",
-            logicalEventId: envelope.logicalEventId,
-            lagMs,
-            gapMs: textGapMs,
-            textDeltaChars: textPart.length,
-            note: `firstVisibleText transport=${source} sinceSubmitMs=${
-              timeline.submitStartedAt == null
-                ? "n/a"
-                : Math.max(0, now - timeline.submitStartedAt)
-            } sinceAcceptedMs=${
-              timeline.acceptedAt == null
-                ? "n/a"
-                : Math.max(0, now - timeline.acceptedAt)
-            } sinceRunStartedMs=${
-              timeline.firstRunStartedAt == null
-                ? "n/a"
-                : Math.max(0, now - timeline.firstRunStartedAt)
-            } snippet="${snippetPreview}"`,
-          });
-        }
-        if (shouldReportTextDelta) {
-          pushStreamDebug({
-            eventType,
-            logicalEventId: envelope.logicalEventId,
-            lagMs,
-            gapMs: textGapMs,
-            textDeltaChars: textPart.length,
-            note:
-              typeof textGapMs === "number" && textGapMs >= 1800
-                ? `Large text gap detected transport=${source} snippet="${snippetPreview}"`
-                : `transport=${source} snippet="${snippetPreview}"`,
-          });
-        }
-      } else {
-        pushStreamDebug({
-          eventType,
-          logicalEventId: envelope.logicalEventId,
-          lagMs,
-          gapMs,
-          note: `transport=${source}`,
-        });
-      }
 
       if (eventType === "run_enqueued") {
-        if (timeline.firstEnqueuedAt == null) {
-          timeline.firstEnqueuedAt = now;
-          pushStreamDebug({
-            eventType: "run_enqueued",
-            logicalEventId: envelope.logicalEventId,
-            lagMs,
-            gapMs,
-            note: `firstQueueEvent transport=${source} sinceSubmitMs=${
-              timeline.submitStartedAt == null
-                ? "n/a"
-                : Math.max(0, now - timeline.submitStartedAt)
-            }`,
-          });
-        }
         return;
       }
       if (eventType === "run_started") {
-        receivedAssistantCharsRef.current = 0;
-        textDeltaCounterRef.current = 0;
-        lastTextDeltaAtRef.current = null;
-        if (timeline.firstRunStartedAt == null) {
-          timeline.firstRunStartedAt = now;
-          pushStreamDebug({
-            eventType: "run_started",
-            logicalEventId: envelope.logicalEventId,
-            lagMs,
-            gapMs,
-            note: `firstRunStarted transport=${source} sinceSubmitMs=${
-              timeline.submitStartedAt == null
-                ? "n/a"
-                : Math.max(0, now - timeline.submitStartedAt)
-            } sinceAcceptedMs=${
-              timeline.acceptedAt == null
-                ? "n/a"
-                : Math.max(0, now - timeline.acceptedAt)
-            }`,
-          });
-        }
         setStatus("streaming");
         activeStepKey = null;
         plannedStepKeys.length = 0;
@@ -2097,20 +1794,7 @@ function ChatInner({
       for (let i = processedTriggerParts; i < parts.length; i += 1) {
         const chunk = parts[i];
         const maybeEnvelope = normalizeRealtimeChunk(chunk);
-        if (!maybeEnvelope) {
-          pushStreamDebug({
-            eventType: "trigger_realtime_unhandled_part",
-            note: `type=${typeof chunk} snippet=${toDebugSnippet(chunk)}`,
-          });
-          continue;
-        }
-
-        if (i === 0) {
-          pushStreamDebug({
-            eventType: "trigger_realtime_raw_part",
-            note: toDebugSnippet(chunk),
-          });
-        }
+        if (!maybeEnvelope) continue;
 
         const rawDbId = Number(maybeEnvelope.dbId ?? 0);
         const normalizedEnvelope: StreamEnvelope = {
@@ -2128,14 +1812,7 @@ function ChatInner({
           ),
         };
 
-        if (i === 0) {
-          pushStreamDebug({
-            eventType: "trigger_realtime_normalized",
-            note: toDebugSnippet(normalizedEnvelope),
-          });
-        }
-
-        handleEnvelope(normalizedEnvelope, "trigger");
+        handleEnvelope(normalizedEnvelope);
       }
 
       processedTriggerParts = parts.length;
@@ -2152,11 +1829,6 @@ function ChatInner({
         `/api/chats/${encodeURIComponent(chatId)}/stream?afterEventId=${afterEventId}`
       );
       eventSourceRef.current = source;
-      activeTransportRef.current = "sse";
-      pushStreamDebug({
-        eventType: "sse_connect",
-        note: `connectionId=${connectionId}, afterEventId=${afterEventId}`,
-      });
 
       const eventTypes = [
         "run_enqueued",
@@ -2174,12 +1846,9 @@ function ChatInner({
         if (connectionId !== streamConnectionIdRef.current) return;
         try {
           const envelope = JSON.parse(event.data) as StreamEnvelope;
-          handleEnvelope(envelope, "sse");
+          handleEnvelope(envelope);
         } catch {
-          pushStreamDebug({
-            eventType: "sse_parse_error",
-            note: "Malformed SSE event payload",
-          });
+          // Malformed SSE payload; skip and wait for next event.
         }
       };
 
@@ -2187,20 +1856,8 @@ function ChatInner({
         source.addEventListener(eventType, listener as EventListener);
       }
 
-      source.onopen = () => {
-        if (connectionId !== streamConnectionIdRef.current) return;
-        pushStreamDebug({
-          eventType: "sse_open",
-          note: `connectionId=${connectionId}`,
-        });
-      };
-
       source.onerror = () => {
         if (connectionId !== streamConnectionIdRef.current) return;
-        pushStreamDebug({
-          eventType: "sse_error",
-          note: `connectionId=${connectionId}, reconnectInMs=1200`,
-        });
         source.close();
         if (cancelled) return;
         reconnectTimerRef.current = window.setTimeout(() => {
@@ -2212,7 +1869,6 @@ function ChatInner({
     const bootstrap = async () => {
       if (!streamInitializedRef.current) {
         try {
-          const bootstrapStartedAt = Date.now();
           const liveRes = await fetch(
             `/api/chats/${encodeURIComponent(chatId)}/turn-runs/live`
           );
@@ -2291,22 +1947,8 @@ function ChatInner({
                   ),
                   recoveredAccessToken
                 );
-                pushStreamDebug({
-                  eventType: "trigger_realtime_recovered",
-                  note: `runId=${liveTriggerRunId}`,
-                });
-              } else {
-                pushStreamDebug({
-                  eventType: "trigger_realtime_missing",
-                  note: `Missing token for runId=${liveTriggerRunId}; fallback SSE`,
-                });
               }
             }
-            pushStreamDebug({
-              eventType: "live_state_bootstrap",
-              logicalEventId: lastEventIdRef.current,
-              note: `recovered=true requestMs=${Date.now() - bootstrapStartedAt}`,
-            });
           } else {
             const res = await fetch(
               `/api/chats/${encodeURIComponent(chatId)}/turn-runs?latest=1`
@@ -2321,54 +1963,27 @@ function ChatInner({
             if (Number.isFinite(latestDbId) && latestDbId > 0) {
               lastDbIdRef.current = latestDbId;
             }
-            pushStreamDebug({
-              eventType: "live_state_bootstrap",
-              logicalEventId: lastEventIdRef.current,
-              note: `recovered=false requestMs=${Date.now() - bootstrapStartedAt}`,
-            });
           }
         } catch {
-          pushStreamDebug({
-            eventType: "live_state_bootstrap_error",
-            note: "Failed to bootstrap live state",
-          });
           // fallback to 0 when latest lookup fails
         }
         streamInitializedRef.current = true;
       }
       if (hasTriggerRealtimeSession()) {
-        activeTransportRef.current = "trigger";
-        pushStreamDebug({
-          eventType: "trigger_realtime_connected",
-          note: `runId=${triggerRealtimeRef.current?.runId}`,
-        });
         drainTriggerStream();
       } else if (statusRef.current === "submitted") {
         if (reconnectTimerRef.current != null) {
           window.clearTimeout(reconnectTimerRef.current);
           reconnectTimerRef.current = null;
         }
-        pushStreamDebug({
-          eventType: "sse_defer_for_trigger",
-          note: "Submit in flight; deferring SSE for trigger realtime",
-        });
         reconnectTimerRef.current = window.setTimeout(() => {
           reconnectTimerRef.current = null;
           if (cancelled) return;
           if (hasTriggerRealtimeSession()) return;
-          pushStreamDebug({
-            eventType: "sse_fallback_after_defer",
-            note: "No trigger realtime within grace; opening SSE fallback",
-          });
           connect(lastEventIdRef.current);
         }, 4000);
       } else if (statusRef.current !== "ready" || activeTurnRunIdRef.current) {
         connect(lastEventIdRef.current);
-      } else {
-        pushStreamDebug({
-          eventType: "sse_idle_skipped",
-          note: "No active run; skipping idle SSE connection",
-        });
       }
     };
 
@@ -2385,11 +2000,6 @@ function ChatInner({
       reconnectStreamRef.current = null;
       drainTriggerStreamRef.current = null;
       stopProgressTicker();
-      receivedAssistantCharsRef.current = 0;
-      pushStreamDebug({
-        eventType: "stream_cleanup",
-        note: "Chat stream effect cleanup",
-      });
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
         eventSourceRef.current = null;
@@ -2399,11 +2009,7 @@ function ChatInner({
         reconnectTimerRef.current = null;
       }
     };
-  }, [
-    chatId,
-    loadMessages,
-    pushStreamDebug,
-  ]);
+  }, [chatId, loadMessages]);
 
   useEffect(() => {
     const lastMessage = messages[messages.length - 1];
@@ -2472,11 +2078,6 @@ function ChatInner({
         captureGlobalTyping={Boolean(providedChatId)}
         onInsertText={insertTextFromGlobalKey}
       />
-      {CHAT_STREAM_DEBUG_ENABLED ? (
-        <div className="px-3 py-1 text-[11px] text-muted-foreground border-t border-border/40 font-mono">
-          {streamDebugText || "stream debug enabled - waiting for events"}
-        </div>
-      ) : null}
       <CreditsLimitModal
         open={showCreditsLimitModal}
         onOpenChange={(open) => {

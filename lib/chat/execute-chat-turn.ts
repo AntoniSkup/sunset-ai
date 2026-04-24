@@ -55,7 +55,6 @@ import {
 import { publishStreamEvents } from "@/lib/chat/stream-bus";
 import { applyStreamEventsToChatTurnRunLiveState } from "@/lib/chat/live-state";
 import type { StreamEventEnvelope } from "@/lib/chat/stream-bus/types";
-import { logChatStreamDiagnostic } from "@/lib/chat/stream-diagnostics";
 
 const BUILDER_TOOLS = new Set([
   "create_site",
@@ -184,24 +183,6 @@ function normalizeChunkEventType(value: unknown): string {
   return typeof value === "string" ? value.trim().toLowerCase() : "unknown";
 }
 
-// Chunk types delivered to `streamText` `onChunk` in ai@6 (see
-// `ai/src/generate-text/stream-text.ts` in the published source). Anything else
-// that arrives is unexpected and will be logged so we can extend the whitelist.
-const AI_SDK_V6_ONCHUNK_TYPES = new Set<string>([
-  "text-delta",
-  "reasoning-delta",
-  "source",
-  "tool-call",
-  "tool-input-start",
-  "tool-input-delta",
-  "tool-result",
-  "raw",
-]);
-
-function isKnownOnChunkType(eventType: string): boolean {
-  return AI_SDK_V6_ONCHUNK_TYPES.has(eventType);
-}
-
 function isToolCallLikeChunkType(eventType: string): boolean {
   return (
     eventType === "tool-call" ||
@@ -224,43 +205,6 @@ function extractChunkText(evt: any): string | null {
     (typeof evt?.delta === "string" ? evt.delta : null) ??
     null
   );
-}
-
-// Builds a compact, safe summary of an onChunk event for `CHAT_STREAM_DEBUG_RAW`
-// diagnostics. Clips long strings and avoids dumping deep provider objects.
-function summarizeRawChunk(evt: any): Record<string, unknown> {
-  const chunk = (evt?.chunk ?? evt ?? {}) as Record<string, unknown>;
-  const out: Record<string, unknown> = {
-    type: typeof chunk.type === "string" ? chunk.type : "unknown",
-  };
-  const passthrough: readonly (keyof typeof chunk)[] = [
-    "id",
-    "toolCallId",
-    "toolName",
-    "providerExecuted",
-  ];
-  for (const key of passthrough) {
-    const v = chunk[key];
-    if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") {
-      out[key as string] = v;
-    }
-  }
-  const text = extractChunkText(evt);
-  if (typeof text === "string") {
-    out.textChars = text.length;
-    if (text.length > 0) out.textSnippet = text.slice(0, 80);
-  }
-  const rawValue = (chunk as { rawValue?: unknown }).rawValue;
-  if (rawValue !== undefined) {
-    try {
-      const str = JSON.stringify(rawValue);
-      out.rawValuePreview =
-        str.length > 240 ? `${str.slice(0, 240)}…(${str.length - 240} more)` : str;
-    } catch {
-      out.rawValuePreview = "[unserializable]";
-    }
-  }
-  return out;
 }
 
 function getToolCallIdFromChunkEvent(evt: any): string | null {
@@ -329,20 +273,6 @@ export async function createChatTurnStream({
   emitRunStarted = true,
   onPublishedTurnEvents,
 }: CreateChatTurnStreamParams) {
-  const streamStartedAt = Date.now();
-  const executionTimings: Record<string, number> = {};
-  const measure = async <T,>(label: string, work: () => Promise<T>): Promise<T> => {
-    const startedAt = Date.now();
-    try {
-      return await work();
-    } finally {
-      executionTimings[label] = Date.now() - startedAt;
-    }
-  };
-  let firstModelChunkAtMs: number | null = null;
-  let firstTextDeltaQueuedAtMs: number | null = null;
-  let firstTextDeltaPersistedAtMs: number | null = null;
-
   const publishTurnEvents = async (
     events: Array<{
       eventType: string;
@@ -350,33 +280,16 @@ export async function createChatTurnStream({
     }>
   ) => {
     if (!turnRunId || events.length === 0) return;
-    const publishedEvents = await measure("publishTurnEventsMs", () =>
-      publishStreamEvents(
-        {
-          chatId: chat.id,
-          runId: turnRunId,
-          events,
-        },
-        {
-          onEventsPersisted: onPublishedTurnEvents,
-        }
-      )
-    );
-    if (firstTextDeltaPersistedAtMs == null) {
-      const firstPersistedTextDelta = publishedEvents.find(
-        (event) => event.eventType === "text_delta"
-      );
-      if (firstPersistedTextDelta) {
-        firstTextDeltaPersistedAtMs = Date.now();
-        logChatStreamDiagnostic("Persisted first text delta batch", {
-          chatId: chat.id,
-          chatPublicId,
-          turnRunId,
-          logicalEventId: firstPersistedTextDelta.logicalEventId,
-          elapsedMs: firstTextDeltaPersistedAtMs - streamStartedAt,
-        });
+    const publishedEvents = await publishStreamEvents(
+      {
+        chatId: chat.id,
+        runId: turnRunId,
+        events,
+      },
+      {
+        onEventsPersisted: onPublishedTurnEvents,
       }
-    }
+    );
     await applyStreamEventsToChatTurnRunLiveState({
       runId: turnRunId,
       chatId: chat.id,
@@ -462,21 +375,17 @@ export async function createChatTurnStream({
       : `chat-turn-bill-${chatPublicId}-${user.id}-${messages.length}`;
 
   if (!turnRunId) {
-    const account = await measure("accountLookupMs", () =>
-      getOrCreateAccountForUser(user.id)
-    );
+    const account = await getOrCreateAccountForUser(user.id);
     billingAccountId = account.id;
-    await measure("ensureDailyCreditsMs", () =>
-      ensureDailyCreditsForAccount(account.id)
+    await ensureDailyCreditsForAccount(account.id);
+    const subscriptionForGate = await getSubscriptionByAccountId(account.id);
+    const { balance: balanceForGate } = await getCreditsBreakdown(
+      account.id,
+      subscriptionForGate
     );
-    const subscriptionForGate = await measure("subscriptionLookupMs", () =>
-      getSubscriptionByAccountId(account.id)
-    );
-    const { balance: balanceForGate } = await measure("creditsBreakdownMs", () =>
-      getCreditsBreakdown(account.id, subscriptionForGate)
-    );
-    const minCreditsToStartTurn = await measure("creditsCostLookupMs", () =>
-      getCreditsCostForAction("chat_message", subscriptionForGate?.planId ?? null)
+    const minCreditsToStartTurn = await getCreditsCostForAction(
+      "chat_message",
+      subscriptionForGate?.planId ?? null
     );
     if (balanceForGate < minCreditsToStartTurn) {
       throw new Error(
@@ -517,8 +426,9 @@ export async function createChatTurnStream({
     }
   }
 
-  const persistedContext = await measure("contextMessagesLookupMs", () =>
-    getChatMessagesByPublicId(chatPublicId, user.id)
+  const persistedContext = await getChatMessagesByPublicId(
+    chatPublicId,
+    user.id
   );
   const contextMessages: Array<Omit<UIMessage, "id">> =
     persistedContext?.messages?.length
@@ -534,26 +444,15 @@ export async function createChatTurnStream({
         })
       : messages;
 
-  const modelMessages = await measure("convertModelMessagesMs", () =>
-    convertToModelMessages(contextMessages)
-  );
+  const modelMessages = await convertToModelMessages(contextMessages);
 
-  const [model, modelId] = await measure("modelLookupMs", () =>
-    Promise.all([getAIModel(), getAIModelId()])
-  );
+  const [model, modelId] = await Promise.all([getAIModel(), getAIModelId()]);
   const promptableSiteAssets = toSiteAssetPromptDescriptors(
-    await measure("siteAssetsLookupMs", () =>
-      getSiteAssetsByChatId(chatPublicId, user.id)
-    )
+    await getSiteAssetsByChatId(chatPublicId, user.id)
   );
   const siteAssetContext = buildSiteAssetPromptContext(promptableSiteAssets);
-  const { staticSystemPrompt, dynamicSystemSuffix } = await measure(
-    "buildPromptMs",
-    async () =>
-      buildChatSystemPromptParts({
-        siteAssetContext,
-      })
-  );
+  const { staticSystemPrompt, dynamicSystemSuffix } =
+    await buildChatSystemPromptParts({ siteAssetContext });
   const useChatPromptCache = isAnthropicChatPromptCachingEnabled();
   const systemPrompt: string | SystemModelMessage | SystemModelMessage[] =
     useChatPromptCache
@@ -578,7 +477,7 @@ export async function createChatTurnStream({
     createSectionToolCall,
     validateCompletenessToolCall,
     resolveImageSlotsToolCall,
-  ] = await measure("toolSetupMs", async () => [
+  ] = [
     createSiteTool(chatPublicId, user.id, {
       deferredChatTurnBilling: true,
     }),
@@ -587,7 +486,7 @@ export async function createChatTurnStream({
     }),
     createValidateCompletenessTool(chatPublicId, user.id),
     createResolveImageSlotsTool(chatPublicId, user.id),
-  ]);
+  ];
   const tools = {
     create_site: createSiteToolCall,
     create_section: createSectionToolCall,
@@ -600,23 +499,7 @@ export async function createChatTurnStream({
   let liveTextBuffer = "";
   let liveTextFlushTimer: ReturnType<typeof setTimeout> | null = null;
   let emittedAssistantChars = 0;
-  let fallbackEmittedChars = 0;
   let stepCounter = 0;
-  const chunkTypeCounts = new Map<string, number>();
-  let textDeltaEventsEmitted = 0;
-
-  // Diagnostics: we whitelist `text-delta` for user-visible text, but keep
-  // counters for everything else so we can verify nothing user-facing is
-  // hiding in reasoning / unknown chunk types when debugging.
-  let reasoningDeltaChars = 0;
-  let reasoningDeltaLogs = 0;
-  let unknownChunkTypeChars = 0;
-  let unknownChunkTypeLogs = 0;
-  let rawChunkDumpCount = 0;
-  const MAX_REASONING_SNIPPET_LOGS = 5;
-  const MAX_UNKNOWN_CHUNK_LOGS = 5;
-  const MAX_RAW_CHUNK_DUMPS = 150;
-  const rawChunkDebugEnabled = true;
 
   const emittedToolCallMeta = new Map<string, { hasDestination: boolean }>();
   let lastSuccessfulRevision: {
@@ -659,17 +542,6 @@ export async function createChatTurnStream({
     const chunk = liveTextBuffer;
     liveTextBuffer = "";
     emittedAssistantChars += chunk.length;
-    textDeltaEventsEmitted += 1;
-    if (firstTextDeltaQueuedAtMs == null) {
-      firstTextDeltaQueuedAtMs = Date.now();
-      logChatStreamDiagnostic("Queued first text delta batch", {
-        chatId: chat.id,
-        chatPublicId,
-        turnRunId,
-        chars: chunk.length,
-        elapsedMs: firstTextDeltaQueuedAtMs - streamStartedAt,
-      });
-    }
     await emitTurnEvent("text_delta", { text: chunk });
   };
 
@@ -706,10 +578,6 @@ export async function createChatTurnStream({
     tools,
     abortSignal: turnRunAbortController?.signal,
     stopWhen: stepCountIs(MAX_CHAT_STEPS_PER_TURN),
-    // When `CHAT_STREAM_DEBUG_RAW` is set we also ask the SDK for provider-native
-    // raw chunks so we can see exactly what Anthropic/OpenAI/etc. emitted. See
-    // https://ai-sdk.dev/docs/ai-sdk-core/generating-text (#onChunk callback).
-    includeRawChunks: rawChunkDebugEnabled,
     experimental_telemetry: {
       isEnabled: true,
       functionId: "chat-stream",
@@ -731,21 +599,6 @@ export async function createChatTurnStream({
               ? evt.type
               : "unknown";
         const eventType = normalizeChunkEventType(rawEventType);
-        chunkTypeCounts.set(
-          eventType,
-          (chunkTypeCounts.get(eventType) ?? 0) + 1
-        );
-
-        if (rawChunkDebugEnabled && rawChunkDumpCount < MAX_RAW_CHUNK_DUMPS) {
-          rawChunkDumpCount += 1;
-          logChatStreamDiagnostic("Raw chunk sample", {
-            chatId: chat.id,
-            chatPublicId,
-            turnRunId,
-            seq: rawChunkDumpCount,
-            chunk: summarizeRawChunk(evt),
-          });
-        }
 
         // Tool-call-like chunks: emit tool_call meta, never forward as text.
         if (isToolCallLikeChunkType(eventType)) {
@@ -771,70 +624,19 @@ export async function createChatTurnStream({
           return;
         }
 
-        // Reasoning deltas are internal to the model. We don't surface them,
-        // but we count chars + log a few snippets so we can prove no
-        // user-visible text is hiding here when debugging.
+        // Reasoning deltas are internal to the model; don't surface them.
         if (eventType === "reasoning-delta") {
-          const reasoningText = extractChunkText(evt);
-          if (typeof reasoningText === "string" && reasoningText.length > 0) {
-            reasoningDeltaChars += reasoningText.length;
-            if (reasoningDeltaLogs < MAX_REASONING_SNIPPET_LOGS) {
-              reasoningDeltaLogs += 1;
-              logChatStreamDiagnostic("Reasoning delta observed", {
-                chatId: chat.id,
-                chatPublicId,
-                turnRunId,
-                chars: reasoningText.length,
-                snippet: reasoningText.slice(0, 60),
-              });
-            }
-          }
           return;
         }
 
         // WHITELIST: only `text-delta` chunks become user-visible assistant text.
         if (eventType !== "text-delta") {
-          if (!isKnownOnChunkType(eventType)) {
-            // The AI SDK / provider emitted a chunk type we don't model. Log
-            // the first few with a text snippet so we can extend our handling
-            // if a future SDK version introduces a new visible-text type.
-            const maybeText = extractChunkText(evt);
-            if (typeof maybeText === "string" && maybeText.length > 0) {
-              unknownChunkTypeChars += maybeText.length;
-            }
-            if (unknownChunkTypeLogs < MAX_UNKNOWN_CHUNK_LOGS) {
-              unknownChunkTypeLogs += 1;
-              logChatStreamDiagnostic("Unknown chunk type", {
-                chatId: chat.id,
-                chatPublicId,
-                turnRunId,
-                eventType,
-                textChars:
-                  typeof maybeText === "string" ? maybeText.length : 0,
-                snippet:
-                  typeof maybeText === "string" && maybeText.length > 0
-                    ? maybeText.slice(0, 60)
-                    : undefined,
-              });
-            }
-          }
           return;
         }
 
         const textDelta = extractChunkText(evt);
         if (!textDelta) {
           return;
-        }
-        if (firstModelChunkAtMs == null) {
-          firstModelChunkAtMs = Date.now();
-          logChatStreamDiagnostic("Received first model text chunk", {
-            chatId: chat.id,
-            chatPublicId,
-            turnRunId,
-            chars: textDelta.length,
-            elapsedMs: firstModelChunkAtMs - streamStartedAt,
-            executionTimings,
-          });
         }
         liveTextBuffer += textDelta;
 
@@ -944,18 +746,6 @@ export async function createChatTurnStream({
             const fallbackDelta = aggregated.slice(emittedAssistantChars);
             if (fallbackDelta) {
               emittedAssistantChars += fallbackDelta.length;
-              fallbackEmittedChars += fallbackDelta.length;
-              textDeltaEventsEmitted += 1;
-              logChatStreamDiagnostic(
-                "Emitted fallback text_delta from onStepFinish",
-                {
-                  chatId: chat.id,
-                  chatPublicId,
-                  turnRunId,
-                  chars: fallbackDelta.length,
-                  snippetHead: fallbackDelta.slice(0, 60),
-                }
-              );
               await emitTurnEvent("text_delta", { text: fallbackDelta });
             }
           }
@@ -1058,11 +848,7 @@ export async function createChatTurnStream({
       }
       try {
         if (billingAccountId == null) {
-          billingAccountId = (
-            await measure("billingAccountLookupMs", () =>
-              getOrCreateAccountForUser(user.id)
-            )
-          ).id;
+          billingAccountId = (await getOrCreateAccountForUser(user.id)).id;
         }
         await finalizeSuccessfulChatTurnBilling({
           accountId: billingAccountId,
@@ -1095,42 +881,6 @@ export async function createChatTurnStream({
           userId: user.id,
         });
       }
-      const chunkTypeSummary = Array.from(chunkTypeCounts.entries())
-        .sort((a, b) => b[1] - a[1])
-        .map(([type, count]) => `${type}:${count}`)
-        .join(",");
-      // Parity check: `emittedAssistantChars + fallbackEmittedChars` should
-      // equal `finalText.length` (modulo trimming). If not, we dropped text
-      // somewhere on the emission path; if `unknownChunkTypeChars > 0`, the
-      // provider sent a new chunk type our whitelist doesn't cover.
-      logChatStreamDiagnostic("Chat turn stream finished", {
-        chatId: chat.id,
-        chatPublicId,
-        turnRunId,
-        totalStreamMs: Date.now() - streamStartedAt,
-        firstModelChunkMs:
-          firstModelChunkAtMs == null ? null : firstModelChunkAtMs - streamStartedAt,
-        firstTextDeltaQueuedMs:
-          firstTextDeltaQueuedAtMs == null
-            ? null
-            : firstTextDeltaQueuedAtMs - streamStartedAt,
-        firstTextDeltaPersistedMs:
-          firstTextDeltaPersistedAtMs == null
-            ? null
-            : firstTextDeltaPersistedAtMs - streamStartedAt,
-        emittedAssistantChars,
-        fallbackEmittedChars,
-        textDeltaEventsEmitted,
-        finalTextLength: finalText.length,
-        finalTextHead: finalText.slice(0, 80),
-        finalTextTail: finalText.slice(-80),
-        reasoningDeltaChars,
-        unknownChunkTypeChars,
-        unknownChunkTypeLogs,
-        rawChunkDumpCount: rawChunkDebugEnabled ? rawChunkDumpCount : undefined,
-        chunkTypes: chunkTypeSummary,
-        executionTimings,
-      });
     },
     onError: async (event: { error: unknown }) => {
       if (liveTextFlushTimer) {
@@ -1176,24 +926,6 @@ export async function createChatTurnStream({
       }
       updateActiveObservation({ output: errMsg, level: "ERROR" });
       updateActiveTrace({ output: errMsg });
-      logChatStreamDiagnostic("Chat turn stream failed", {
-        chatId: chat.id,
-        chatPublicId,
-        turnRunId,
-        error: errMsg,
-        totalStreamMs: Date.now() - streamStartedAt,
-        firstModelChunkMs:
-          firstModelChunkAtMs == null ? null : firstModelChunkAtMs - streamStartedAt,
-        firstTextDeltaQueuedMs:
-          firstTextDeltaQueuedAtMs == null
-            ? null
-            : firstTextDeltaQueuedAtMs - streamStartedAt,
-        firstTextDeltaPersistedMs:
-          firstTextDeltaPersistedAtMs == null
-            ? null
-            : firstTextDeltaPersistedAtMs - streamStartedAt,
-        executionTimings,
-      });
     },
   });
 }

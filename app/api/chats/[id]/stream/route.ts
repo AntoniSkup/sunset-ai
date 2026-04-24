@@ -6,7 +6,6 @@ import {
 import {
   readStreamEventsAfter,
 } from "@/lib/chat/stream-bus";
-import { diffMs, logChatStreamDiagnostic } from "@/lib/chat/stream-diagnostics";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -78,23 +77,9 @@ export async function GET(
       let consecutiveReadErrors = 0;
       const connectionStartedAt = Date.now();
 
-      logChatStreamDiagnostic("SSE connection opened", {
-        chatId: chat.id,
-        chatPublicId,
-        userId: user.id,
-        afterEventId,
-      });
-
       const close = () => {
         if (closed) return;
         closed = true;
-        logChatStreamDiagnostic("SSE connection closed", {
-          chatId: chat.id,
-          chatPublicId,
-          userId: user.id,
-          afterEventId,
-          connectedForMs: Date.now() - connectionStartedAt,
-        });
         try {
           controller.close();
         } catch {
@@ -110,7 +95,6 @@ export async function GET(
       const sendLoop = async () => {
         let pollIntervalMs = SSE_POLL_INTERVAL_BASE_MS;
         let lastHeartbeatAtMs = 0;
-        let idlePolls = 0;
         let lastEventAtMs = 0;
         while (!closed) {
           if (request.signal.aborted) {
@@ -118,14 +102,6 @@ export async function GET(
             return;
           }
           if (Date.now() - connectionStartedAt >= SSE_CONNECTION_MAX_MS) {
-            logChatStreamDiagnostic("SSE connection recycled before runtime timeout", {
-              chatId: chat.id,
-              chatPublicId,
-              userId: user.id,
-              afterEventId,
-              connectedForMs: Date.now() - connectionStartedAt,
-              maxConnectionMs: SSE_CONNECTION_MAX_MS,
-            });
             close();
             return;
           }
@@ -138,52 +114,18 @@ export async function GET(
               ? SSE_IDLE_NO_EVENTS_CLOSE_MS
               : SSE_IDLE_POST_EVENT_CLOSE_MS;
           if (idleForMs >= idleThresholdMs) {
-            logChatStreamDiagnostic("SSE connection closing on idle threshold", {
-              chatId: chat.id,
-              chatPublicId,
-              userId: user.id,
-              afterEventId,
-              idleForMs,
-              idleThresholdMs,
-              hasReceivedEvents: lastEventAtMs > 0,
-            });
             close();
             return;
           }
           try {
-            const readStartedAt = Date.now();
             const events = await readStreamEventsAfter({
               chatId: chat.id,
               afterLogicalEventId: afterEventId,
               limit: 100,
             });
-            const readDurationMs = Date.now() - readStartedAt;
             consecutiveReadErrors = 0;
             if (events.length > 0) {
-              idlePolls = 0;
               lastEventAtMs = Date.now();
-            } else {
-              idlePolls += 1;
-            }
-
-            if (
-              events.length > 0 ||
-              readDurationMs >= 250 ||
-              idlePolls === 1 ||
-              idlePolls % 20 === 0
-            ) {
-              const newestEvent = events[events.length - 1];
-              logChatStreamDiagnostic("SSE poll completed", {
-                chatId: chat.id,
-                afterEventId,
-                eventCount: events.length,
-                idlePolls,
-                pollIntervalMs,
-                readDurationMs,
-                newestEventLagMs: newestEvent
-                  ? diffMs(Date.now(), newestEvent.createdAt)
-                  : null,
-              });
             }
 
             for (const event of events) {
@@ -243,12 +185,6 @@ export async function GET(
               SSE_ERROR_RETRY_MAX_MS,
               SSE_ERROR_RETRY_BASE_MS * Math.max(1, consecutiveReadErrors)
             );
-            logChatStreamDiagnostic("SSE poll failed", {
-              chatId: chat.id,
-              afterEventId,
-              consecutiveReadErrors,
-              retryDelayMs,
-            });
             if (closed || request.signal.aborted) {
               close();
               return;

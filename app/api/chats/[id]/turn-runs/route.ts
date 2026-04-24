@@ -12,7 +12,6 @@ import {
   getRunningChatTurnRun,
   getUser,
 } from "@/lib/db/queries";
-import { diffMs, logChatStreamDiagnostic } from "@/lib/chat/stream-diagnostics";
 import { triggerChatTurnTask } from "@/lib/chat/trigger-chat-turn-task";
 import { createTriggerRealtimeSessionForRun } from "@/lib/chat/trigger-realtime-auth";
 import {
@@ -36,17 +35,7 @@ export async function POST(
     params: Promise<{ id: string }>;
   },
 ) {
-  const requestStartedAt = Date.now();
-  const timings: Record<string, number> = {};
-  const measure = async <T,>(label: string, work: () => Promise<T>): Promise<T> => {
-    const startedAt = Date.now();
-    try {
-      return await work();
-    } finally {
-      timings[label] = Date.now() - startedAt;
-    }
-  };
-  const user = await measure("getUserMs", () => getUser());
+  const user = await getUser();
   if (!user) {
     return NextResponse.json(
       { error: "Unauthorized", code: "UNAUTHORIZED" },
@@ -63,9 +52,9 @@ export async function POST(
   }
 
   const [chat, body, account] = await Promise.all([
-    measure("chatLookupMs", () => getChatByPublicId(chatPublicId, user.id)),
-    measure("payloadParseMs", () => request.json().catch(() => null)),
-    measure("accountLookupMs", () => getOrCreateAccountForUser(user.id)),
+    getChatByPublicId(chatPublicId, user.id),
+    request.json().catch(() => null),
+    getOrCreateAccountForUser(user.id),
   ]);
   if (!chat) {
     return NextResponse.json(
@@ -87,16 +76,10 @@ export async function POST(
       : `turn-${chat.id}-${nanoid(12)}`;
 
   const [subscription, existing, _ensureDaily, runningRun] = await Promise.all([
-    measure("subscriptionLookupMs", () =>
-      getSubscriptionByAccountId(account.id)
-    ),
-    measure("idempotencyLookupMs", () =>
-      getChatTurnRunByIdempotencyKey(idempotencyKey)
-    ),
-    measure("ensureDailyCreditsMs", () =>
-      ensureDailyCreditsForAccount(account.id)
-    ),
-    measure("runningRunLookupMs", () => getRunningChatTurnRun(chat.id)),
+    getSubscriptionByAccountId(account.id),
+    getChatTurnRunByIdempotencyKey(idempotencyKey),
+    ensureDailyCreditsForAccount(account.id),
+    getRunningChatTurnRun(chat.id),
   ]);
 
   if (existing && existing.chatId === chat.id && existing.userId === user.id) {
@@ -104,12 +87,8 @@ export async function POST(
   }
 
   const [{ balance }, minCreditsForTurnStart] = await Promise.all([
-    measure("creditsBreakdownMs", () =>
-      getCreditsBreakdown(account.id, subscription)
-    ),
-    measure("creditsCostLookupMs", () =>
-      getCreditsCostForAction("chat_message", subscription?.planId ?? null)
-    ),
+    getCreditsBreakdown(account.id, subscription),
+    getCreditsCostForAction("chat_message", subscription?.planId ?? null),
   ]);
   if (balance < minCreditsForTurnStart) {
     return NextResponse.json(
@@ -138,49 +117,30 @@ export async function POST(
       );
       const userText = extractTextFromMessageParts(persistedParts);
       if (hasDisplayableMessageParts(persistedParts)) {
-        await measure("persistUserMessageMs", () =>
-          createChatMessage({
-            chatId: chat.id,
-            role: "user",
-            content: userText.trim(),
-            parts: persistedParts,
-          })
-        );
+        await createChatMessage({
+          chatId: chat.id,
+          role: "user",
+          content: userText.trim(),
+          parts: persistedParts,
+        });
       }
     }
   })();
 
   const [, run] = await Promise.all([
     persistPromise,
-    measure("enqueueRunMs", () =>
-      enqueueChatTurnRun({
-        chatId: chat.id,
-        userId: user.id,
-        idempotencyKey,
-        payload: payloadObj,
-      })
-    ),
+    enqueueChatTurnRun({
+      chatId: chat.id,
+      userId: user.id,
+      idempotencyKey,
+      payload: payloadObj,
+    }),
   ]);
-
-  logChatStreamDiagnostic("Chat turn run enqueued", {
-    chatId: chat.id,
-    chatPublicId,
-    runId: run.id,
-    userId: user.id,
-    sequence: run.sequence,
-    hadRunning,
-    enqueueLatencyMs: Date.now() - requestStartedAt,
-    createdToNowMs: diffMs(Date.now(), run.createdAt),
-  });
-
-  timings.publishEnqueuedMs = 0;
 
   const processingEnabled = process.env.ENABLE_TRIGGER_CHAT_QUEUE === "1";
   let triggerRealtime: { runId: string; accessToken: string } | null = null;
   if (!hadRunning && processingEnabled) {
-    const handle = await measure("triggerTaskMs", () =>
-      triggerChatTurnTask(run.id)
-    );
+    const handle = await triggerChatTurnTask(run.id);
     const triggerHandleId = String(handle.id);
     void attachTriggerRunIdToChatTurnRun({
       runId: run.id,
@@ -197,24 +157,12 @@ export async function POST(
             runId: triggerHandleId,
             accessToken: handle.publicAccessToken,
           }
-        : await measure("triggerRealtimeSessionMs", () =>
-            createTriggerRealtimeSessionForRun(triggerHandleId)
-          );
+        : await createTriggerRealtimeSessionForRun(triggerHandleId);
   } else if (runningRun?.triggerRunId) {
-    triggerRealtime = await measure("reuseTriggerRealtimeSessionMs", () =>
-      createTriggerRealtimeSessionForRun(runningRun.triggerRunId)
+    triggerRealtime = await createTriggerRealtimeSessionForRun(
+      runningRun.triggerRunId,
     );
   }
-
-  logChatStreamDiagnostic("Chat turn run request completed", {
-    chatId: chat.id,
-    chatPublicId,
-    runId: run.id,
-    queued: hadRunning,
-    processingEnabled,
-    totalRequestMs: Date.now() - requestStartedAt,
-    timings,
-  });
 
   return NextResponse.json(
     {

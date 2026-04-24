@@ -1,6 +1,5 @@
 import { logger, task } from "@trigger.dev/sdk/v3";
 import type { UIMessage } from "ai";
-import { diffMs, logChatStreamDiagnostic } from "@/lib/chat/stream-diagnostics";
 import { chatTurnEventsStream } from "./chat-turn-stream";
 
 type DbQueriesModule = typeof import("@/lib/db/queries");
@@ -88,7 +87,6 @@ export const runChatTurnTask = task({
   id: "run-chat-turn",
   maxDuration: 900,
   run: async (payload: { turnRunId: string }, { ctx }) => {
-    const taskStartedAt = Date.now();
     const turnRunId = payload?.turnRunId;
     if (!turnRunId) {
       throw new Error("turnRunId is required");
@@ -151,17 +149,6 @@ export const runChatTurnTask = task({
       });
     }
 
-    logChatStreamDiagnostic("Trigger claimed turn run", {
-      requestedRunId: turnRunId,
-      claimedRunId: claimed.id,
-      triggerRunId: String(ctx.run.id),
-      chatId: claimed.chatId,
-      queueDelayMs: diffMs(claimed.startedAt, claimed.createdAt),
-      taskStartupMs: Date.now() - taskStartedAt,
-      requestedStatus: existingRun.status,
-      claimedSequence: claimed.sequence,
-    });
-
     void attachTriggerRunIdToChatTurnRun({
       runId: claimed.id,
       triggerRunId: String(ctx.run.id),
@@ -208,49 +195,19 @@ export const runChatTurnTask = task({
     //   - drained explicitly before the task exits to guarantee run_completed
     //     and any trailing text_delta reach the client.
     let realtimeAppendChain: Promise<void> = Promise.resolve();
-    let realtimeAppendsScheduled = 0;
-    let realtimeAppendsCompleted = 0;
-    let realtimeAppendErrors = 0;
-    let realtimeAppendTotalMs = 0;
-    let realtimeAppendMaxMs = 0;
     const scheduleRealtimeAppend = (payload: string) => {
-      realtimeAppendsScheduled += 1;
       realtimeAppendChain = realtimeAppendChain.then(async () => {
-        const appendStartedAt = Date.now();
         try {
           await chatTurnEventsStream.append(payload);
-          realtimeAppendsCompleted += 1;
         } catch (error) {
-          realtimeAppendErrors += 1;
           logger.error("Failed to append to realtime stream", {
             error: error instanceof Error ? error.message : String(error),
-            scheduled: realtimeAppendsScheduled,
-            completed: realtimeAppendsCompleted,
-            errors: realtimeAppendErrors,
           });
-        } finally {
-          const durationMs = Date.now() - appendStartedAt;
-          realtimeAppendTotalMs += durationMs;
-          if (durationMs > realtimeAppendMaxMs) {
-            realtimeAppendMaxMs = durationMs;
-          }
         }
       });
     };
 
     try {
-      const executionStartedAt = Date.now();
-      const executionTimings: Record<string, number> = {};
-      const measure = async <T,>(label: string, work: () => Promise<T>): Promise<T> => {
-        const startedAt = Date.now();
-        try {
-          return await work();
-        } finally {
-          executionTimings[label] = Date.now() - startedAt;
-        }
-      };
-      let firstPublishedEventAtMs: number | null = null;
-      let firstTextDeltaAtMs: number | null = null;
       const publishedRunStartedEvents = await publishStreamEvents({
         chatId: claimed.chatId,
         runId: claimed.id,
@@ -264,34 +221,23 @@ export const runChatTurnTask = task({
           },
         ],
       });
-      firstPublishedEventAtMs = Date.now();
-      logChatStreamDiagnostic("Trigger published first turn events batch", {
-        triggerRunId: String(ctx.run.id),
-        chatTurnRunId: claimed.id,
-        chatId: claimed.chatId,
-        eventTypes: publishedRunStartedEvents.map((event) => event.eventType),
-        elapsedMs: firstPublishedEventAtMs - executionStartedAt,
-      });
       for (const event of publishedRunStartedEvents) {
         scheduleRealtimeAppend(serializeRealtimeEvent(event));
       }
-      const runStartedLiveStateApply = measure(
-        "runStartedLiveStateApplyMs",
-        async () => {
-          const { applyStreamEventsToChatTurnRunLiveState } =
-            await liveStateModulePromise;
-          await applyStreamEventsToChatTurnRunLiveState({
-            runId: claimed.id,
-            chatId: claimed.chatId,
-            userId: claimed.userId,
-            events: publishedRunStartedEvents,
-          });
-        }
-      );
+      const runStartedLiveStateApply = (async () => {
+        const { applyStreamEventsToChatTurnRunLiveState } =
+          await liveStateModulePromise;
+        await applyStreamEventsToChatTurnRunLiveState({
+          runId: claimed.id,
+          chatId: claimed.chatId,
+          userId: claimed.userId,
+          events: publishedRunStartedEvents,
+        });
+      })();
       const [user, chat, { executeChatTurn }] = await Promise.all([
-        measure("userLookupMs", () => getUserById(claimed.userId)),
-        measure("chatLookupMs", () => getChatByPublicId(chatPublicId, claimed.userId)),
-        measure("executeChatTurnImportMs", () => executeChatTurnModulePromise),
+        getUserById(claimed.userId),
+        getChatByPublicId(chatPublicId, claimed.userId),
+        executeChatTurnModulePromise,
       ]);
       await runStartedLiveStateApply;
 
@@ -302,74 +248,25 @@ export const runChatTurnTask = task({
         throw new Error(`Chat not found: ${chatPublicId}`);
       }
 
-      logChatStreamDiagnostic("Trigger direct chat execution starting", {
-        triggerRunId: String(ctx.run.id),
-        chatTurnRunId: claimed.id,
-        chatId: claimed.chatId,
-        taskDispatchMs: Date.now() - executionStartedAt,
+      await executeChatTurn({
+        user,
+        chat,
+        chatPublicId,
+        messages: messages as Array<Omit<UIMessage, "id">>,
+        turnRunId: claimed.id,
+        persistIncomingUserMessage: false,
+        emitRunStarted: false,
+        onPublishedTurnEvents: (events) => {
+          for (const event of events) {
+            scheduleRealtimeAppend(serializeRealtimeEvent(event));
+          }
+        },
       });
-
-      await measure("executeChatTurnMs", () =>
-        executeChatTurn({
-          user,
-          chat,
-          chatPublicId,
-          messages: messages as Array<Omit<UIMessage, "id">>,
-          turnRunId: claimed.id,
-          persistIncomingUserMessage: false,
-          emitRunStarted: false,
-          onPublishedTurnEvents: (events) => {
-            if (firstTextDeltaAtMs == null) {
-              const firstTextDelta = events.find(
-                (event) => event.eventType === "text_delta"
-              );
-              if (firstTextDelta) {
-                firstTextDeltaAtMs = Date.now();
-                logChatStreamDiagnostic("Trigger published first text delta batch", {
-                  triggerRunId: String(ctx.run.id),
-                  chatTurnRunId: claimed.id,
-                  chatId: claimed.chatId,
-                  logicalEventId: firstTextDelta.logicalEventId,
-                  elapsedMs: firstTextDeltaAtMs - executionStartedAt,
-                });
-              }
-            }
-            for (const event of events) {
-              scheduleRealtimeAppend(serializeRealtimeEvent(event));
-            }
-          },
-        })
-      );
 
       // Drain pending realtime appends before the task exits so trailing
       // events (especially run_completed, which is the client's signal to
       // finalize and call loadMessages) are guaranteed to reach the client.
-      const realtimeDrainStartedAt = Date.now();
       await realtimeAppendChain;
-      const realtimeDrainMs = Date.now() - realtimeDrainStartedAt;
-
-      logChatStreamDiagnostic("Trigger direct chat execution completed", {
-        triggerRunId: String(ctx.run.id),
-        chatTurnRunId: claimed.id,
-        chatId: claimed.chatId,
-        totalDurationMs: Date.now() - executionStartedAt,
-        firstPublishedEventMs:
-          firstPublishedEventAtMs == null
-            ? null
-            : firstPublishedEventAtMs - executionStartedAt,
-        firstTextDeltaMs:
-          firstTextDeltaAtMs == null ? null : firstTextDeltaAtMs - executionStartedAt,
-        realtimeAppendsScheduled,
-        realtimeAppendsCompleted,
-        realtimeAppendErrors,
-        realtimeAppendAvgMs:
-          realtimeAppendsCompleted > 0
-            ? Math.round(realtimeAppendTotalMs / realtimeAppendsCompleted)
-            : 0,
-        realtimeAppendMaxMs,
-        realtimeDrainMs,
-        executionTimings,
-      });
     } catch (error) {
       const message = normalizeErrorMessage(
         error,
@@ -379,13 +276,6 @@ export const runChatTurnTask = task({
       if (latestRun?.status === "failed" || latestRun?.status === "canceled") {
         throw error;
       }
-      logChatStreamDiagnostic("Trigger execution failed", {
-        triggerRunId: String(ctx.run.id),
-        chatTurnRunId: claimed.id,
-        chatId: claimed.chatId,
-        elapsedMs: Date.now() - taskStartedAt,
-        error: message,
-      });
       await markChatTurnRunFailed({
         runId: claimed.id,
         errorMessage: message,
@@ -425,13 +315,6 @@ export const runChatTurnTask = task({
       // task exits so we don't truncate the realtime stream.
       await realtimeAppendChain.catch(() => {});
       const nextPending = await claimNextPendingChatTurnRun(claimed.chatId);
-      logChatStreamDiagnostic("Trigger run finished", {
-        triggerRunId: String(ctx.run.id),
-        chatTurnRunId: claimed.id,
-        chatId: claimed.chatId,
-        elapsedMs: Date.now() - taskStartedAt,
-        nextPendingRunId: nextPending?.id ?? null,
-      });
       if (nextPending) {
         const { triggerChatTurnTask } = await triggerChatTurnTaskModulePromise;
         await triggerChatTurnTask(nextPending.id);
