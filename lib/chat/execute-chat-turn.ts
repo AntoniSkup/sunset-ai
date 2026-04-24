@@ -184,25 +184,83 @@ function normalizeChunkEventType(value: unknown): string {
   return typeof value === "string" ? value.trim().toLowerCase() : "unknown";
 }
 
-function isNonAssistantOrToolChunkType(eventType: string): boolean {
-  const t = normalizeChunkEventType(eventType);
-  return (
-    t.includes("tool") ||
-    t.includes("input-json") ||
-    t.includes("arguments") ||
-    t.includes("reasoning") ||
-    t.includes("metadata")
-  );
+// Chunk types delivered to `streamText` `onChunk` in ai@6 (see
+// `ai/src/generate-text/stream-text.ts` in the published source). Anything else
+// that arrives is unexpected and will be logged so we can extend the whitelist.
+const AI_SDK_V6_ONCHUNK_TYPES = new Set<string>([
+  "text-delta",
+  "reasoning-delta",
+  "source",
+  "tool-call",
+  "tool-input-start",
+  "tool-input-delta",
+  "tool-result",
+  "raw",
+]);
+
+function isKnownOnChunkType(eventType: string): boolean {
+  return AI_SDK_V6_ONCHUNK_TYPES.has(eventType);
 }
 
 function isToolCallLikeChunkType(eventType: string): boolean {
-  const t = normalizeChunkEventType(eventType);
   return (
-    t.includes("tool-call") ||
-    t.includes("tool_call") ||
-    t.includes("tool-input") ||
-    t.includes("tool_input")
+    eventType === "tool-call" ||
+    eventType === "tool-input-start" ||
+    eventType === "tool-input-delta" ||
+    eventType === "tool-result"
   );
+}
+
+// Pulls user-visible text out of a v6 onChunk event. The callback shape is
+// `{ chunk: TextStreamPart }`, so prefer `evt.chunk.text` and fall back to
+// legacy / alternative shapes defensively.
+function extractChunkText(evt: any): string | null {
+  return (
+    (typeof evt?.chunk?.text === "string" ? evt.chunk.text : null) ??
+    (typeof evt?.chunk?.textDelta === "string" ? evt.chunk.textDelta : null) ??
+    (typeof evt?.chunk?.delta === "string" ? evt.chunk.delta : null) ??
+    (typeof evt?.text === "string" ? evt.text : null) ??
+    (typeof evt?.textDelta === "string" ? evt.textDelta : null) ??
+    (typeof evt?.delta === "string" ? evt.delta : null) ??
+    null
+  );
+}
+
+// Builds a compact, safe summary of an onChunk event for `CHAT_STREAM_DEBUG_RAW`
+// diagnostics. Clips long strings and avoids dumping deep provider objects.
+function summarizeRawChunk(evt: any): Record<string, unknown> {
+  const chunk = (evt?.chunk ?? evt ?? {}) as Record<string, unknown>;
+  const out: Record<string, unknown> = {
+    type: typeof chunk.type === "string" ? chunk.type : "unknown",
+  };
+  const passthrough: readonly (keyof typeof chunk)[] = [
+    "id",
+    "toolCallId",
+    "toolName",
+    "providerExecuted",
+  ];
+  for (const key of passthrough) {
+    const v = chunk[key];
+    if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") {
+      out[key as string] = v;
+    }
+  }
+  const text = extractChunkText(evt);
+  if (typeof text === "string") {
+    out.textChars = text.length;
+    if (text.length > 0) out.textSnippet = text.slice(0, 80);
+  }
+  const rawValue = (chunk as { rawValue?: unknown }).rawValue;
+  if (rawValue !== undefined) {
+    try {
+      const str = JSON.stringify(rawValue);
+      out.rawValuePreview =
+        str.length > 240 ? `${str.slice(0, 240)}…(${str.length - 240} more)` : str;
+    } catch {
+      out.rawValuePreview = "[unserializable]";
+    }
+  }
+  return out;
 }
 
 function getToolCallIdFromChunkEvent(evt: any): string | null {
@@ -542,7 +600,24 @@ export async function createChatTurnStream({
   let liveTextBuffer = "";
   let liveTextFlushTimer: ReturnType<typeof setTimeout> | null = null;
   let emittedAssistantChars = 0;
+  let fallbackEmittedChars = 0;
   let stepCounter = 0;
+  const chunkTypeCounts = new Map<string, number>();
+  let textDeltaEventsEmitted = 0;
+
+  // Diagnostics: we whitelist `text-delta` for user-visible text, but keep
+  // counters for everything else so we can verify nothing user-facing is
+  // hiding in reasoning / unknown chunk types when debugging.
+  let reasoningDeltaChars = 0;
+  let reasoningDeltaLogs = 0;
+  let unknownChunkTypeChars = 0;
+  let unknownChunkTypeLogs = 0;
+  let rawChunkDumpCount = 0;
+  const MAX_REASONING_SNIPPET_LOGS = 5;
+  const MAX_UNKNOWN_CHUNK_LOGS = 5;
+  const MAX_RAW_CHUNK_DUMPS = 150;
+  const rawChunkDebugEnabled = true;
+
   const emittedToolCallMeta = new Map<string, { hasDestination: boolean }>();
   let lastSuccessfulRevision: {
     chatId: string;
@@ -584,6 +659,7 @@ export async function createChatTurnStream({
     const chunk = liveTextBuffer;
     liveTextBuffer = "";
     emittedAssistantChars += chunk.length;
+    textDeltaEventsEmitted += 1;
     if (firstTextDeltaQueuedAtMs == null) {
       firstTextDeltaQueuedAtMs = Date.now();
       logChatStreamDiagnostic("Queued first text delta batch", {
@@ -630,6 +706,10 @@ export async function createChatTurnStream({
     tools,
     abortSignal: turnRunAbortController?.signal,
     stopWhen: stepCountIs(MAX_CHAT_STEPS_PER_TURN),
+    // When `CHAT_STREAM_DEBUG_RAW` is set we also ask the SDK for provider-native
+    // raw chunks so we can see exactly what Anthropic/OpenAI/etc. emitted. See
+    // https://ai-sdk.dev/docs/ai-sdk-core/generating-text (#onChunk callback).
+    includeRawChunks: rawChunkDebugEnabled,
     experimental_telemetry: {
       isEnabled: true,
       functionId: "chat-stream",
@@ -645,13 +725,29 @@ export async function createChatTurnStream({
         if (await pollTurnCanceled()) return;
         const evt = chunkEvent as any;
         const rawEventType =
-          typeof evt?.type === "string"
-            ? evt.type
-            : typeof evt?.chunk?.type === "string"
-              ? evt.chunk.type
+          typeof evt?.chunk?.type === "string"
+            ? evt.chunk.type
+            : typeof evt?.type === "string"
+              ? evt.type
               : "unknown";
         const eventType = normalizeChunkEventType(rawEventType);
+        chunkTypeCounts.set(
+          eventType,
+          (chunkTypeCounts.get(eventType) ?? 0) + 1
+        );
 
+        if (rawChunkDebugEnabled && rawChunkDumpCount < MAX_RAW_CHUNK_DUMPS) {
+          rawChunkDumpCount += 1;
+          logChatStreamDiagnostic("Raw chunk sample", {
+            chatId: chat.id,
+            chatPublicId,
+            turnRunId,
+            seq: rawChunkDumpCount,
+            chunk: summarizeRawChunk(evt),
+          });
+        }
+
+        // Tool-call-like chunks: emit tool_call meta, never forward as text.
         if (isToolCallLikeChunkType(eventType)) {
           if (liveTextFlushTimer) {
             clearTimeout(liveTextFlushTimer);
@@ -672,22 +768,60 @@ export async function createChatTurnStream({
               destination,
             });
           }
-        }
-
-        if (isNonAssistantOrToolChunkType(eventType)) {
           return;
         }
-        const textDelta =
-          (typeof evt?.textDelta === "string" ? evt.textDelta : null) ??
-          (typeof evt?.delta === "string" ? evt.delta : null) ??
-          (typeof evt?.text === "string" ? evt.text : null) ??
-          (typeof evt?.chunk?.textDelta === "string"
-            ? evt.chunk.textDelta
-            : null) ??
-          (typeof evt?.chunk?.delta === "string" ? evt.chunk.delta : null) ??
-          (typeof evt?.chunk?.text === "string" ? evt.chunk.text : null) ??
-          null;
 
+        // Reasoning deltas are internal to the model. We don't surface them,
+        // but we count chars + log a few snippets so we can prove no
+        // user-visible text is hiding here when debugging.
+        if (eventType === "reasoning-delta") {
+          const reasoningText = extractChunkText(evt);
+          if (typeof reasoningText === "string" && reasoningText.length > 0) {
+            reasoningDeltaChars += reasoningText.length;
+            if (reasoningDeltaLogs < MAX_REASONING_SNIPPET_LOGS) {
+              reasoningDeltaLogs += 1;
+              logChatStreamDiagnostic("Reasoning delta observed", {
+                chatId: chat.id,
+                chatPublicId,
+                turnRunId,
+                chars: reasoningText.length,
+                snippet: reasoningText.slice(0, 60),
+              });
+            }
+          }
+          return;
+        }
+
+        // WHITELIST: only `text-delta` chunks become user-visible assistant text.
+        if (eventType !== "text-delta") {
+          if (!isKnownOnChunkType(eventType)) {
+            // The AI SDK / provider emitted a chunk type we don't model. Log
+            // the first few with a text snippet so we can extend our handling
+            // if a future SDK version introduces a new visible-text type.
+            const maybeText = extractChunkText(evt);
+            if (typeof maybeText === "string" && maybeText.length > 0) {
+              unknownChunkTypeChars += maybeText.length;
+            }
+            if (unknownChunkTypeLogs < MAX_UNKNOWN_CHUNK_LOGS) {
+              unknownChunkTypeLogs += 1;
+              logChatStreamDiagnostic("Unknown chunk type", {
+                chatId: chat.id,
+                chatPublicId,
+                turnRunId,
+                eventType,
+                textChars:
+                  typeof maybeText === "string" ? maybeText.length : 0,
+                snippet:
+                  typeof maybeText === "string" && maybeText.length > 0
+                    ? maybeText.slice(0, 60)
+                    : undefined,
+              });
+            }
+          }
+          return;
+        }
+
+        const textDelta = extractChunkText(evt);
         if (!textDelta) {
           return;
         }
@@ -810,6 +944,18 @@ export async function createChatTurnStream({
             const fallbackDelta = aggregated.slice(emittedAssistantChars);
             if (fallbackDelta) {
               emittedAssistantChars += fallbackDelta.length;
+              fallbackEmittedChars += fallbackDelta.length;
+              textDeltaEventsEmitted += 1;
+              logChatStreamDiagnostic(
+                "Emitted fallback text_delta from onStepFinish",
+                {
+                  chatId: chat.id,
+                  chatPublicId,
+                  turnRunId,
+                  chars: fallbackDelta.length,
+                  snippetHead: fallbackDelta.slice(0, 60),
+                }
+              );
               await emitTurnEvent("text_delta", { text: fallbackDelta });
             }
           }
@@ -949,6 +1095,14 @@ export async function createChatTurnStream({
           userId: user.id,
         });
       }
+      const chunkTypeSummary = Array.from(chunkTypeCounts.entries())
+        .sort((a, b) => b[1] - a[1])
+        .map(([type, count]) => `${type}:${count}`)
+        .join(",");
+      // Parity check: `emittedAssistantChars + fallbackEmittedChars` should
+      // equal `finalText.length` (modulo trimming). If not, we dropped text
+      // somewhere on the emission path; if `unknownChunkTypeChars > 0`, the
+      // provider sent a new chunk type our whitelist doesn't cover.
       logChatStreamDiagnostic("Chat turn stream finished", {
         chatId: chat.id,
         chatPublicId,
@@ -964,6 +1118,17 @@ export async function createChatTurnStream({
           firstTextDeltaPersistedAtMs == null
             ? null
             : firstTextDeltaPersistedAtMs - streamStartedAt,
+        emittedAssistantChars,
+        fallbackEmittedChars,
+        textDeltaEventsEmitted,
+        finalTextLength: finalText.length,
+        finalTextHead: finalText.slice(0, 80),
+        finalTextTail: finalText.slice(-80),
+        reasoningDeltaChars,
+        unknownChunkTypeChars,
+        unknownChunkTypeLogs,
+        rawChunkDumpCount: rawChunkDebugEnabled ? rawChunkDumpCount : undefined,
+        chunkTypes: chunkTypeSummary,
         executionTimings,
       });
     },

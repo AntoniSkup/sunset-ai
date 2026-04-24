@@ -1894,6 +1894,9 @@ function ChatInner({
         return;
       }
       if (eventType === "run_started") {
+        receivedAssistantCharsRef.current = 0;
+        textDeltaCounterRef.current = 0;
+        lastTextDeltaAtRef.current = null;
         if (timeline.firstRunStartedAt == null) {
           timeline.firstRunStartedAt = now;
           pushStreamDebug({
