@@ -1,19 +1,15 @@
 import { logger, task } from "@trigger.dev/sdk/v3";
 import type { UIMessage } from "ai";
-import {
-  attachTriggerRunIdToChatTurnRun,
-  claimNextPendingChatTurnRun,
-  getChatByPublicId,
-  getChatTurnRunById,
-  getUserById,
-  markChatTurnRunFailed,
-} from "@/lib/db/queries";
 import { diffMs, logChatStreamDiagnostic } from "@/lib/chat/stream-diagnostics";
-import { publishStreamEvents } from "@/lib/chat/stream-bus";
-import { applyStreamEventsToChatTurnRunLiveState } from "@/lib/chat/live-state";
-import { triggerChatTurnTask } from "@/lib/chat/trigger-chat-turn-task";
-import { executeChatTurn } from "@/lib/chat/execute-chat-turn";
 import { chatTurnEventsStream } from "./chat-turn-stream";
+
+type DbQueriesModule = typeof import("@/lib/db/queries");
+type StreamBusModule = typeof import("@/lib/chat/stream-bus");
+type LiveStateModule = typeof import("@/lib/chat/live-state");
+type ExecuteChatTurnModule = typeof import("@/lib/chat/execute-chat-turn");
+type TriggerChatTurnTaskModule = typeof import(
+  "@/lib/chat/trigger-chat-turn-task"
+);
 
 function serializeRealtimeEvent(event: {
   dbId: number;
@@ -98,6 +94,36 @@ export const runChatTurnTask = task({
       throw new Error("turnRunId is required");
     }
 
+    // Fire off all heavy module loads in parallel. These imports carry Drizzle,
+    // the Upstash Redis client, the AI SDK + provider bundles, and the Trigger
+    // SDK `tasks.trigger` helper. Starting them here means module evaluation
+    // overlaps with the claim work below instead of blocking cold start.
+    const queriesModulePromise: Promise<DbQueriesModule> = import(
+      "@/lib/db/queries"
+    );
+    const streamBusModulePromise: Promise<StreamBusModule> = import(
+      "@/lib/chat/stream-bus"
+    );
+    const liveStateModulePromise: Promise<LiveStateModule> = import(
+      "@/lib/chat/live-state"
+    );
+    const executeChatTurnModulePromise: Promise<ExecuteChatTurnModule> = import(
+      "@/lib/chat/execute-chat-turn"
+    );
+    const triggerChatTurnTaskModulePromise: Promise<TriggerChatTurnTaskModule> =
+      import("@/lib/chat/trigger-chat-turn-task");
+    // Silence unhandled rejections; real awaits below surface any errors.
+    triggerChatTurnTaskModulePromise.catch(() => {});
+
+    const {
+      getChatTurnRunById,
+      claimNextPendingChatTurnRun,
+      attachTriggerRunIdToChatTurnRun,
+      getUserById,
+      getChatByPublicId,
+      markChatTurnRunFailed,
+    } = await queriesModulePromise;
+
     const existingRun = await getChatTurnRunById(turnRunId);
     if (!existingRun) {
       throw new Error(`Chat turn run not found: ${turnRunId}`);
@@ -159,6 +185,8 @@ export const runChatTurnTask = task({
       throw new Error("Invalid turn-run payload: expected chatId and messages[]");
     }
 
+    const { publishStreamEvents } = await streamBusModulePromise;
+
     try {
       const executionStartedAt = Date.now();
       const executionTimings: Record<string, number> = {};
@@ -203,17 +231,21 @@ export const runChatTurnTask = task({
       );
       const runStartedLiveStateApply = measure(
         "runStartedLiveStateApplyMs",
-        () =>
-          applyStreamEventsToChatTurnRunLiveState({
+        async () => {
+          const { applyStreamEventsToChatTurnRunLiveState } =
+            await liveStateModulePromise;
+          await applyStreamEventsToChatTurnRunLiveState({
             runId: claimed.id,
             chatId: claimed.chatId,
             userId: claimed.userId,
             events: publishedRunStartedEvents,
-          })
+          });
+        }
       );
-      const [user, chat] = await Promise.all([
+      const [user, chat, { executeChatTurn }] = await Promise.all([
         measure("userLookupMs", () => getUserById(claimed.userId)),
         measure("chatLookupMs", () => getChatByPublicId(chatPublicId, claimed.userId)),
+        measure("executeChatTurnImportMs", () => executeChatTurnModulePromise),
       ]);
       await Promise.all([runStartedRealtimeAppend, runStartedLiveStateApply]);
 
@@ -312,6 +344,8 @@ export const runChatTurnTask = task({
       for (const event of publishedEvents) {
         await chatTurnEventsStream.append(serializeRealtimeEvent(event));
       }
+      const { applyStreamEventsToChatTurnRunLiveState } =
+        await liveStateModulePromise;
       await applyStreamEventsToChatTurnRunLiveState({
         runId: claimed.id,
         chatId: claimed.chatId,
@@ -329,6 +363,7 @@ export const runChatTurnTask = task({
         nextPendingRunId: nextPending?.id ?? null,
       });
       if (nextPending) {
+        const { triggerChatTurnTask } = await triggerChatTurnTaskModulePromise;
         await triggerChatTurnTask(nextPending.id);
       }
     }
