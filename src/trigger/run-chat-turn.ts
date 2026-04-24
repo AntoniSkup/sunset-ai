@@ -155,9 +155,18 @@ export const runChatTurnTask = task({
 
     try {
       const executionStartedAt = Date.now();
+      const executionTimings: Record<string, number> = {};
+      const measure = async <T,>(label: string, work: () => Promise<T>): Promise<T> => {
+        const startedAt = Date.now();
+        try {
+          return await work();
+        } finally {
+          executionTimings[label] = Date.now() - startedAt;
+        }
+      };
       const [user, chat] = await Promise.all([
-        getUserById(claimed.userId),
-        getChatByPublicId(chatPublicId, claimed.userId),
+        measure("userLookupMs", () => getUserById(claimed.userId)),
+        measure("chatLookupMs", () => getChatByPublicId(chatPublicId, claimed.userId)),
       ]);
 
       if (!user) {
@@ -174,7 +183,11 @@ export const runChatTurnTask = task({
         taskDispatchMs: Date.now() - executionStartedAt,
       });
 
-      await executeChatTurn({
+      let firstPublishedEventAtMs: number | null = null;
+      let firstTextDeltaAtMs: number | null = null;
+
+      await measure("executeChatTurnMs", () =>
+        executeChatTurn({
         user,
         chat,
         chatPublicId,
@@ -182,17 +195,48 @@ export const runChatTurnTask = task({
         turnRunId: claimed.id,
         persistIncomingUserMessage: false,
         onPublishedTurnEvents: async (events) => {
+          if (firstPublishedEventAtMs == null && events.length > 0) {
+            firstPublishedEventAtMs = Date.now();
+            logChatStreamDiagnostic("Trigger published first turn events batch", {
+              triggerRunId: String(ctx.run.id),
+              chatTurnRunId: claimed.id,
+              chatId: claimed.chatId,
+              eventTypes: events.map((event) => event.eventType),
+              elapsedMs: firstPublishedEventAtMs - executionStartedAt,
+            });
+          }
+          if (firstTextDeltaAtMs == null) {
+            const firstTextDelta = events.find((event) => event.eventType === "text_delta");
+            if (firstTextDelta) {
+              firstTextDeltaAtMs = Date.now();
+              logChatStreamDiagnostic("Trigger published first text delta batch", {
+                triggerRunId: String(ctx.run.id),
+                chatTurnRunId: claimed.id,
+                chatId: claimed.chatId,
+                logicalEventId: firstTextDelta.logicalEventId,
+                elapsedMs: firstTextDeltaAtMs - executionStartedAt,
+              });
+            }
+          }
           for (const event of events) {
             await chatTurnEventsStream.append(serializeRealtimeEvent(event));
           }
         },
-      });
+      })
+      );
 
       logChatStreamDiagnostic("Trigger direct chat execution completed", {
         triggerRunId: String(ctx.run.id),
         chatTurnRunId: claimed.id,
         chatId: claimed.chatId,
         totalDurationMs: Date.now() - executionStartedAt,
+        firstPublishedEventMs:
+          firstPublishedEventAtMs == null
+            ? null
+            : firstPublishedEventAtMs - executionStartedAt,
+        firstTextDeltaMs:
+          firstTextDeltaAtMs == null ? null : firstTextDeltaAtMs - executionStartedAt,
+        executionTimings,
       });
     } catch (error) {
       const message = normalizeErrorMessage(

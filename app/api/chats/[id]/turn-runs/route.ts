@@ -40,6 +40,15 @@ export async function POST(
   },
 ) {
   const requestStartedAt = Date.now();
+  const timings: Record<string, number> = {};
+  const measure = async <T,>(label: string, work: () => Promise<T>): Promise<T> => {
+    const startedAt = Date.now();
+    try {
+      return await work();
+    } finally {
+      timings[label] = Date.now() - startedAt;
+    }
+  };
   const user = await getUser();
   if (!user) {
     return NextResponse.json(
@@ -56,7 +65,9 @@ export async function POST(
     );
   }
 
-  const chat = await getChatByPublicId(chatPublicId, user.id);
+  const chat = await measure("chatLookupMs", () =>
+    getChatByPublicId(chatPublicId, user.id)
+  );
   if (!chat) {
     return NextResponse.json(
       { error: "Chat not found", code: "CHAT_NOT_FOUND" },
@@ -64,7 +75,9 @@ export async function POST(
     );
   }
 
-  const body = await request.json().catch(() => null);
+  const body = await measure("payloadParseMs", () =>
+    request.json().catch(() => null)
+  );
   const payload = body?.payload;
   if (!payload || typeof payload !== "object") {
     return NextResponse.json(
@@ -78,18 +91,30 @@ export async function POST(
       ? body.idempotencyKey.trim().slice(0, 128)
       : `turn-${chat.id}-${nanoid(12)}`;
 
-  const existing = await getChatTurnRunByIdempotencyKey(idempotencyKey);
+  const existing = await measure("idempotencyLookupMs", () =>
+    getChatTurnRunByIdempotencyKey(idempotencyKey)
+  );
   if (existing && existing.chatId === chat.id && existing.userId === user.id) {
     return NextResponse.json({ run: existing, deduped: true });
   }
 
-  const account = await getOrCreateAccountForUser(user.id);
-  await ensureDailyCreditsForAccount(account.id);
-  const subscription = await getSubscriptionByAccountId(account.id);
-  const { balance } = await getCreditsBreakdown(account.id, subscription);
-  const minCreditsForTurnStart = await getCreditsCostForAction(
-    "chat_message",
-    subscription?.planId ?? null,
+  const { balance, minCreditsForTurnStart } = await measure(
+    "creditsGateMs",
+    async () => {
+    const account = await getOrCreateAccountForUser(user.id);
+    await ensureDailyCreditsForAccount(account.id);
+    const subscription = await getSubscriptionByAccountId(account.id);
+    const { balance } = await getCreditsBreakdown(account.id, subscription);
+    const minCreditsForTurnStart = await getCreditsCostForAction(
+      "chat_message",
+      subscription?.planId ?? null,
+    );
+
+    return {
+      balance,
+      minCreditsForTurnStart,
+    };
+    }
   );
   if (balance < minCreditsForTurnStart) {
     return NextResponse.json(
@@ -102,7 +127,9 @@ export async function POST(
     );
   }
 
-  const runningRun = await getRunningChatTurnRun(chat.id);
+  const runningRun = await measure("runningRunLookupMs", () =>
+    getRunningChatTurnRun(chat.id)
+  );
   const hadRunning = Boolean(runningRun);
   const payloadObj = payload as Record<string, unknown>;
   const payloadMessages = Array.isArray(payloadObj.messages)
@@ -118,28 +145,36 @@ export async function POST(
     );
     const userText = extractTextFromMessageParts(persistedParts);
     if (hasDisplayableMessageParts(persistedParts)) {
-      await createChatMessage({
-        chatId: chat.id,
-        role: "user",
-        content: userText.trim(),
-        parts: persistedParts,
-      });
+      await measure("persistUserMessageMs", () =>
+        createChatMessage({
+          chatId: chat.id,
+          role: "user",
+          content: userText.trim(),
+          parts: persistedParts,
+        })
+      );
       if (!chat.title && userText.trim()) {
-        const title = await generateChatName(userText.trim(), {
-          userId: user.id,
-          chatId: chatPublicId,
-        });
-        await updateChatByPublicId(chatPublicId, user.id, { title });
+        const title = await measure("generateTitleMs", () =>
+          generateChatName(userText.trim(), {
+            userId: user.id,
+            chatId: chatPublicId,
+          })
+        );
+        await measure("persistTitleMs", () =>
+          updateChatByPublicId(chatPublicId, user.id, { title })
+        );
       }
     }
   }
 
-  const run = await enqueueChatTurnRun({
-    chatId: chat.id,
-    userId: user.id,
-    idempotencyKey,
-    payload: payloadObj,
-  });
+  const run = await measure("enqueueRunMs", () =>
+    enqueueChatTurnRun({
+      chatId: chat.id,
+      userId: user.id,
+      idempotencyKey,
+      payload: payloadObj,
+    })
+  );
 
   logChatStreamDiagnostic("Chat turn run enqueued", {
     chatId: chat.id,
@@ -152,40 +187,46 @@ export async function POST(
     createdToNowMs: diffMs(Date.now(), run.createdAt),
   });
 
-  await publishStreamEvents({
-    chatId: chat.id,
-    runId: run.id,
-    events: [
-      {
-        eventType: "run_enqueued",
-        payload: {
-          runId: run.id,
-          sequence: run.sequence,
-          status: run.status,
+  await measure("publishEnqueuedMs", () =>
+    publishStreamEvents({
+      chatId: chat.id,
+      runId: run.id,
+      events: [
+        {
+          eventType: "run_enqueued",
+          payload: {
+            runId: run.id,
+            sequence: run.sequence,
+            status: run.status,
+          },
         },
-      },
-    ],
-  });
+      ],
+    })
+  );
 
   // Trigger processing if there isn't already an active run for this chat.
   const processingEnabled = process.env.ENABLE_TRIGGER_CHAT_QUEUE === "1";
   let triggerRealtime: { runId: string; accessToken: string } | null = null;
   if (!hadRunning && processingEnabled) {
-    const handle = await triggerChatTurnTask(run.id);
-    await attachTriggerRunIdToChatTurnRun({
-      runId: run.id,
-      triggerRunId: String(handle.id),
-    });
+    const handle = await measure("triggerTaskMs", () => triggerChatTurnTask(run.id));
+    await measure("attachTriggerRunIdMs", () =>
+      attachTriggerRunIdToChatTurnRun({
+        runId: run.id,
+        triggerRunId: String(handle.id),
+      })
+    );
     triggerRealtime =
       typeof handle.publicAccessToken === "string"
         ? {
             runId: String(handle.id),
             accessToken: handle.publicAccessToken,
           }
-        : await createTriggerRealtimeSessionForRun(String(handle.id));
+        : await measure("triggerRealtimeSessionMs", () =>
+            createTriggerRealtimeSessionForRun(String(handle.id))
+          );
   } else if (runningRun?.triggerRunId) {
-    triggerRealtime = await createTriggerRealtimeSessionForRun(
-      runningRun.triggerRunId
+    triggerRealtime = await measure("reuseTriggerRealtimeSessionMs", () =>
+      createTriggerRealtimeSessionForRun(runningRun.triggerRunId)
     );
   }
 
@@ -196,6 +237,7 @@ export async function POST(
     queued: hadRunning,
     processingEnabled,
     totalRequestMs: Date.now() - requestStartedAt,
+    timings,
   });
 
   return NextResponse.json(

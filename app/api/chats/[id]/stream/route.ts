@@ -9,6 +9,8 @@ import {
 import { diffMs, logChatStreamDiagnostic } from "@/lib/chat/stream-diagnostics";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+export const maxDuration = 240;
 const SSE_POLL_INTERVAL_BASE_MS = 40;
 const SSE_POLL_INTERVAL_MAX_MS = 120;
 const SSE_HEARTBEAT_INTERVAL_MS = 15000;

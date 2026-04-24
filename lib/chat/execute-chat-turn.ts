@@ -55,6 +55,7 @@ import {
 import { publishStreamEvents } from "@/lib/chat/stream-bus";
 import { applyStreamEventsToChatTurnRunLiveState } from "@/lib/chat/live-state";
 import type { StreamEventEnvelope } from "@/lib/chat/stream-bus/types";
+import { logChatStreamDiagnostic } from "@/lib/chat/stream-diagnostics";
 
 const BUILDER_TOOLS = new Set([
   "create_site",
@@ -268,6 +269,20 @@ export async function createChatTurnStream({
   persistIncomingUserMessage = false,
   onPublishedTurnEvents,
 }: CreateChatTurnStreamParams) {
+  const streamStartedAt = Date.now();
+  const executionTimings: Record<string, number> = {};
+  const measure = async <T,>(label: string, work: () => Promise<T>): Promise<T> => {
+    const startedAt = Date.now();
+    try {
+      return await work();
+    } finally {
+      executionTimings[label] = Date.now() - startedAt;
+    }
+  };
+  let firstModelChunkAtMs: number | null = null;
+  let firstTextDeltaQueuedAtMs: number | null = null;
+  let firstTextDeltaPersistedAtMs: number | null = null;
+
   const publishTurnEvents = async (
     events: Array<{
       eventType: string;
@@ -275,13 +290,33 @@ export async function createChatTurnStream({
     }>
   ) => {
     if (!turnRunId || events.length === 0) return;
-    const publishedEvents = await publishStreamEvents({
-      chatId: chat.id,
-      runId: turnRunId,
-      events,
-    }, {
-      onEventsPersisted: onPublishedTurnEvents,
-    });
+    const publishedEvents = await measure("publishTurnEventsMs", () =>
+      publishStreamEvents(
+        {
+          chatId: chat.id,
+          runId: turnRunId,
+          events,
+        },
+        {
+          onEventsPersisted: onPublishedTurnEvents,
+        }
+      )
+    );
+    if (firstTextDeltaPersistedAtMs == null) {
+      const firstPersistedTextDelta = publishedEvents.find(
+        (event) => event.eventType === "text_delta"
+      );
+      if (firstPersistedTextDelta) {
+        firstTextDeltaPersistedAtMs = Date.now();
+        logChatStreamDiagnostic("Persisted first text delta batch", {
+          chatId: chat.id,
+          chatPublicId,
+          turnRunId,
+          logicalEventId: firstPersistedTextDelta.logicalEventId,
+          elapsedMs: firstTextDeltaPersistedAtMs - streamStartedAt,
+        });
+      }
+    }
     await applyStreamEventsToChatTurnRunLiveState({
       runId: turnRunId,
       chatId: chat.id,
@@ -360,21 +395,23 @@ export async function createChatTurnStream({
     );
   }
 
-  const account = await getOrCreateAccountForUser(user.id);
-  await ensureDailyCreditsForAccount(account.id);
+  const account = await measure("accountLookupMs", () =>
+    getOrCreateAccountForUser(user.id)
+  );
+  await measure("ensureDailyCreditsMs", () => ensureDailyCreditsForAccount(account.id));
   const turnBillingIdempotencyKey =
     typeof turnRunId === "string" && turnRunId.trim()
       ? `chat-turn-bill-${turnRunId.trim()}`
       : `chat-turn-bill-${chatPublicId}-${user.id}-${messages.length}`;
 
-  const subscriptionForGate = await getSubscriptionByAccountId(account.id);
-  const { balance: balanceForGate } = await getCreditsBreakdown(
-    account.id,
-    subscriptionForGate
+  const subscriptionForGate = await measure("subscriptionLookupMs", () =>
+    getSubscriptionByAccountId(account.id)
   );
-  const minCreditsToStartTurn = await getCreditsCostForAction(
-    "chat_message",
-    subscriptionForGate?.planId ?? null
+  const { balance: balanceForGate } = await measure("creditsBreakdownMs", () =>
+    getCreditsBreakdown(account.id, subscriptionForGate)
+  );
+  const minCreditsToStartTurn = await measure("creditsCostLookupMs", () =>
+    getCreditsCostForAction("chat_message", subscriptionForGate?.planId ?? null)
   );
   if (balanceForGate < minCreditsToStartTurn) {
     throw new Error(
@@ -408,7 +445,9 @@ export async function createChatTurnStream({
     }
   }
 
-  const persistedContext = await getChatMessagesByPublicId(chatPublicId, user.id);
+  const persistedContext = await measure("contextMessagesLookupMs", () =>
+    getChatMessagesByPublicId(chatPublicId, user.id)
+  );
   const contextMessages: Array<Omit<UIMessage, "id">> =
     persistedContext?.messages?.length
       ? persistedContext.messages.map((m) => {
@@ -423,16 +462,26 @@ export async function createChatTurnStream({
         })
       : messages;
 
-  const modelMessages = await convertToModelMessages(contextMessages);
+  const modelMessages = await measure("convertModelMessagesMs", () =>
+    convertToModelMessages(contextMessages)
+  );
 
-  const [model, modelId] = await Promise.all([getAIModel(), getAIModelId()]);
+  const [model, modelId] = await measure("modelLookupMs", () =>
+    Promise.all([getAIModel(), getAIModelId()])
+  );
   const promptableSiteAssets = toSiteAssetPromptDescriptors(
-    await getSiteAssetsByChatId(chatPublicId, user.id)
+    await measure("siteAssetsLookupMs", () =>
+      getSiteAssetsByChatId(chatPublicId, user.id)
+    )
   );
   const siteAssetContext = buildSiteAssetPromptContext(promptableSiteAssets);
-  const { staticSystemPrompt, dynamicSystemSuffix } = buildChatSystemPromptParts({
-    siteAssetContext,
-  });
+  const { staticSystemPrompt, dynamicSystemSuffix } = await measure(
+    "buildPromptMs",
+    async () =>
+      buildChatSystemPromptParts({
+        siteAssetContext,
+      })
+  );
   const useChatPromptCache = isAnthropicChatPromptCachingEnabled();
   const systemPrompt: string | SystemModelMessage | SystemModelMessage[] =
     useChatPromptCache
@@ -452,20 +501,21 @@ export async function createChatTurnStream({
         ]
       : buildChatSystemPrompt({ siteAssetContext });
 
-  const createSiteToolCall = createSiteTool(chatPublicId, user.id, {
-    deferredChatTurnBilling: true,
-  });
-  const createSectionToolCall = createSectionTool(chatPublicId, user.id, {
-    deferredChatTurnBilling: true,
-  });
-  const validateCompletenessToolCall = createValidateCompletenessTool(
-    chatPublicId,
-    user.id
-  );
-  const resolveImageSlotsToolCall = createResolveImageSlotsTool(
-    chatPublicId,
-    user.id
-  );
+  const [
+    createSiteToolCall,
+    createSectionToolCall,
+    validateCompletenessToolCall,
+    resolveImageSlotsToolCall,
+  ] = await measure("toolSetupMs", async () => [
+    createSiteTool(chatPublicId, user.id, {
+      deferredChatTurnBilling: true,
+    }),
+    createSectionTool(chatPublicId, user.id, {
+      deferredChatTurnBilling: true,
+    }),
+    createValidateCompletenessTool(chatPublicId, user.id),
+    createResolveImageSlotsTool(chatPublicId, user.id),
+  ]);
   const tools = {
     create_site: createSiteToolCall,
     create_section: createSectionToolCall,
@@ -520,6 +570,16 @@ export async function createChatTurnStream({
     const chunk = liveTextBuffer;
     liveTextBuffer = "";
     emittedAssistantChars += chunk.length;
+    if (firstTextDeltaQueuedAtMs == null) {
+      firstTextDeltaQueuedAtMs = Date.now();
+      logChatStreamDiagnostic("Queued first text delta batch", {
+        chatId: chat.id,
+        chatPublicId,
+        turnRunId,
+        chars: chunk.length,
+        elapsedMs: firstTextDeltaQueuedAtMs - streamStartedAt,
+      });
+    }
     await emitTurnEvent("text_delta", { text: chunk });
   };
 
@@ -616,6 +676,17 @@ export async function createChatTurnStream({
 
         if (!textDelta) {
           return;
+        }
+        if (firstModelChunkAtMs == null) {
+          firstModelChunkAtMs = Date.now();
+          logChatStreamDiagnostic("Received first model text chunk", {
+            chatId: chat.id,
+            chatPublicId,
+            turnRunId,
+            chars: textDelta.length,
+            elapsedMs: firstModelChunkAtMs - streamStartedAt,
+            executionTimings,
+          });
         }
         liveTextBuffer += textDelta;
 
@@ -846,6 +917,23 @@ export async function createChatTurnStream({
           userId: user.id,
         });
       }
+      logChatStreamDiagnostic("Chat turn stream finished", {
+        chatId: chat.id,
+        chatPublicId,
+        turnRunId,
+        totalStreamMs: Date.now() - streamStartedAt,
+        firstModelChunkMs:
+          firstModelChunkAtMs == null ? null : firstModelChunkAtMs - streamStartedAt,
+        firstTextDeltaQueuedMs:
+          firstTextDeltaQueuedAtMs == null
+            ? null
+            : firstTextDeltaQueuedAtMs - streamStartedAt,
+        firstTextDeltaPersistedMs:
+          firstTextDeltaPersistedAtMs == null
+            ? null
+            : firstTextDeltaPersistedAtMs - streamStartedAt,
+        executionTimings,
+      });
     },
     onError: async (event: { error: unknown }) => {
       if (liveTextFlushTimer) {
@@ -891,6 +979,24 @@ export async function createChatTurnStream({
       }
       updateActiveObservation({ output: errMsg, level: "ERROR" });
       updateActiveTrace({ output: errMsg });
+      logChatStreamDiagnostic("Chat turn stream failed", {
+        chatId: chat.id,
+        chatPublicId,
+        turnRunId,
+        error: errMsg,
+        totalStreamMs: Date.now() - streamStartedAt,
+        firstModelChunkMs:
+          firstModelChunkAtMs == null ? null : firstModelChunkAtMs - streamStartedAt,
+        firstTextDeltaQueuedMs:
+          firstTextDeltaQueuedAtMs == null
+            ? null
+            : firstTextDeltaQueuedAtMs - streamStartedAt,
+        firstTextDeltaPersistedMs:
+          firstTextDeltaPersistedAtMs == null
+            ? null
+            : firstTextDeltaPersistedAtMs - streamStartedAt,
+        executionTimings,
+      });
     },
   });
 }

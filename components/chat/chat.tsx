@@ -29,6 +29,7 @@ const billingFetcher = (url: string) => fetch(url).then((res) => res.json());
 const MIN_CREDITS_TO_SEND = 0.5;
 const CHAT_STREAM_DEBUG_ENABLED = true;
 const FORCE_TRIGGER_REALTIME_STREAM = true;
+type StreamTransport = "sse" | "trigger";
 type PendingAttachment = {
   localId: string;
   id: number | null;
@@ -387,6 +388,21 @@ function ChatInner({
   const reconnectStreamRef = useRef<(() => void) | null>(null);
   const drainTriggerStreamRef = useRef<(() => void) | null>(null);
   const triggerStreamPartsRef = useRef<ChatTurnRealtimeStreamPart[]>([]);
+  const triggerRealtimeRef = useRef<TriggerRealtimeSession | null>(null);
+  const activeTransportRef = useRef<StreamTransport | null>(null);
+  const activeTurnTimelineRef = useRef<{
+    submitStartedAt: number | null;
+    acceptedAt: number | null;
+    firstEnqueuedAt: number | null;
+    firstRunStartedAt: number | null;
+    firstTextDeltaAt: number | null;
+  }>({
+    submitStartedAt: null,
+    acceptedAt: null,
+    firstEnqueuedAt: null,
+    firstRunStartedAt: null,
+    firstTextDeltaAt: null,
+  });
   const statusRef = useRef(status);
   const chatIdRef = useRef(chatId);
   const lastStreamEventAtRef = useRef<number | null>(null);
@@ -402,6 +418,9 @@ function ChatInner({
   useEffect(() => {
     chatIdRef.current = chatId;
   }, [chatId]);
+  useEffect(() => {
+    triggerRealtimeRef.current = triggerRealtime;
+  }, [triggerRealtime]);
   const loadMessages = useCallback(async () => {
     if (!chatId) return;
     const res = await fetch(
@@ -541,11 +560,21 @@ function ChatInner({
       ]);
 
       setStatus("submitted");
+      setTriggerRealtime(null);
+      triggerRealtimeRef.current = null;
+      activeTransportRef.current = null;
 
       const idempotencyKey = `turn-${chatId}-${Date.now()}-${Math.random()
         .toString(36)
         .slice(2, 10)}`;
       const enqueueStartedAt = Date.now();
+      activeTurnTimelineRef.current = {
+        submitStartedAt: enqueueStartedAt,
+        acceptedAt: null,
+        firstEnqueuedAt: null,
+        firstRunStartedAt: null,
+        firstTextDeltaAt: null,
+      };
 
       const ac = new AbortController();
       turnFetchAbortRef.current = ac;
@@ -644,6 +673,7 @@ function ChatInner({
             : null;
         if (realtime && chatId) {
           setTriggerRealtime(realtime);
+          triggerRealtimeRef.current = realtime;
           window.sessionStorage.setItem(
             buildTriggerRealtimeSessionStorageKey(chatId, realtime.runId),
             realtime.accessToken
@@ -662,6 +692,7 @@ function ChatInner({
           eventType: "turn_run_accepted",
           note: `requestMs=${Date.now() - enqueueStartedAt}`,
         });
+        activeTurnTimelineRef.current.acceptedAt = Date.now();
         setStatus("streaming");
       } catch (err) {
         if (err instanceof Error && err.name === "AbortError") {
@@ -1111,9 +1142,46 @@ function ChatInner({
     chatId,
     loadMessages,
     pushStreamDebug,
-    triggerRealtime?.runId,
-    triggerRealtime?.accessToken,
   ]);
+
+  useEffect(() => {
+    if (!chatId) return;
+
+    if (
+      FORCE_TRIGGER_REALTIME_STREAM &&
+      triggerRealtime?.runId &&
+      triggerRealtime.accessToken
+    ) {
+      activeTransportRef.current = "trigger";
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+      if (reconnectTimerRef.current != null) {
+        window.clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+      pushStreamDebug({
+        eventType: "trigger_realtime_connected",
+        note: `runId=${triggerRealtime.runId} transportSwitch=without-bootstrap`,
+      });
+      drainTriggerStreamRef.current?.();
+      return;
+    }
+
+    if (
+      statusRef.current !== "ready" &&
+      !eventSourceRef.current &&
+      reconnectStreamRef.current
+    ) {
+      activeTransportRef.current = "sse";
+      pushStreamDebug({
+        eventType: "sse_reconnect_requested",
+        note: `afterEventId=${lastEventIdRef.current}`,
+      });
+      reconnectStreamRef.current();
+    }
+  }, [chatId, pushStreamDebug, triggerRealtime]);
 
   useEffect(() => {
     if (!chatId) return;
@@ -1127,15 +1195,17 @@ function ChatInner({
     lastStreamEventAtRef.current = null;
     lastTextDeltaAtRef.current = null;
     textDeltaCounterRef.current = 0;
+    activeTransportRef.current = null;
     pushStreamDebug({
       eventType: "stream_bootstrap",
       note: "Initializing SSE stream lifecycle",
     });
-    const shouldUseTriggerRealtime = Boolean(
+    const hasTriggerRealtimeSession = () =>
+      Boolean(
       FORCE_TRIGGER_REALTIME_STREAM &&
-      triggerRealtime?.runId &&
-      triggerRealtime?.accessToken
-    );
+        triggerRealtimeRef.current?.runId &&
+        triggerRealtimeRef.current?.accessToken
+      );
 
     const TRACKED_PROGRESS_TOOLS = new Set([
       "create_site",
@@ -1659,10 +1729,14 @@ function ChatInner({
       });
     };
 
-    const handleEnvelope = (envelope: StreamEnvelope) => {
+    const handleEnvelope = (
+      envelope: StreamEnvelope,
+      source: StreamTransport
+    ) => {
       if (envelope.logicalEventId <= lastEventIdRef.current) return;
 
       const now = Date.now();
+      activeTransportRef.current = source;
       const parsedCreatedAtMs = Date.parse(String(envelope.createdAt));
       const lagMs = Number.isFinite(parsedCreatedAtMs)
         ? Math.max(0, now - parsedCreatedAtMs)
@@ -1677,6 +1751,7 @@ function ChatInner({
 
       const payload = envelope.payload ?? {};
       const eventType = envelope.eventType;
+      const timeline = activeTurnTimelineRef.current;
       if (eventType === "text_delta") {
         textDeltaCounterRef.current += 1;
         const textPart = String(payload.text ?? "");
@@ -1688,6 +1763,29 @@ function ChatInner({
         const shouldReportTextDelta =
           textDeltaCounterRef.current % 8 === 0 ||
           (typeof textGapMs === "number" && textGapMs >= 1000);
+        if (timeline.firstTextDeltaAt == null) {
+          timeline.firstTextDeltaAt = now;
+          pushStreamDebug({
+            eventType: "text_delta",
+            logicalEventId: envelope.logicalEventId,
+            lagMs,
+            gapMs: textGapMs,
+            textDeltaChars: textPart.length,
+            note: `firstVisibleText transport=${source} sinceSubmitMs=${
+              timeline.submitStartedAt == null
+                ? "n/a"
+                : Math.max(0, now - timeline.submitStartedAt)
+            } sinceAcceptedMs=${
+              timeline.acceptedAt == null
+                ? "n/a"
+                : Math.max(0, now - timeline.acceptedAt)
+            } sinceRunStartedMs=${
+              timeline.firstRunStartedAt == null
+                ? "n/a"
+                : Math.max(0, now - timeline.firstRunStartedAt)
+            }`,
+          });
+        }
         if (shouldReportTextDelta) {
           pushStreamDebug({
             eventType,
@@ -1697,8 +1795,8 @@ function ChatInner({
             textDeltaChars: textPart.length,
             note:
               typeof textGapMs === "number" && textGapMs >= 1800
-                ? "Large text gap detected"
-                : undefined,
+                ? `Large text gap detected transport=${source}`
+                : `transport=${source}`,
           });
         }
       } else {
@@ -1707,13 +1805,46 @@ function ChatInner({
           logicalEventId: envelope.logicalEventId,
           lagMs,
           gapMs,
+          note: `transport=${source}`,
         });
       }
 
       if (eventType === "run_enqueued") {
+        if (timeline.firstEnqueuedAt == null) {
+          timeline.firstEnqueuedAt = now;
+          pushStreamDebug({
+            eventType: "run_enqueued",
+            logicalEventId: envelope.logicalEventId,
+            lagMs,
+            gapMs,
+            note: `firstQueueEvent transport=${source} sinceSubmitMs=${
+              timeline.submitStartedAt == null
+                ? "n/a"
+                : Math.max(0, now - timeline.submitStartedAt)
+            }`,
+          });
+        }
         return;
       }
       if (eventType === "run_started") {
+        if (timeline.firstRunStartedAt == null) {
+          timeline.firstRunStartedAt = now;
+          pushStreamDebug({
+            eventType: "run_started",
+            logicalEventId: envelope.logicalEventId,
+            lagMs,
+            gapMs,
+            note: `firstRunStarted transport=${source} sinceSubmitMs=${
+              timeline.submitStartedAt == null
+                ? "n/a"
+                : Math.max(0, now - timeline.submitStartedAt)
+            } sinceAcceptedMs=${
+              timeline.acceptedAt == null
+                ? "n/a"
+                : Math.max(0, now - timeline.acceptedAt)
+            }`,
+          });
+        }
         setStatus("streaming");
         activeStepKey = null;
         plannedStepKeys.length = 0;
@@ -1853,7 +1984,7 @@ function ChatInner({
     };
 
     const drainTriggerStream = () => {
-      if (!shouldUseTriggerRealtime || cancelled) return;
+      if (!hasTriggerRealtimeSession() || cancelled) return;
       const parts = triggerStreamPartsRef.current;
       if (!Array.isArray(parts) || parts.length === 0) return;
       if (processedTriggerParts < 0 || processedTriggerParts > parts.length) {
@@ -1899,7 +2030,7 @@ function ChatInner({
           });
         }
 
-        handleEnvelope(normalizedEnvelope);
+        handleEnvelope(normalizedEnvelope, "trigger");
       }
 
       processedTriggerParts = parts.length;
@@ -1916,6 +2047,7 @@ function ChatInner({
         `/api/chats/${encodeURIComponent(chatId)}/stream?afterEventId=${afterEventId}`
       );
       eventSourceRef.current = source;
+      activeTransportRef.current = "sse";
       pushStreamDebug({
         eventType: "sse_connect",
         note: `connectionId=${connectionId}, afterEventId=${afterEventId}`,
@@ -1937,7 +2069,7 @@ function ChatInner({
         if (connectionId !== streamConnectionIdRef.current) return;
         try {
           const envelope = JSON.parse(event.data) as StreamEnvelope;
-          handleEnvelope(envelope);
+          handleEnvelope(envelope, "sse");
         } catch {
           pushStreamDebug({
             eventType: "sse_parse_error",
@@ -2090,10 +2222,11 @@ function ChatInner({
         }
         streamInitializedRef.current = true;
       }
-      if (shouldUseTriggerRealtime) {
+      if (hasTriggerRealtimeSession()) {
+        activeTransportRef.current = "trigger";
         pushStreamDebug({
           eventType: "trigger_realtime_connected",
-          note: `runId=${triggerRealtime?.runId}`,
+          note: `runId=${triggerRealtimeRef.current?.runId}`,
         });
         drainTriggerStream();
       } else {
@@ -2131,8 +2264,6 @@ function ChatInner({
     chatId,
     loadMessages,
     pushStreamDebug,
-    triggerRealtime?.runId,
-    triggerRealtime?.accessToken,
   ]);
 
   useEffect(() => {

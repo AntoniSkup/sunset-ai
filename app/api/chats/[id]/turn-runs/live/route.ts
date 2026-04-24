@@ -6,6 +6,7 @@ import {
   getUser,
 } from "@/lib/db/queries";
 import { createTriggerRealtimeSessionForRun } from "@/lib/chat/trigger-realtime-auth";
+import { logChatStreamDiagnostic } from "@/lib/chat/stream-diagnostics";
 
 export async function GET(
   _request: Request,
@@ -15,6 +16,7 @@ export async function GET(
     params: Promise<{ id: string }>;
   }
 ) {
+  const requestStartedAt = Date.now();
   const user = await getUser();
   if (!user) {
     return NextResponse.json(
@@ -32,13 +34,27 @@ export async function GET(
     );
   }
 
+  const fetchStartedAt = Date.now();
   const [run, liveState] = await Promise.all([
     getRunningChatTurnRun(chat.id),
     getRunningChatTurnRunLiveState(chat.id, user.id),
   ]);
+  const queryMs = Date.now() - fetchStartedAt;
+  const tokenStartedAt = Date.now();
   const triggerRealtime = run?.triggerRunId
     ? await createTriggerRealtimeSessionForRun(run.triggerRunId)
     : null;
+  const triggerRealtimeSessionMs = Date.now() - tokenStartedAt;
+
+  logChatStreamDiagnostic("Live state bootstrap request completed", {
+    chatId: chat.id,
+    chatPublicId,
+    runId: run?.id ?? null,
+    hasLiveState: Boolean(liveState),
+    queryMs,
+    triggerRealtimeSessionMs,
+    totalRequestMs: Date.now() - requestStartedAt,
+  });
 
   return NextResponse.json({
     run: run ?? null,
