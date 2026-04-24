@@ -22,6 +22,12 @@ export type PublishEventsParams = {
   events: StreamEventInput[];
 };
 
+export type PublishStreamEventsOptions = {
+  onEventsPersisted?: (
+    events: StreamEventEnvelope[]
+  ) => Promise<void> | void;
+};
+
 export type ReadEventsAfterParams = {
   chatId: number;
   afterLogicalEventId: number;

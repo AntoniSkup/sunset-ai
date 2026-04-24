@@ -279,6 +279,8 @@ export async function createChatTurnStream({
       chatId: chat.id,
       runId: turnRunId,
       events,
+    }, {
+      onEventsPersisted: onPublishedTurnEvents,
     });
     await applyStreamEventsToChatTurnRunLiveState({
       runId: turnRunId,
@@ -286,9 +288,6 @@ export async function createChatTurnStream({
       userId: user.id,
       events: publishedEvents,
     });
-    if (onPublishedTurnEvents) {
-      await onPublishedTurnEvents(publishedEvents);
-    }
   };
 
   const pendingTurnEvents: Array<{

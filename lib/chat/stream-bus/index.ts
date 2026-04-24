@@ -2,6 +2,7 @@ import { dbStreamBusAdapter } from "./db";
 import { upstashStreamBusAdapter } from "./upstash";
 import type {
   PublishEventsParams,
+  PublishStreamEventsOptions,
   ReadEventsAfterParams,
   StreamEventEnvelope,
 } from "./types";
@@ -114,11 +115,25 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T
 }
 
 export async function publishStreamEvents(
-  params: PublishEventsParams
+  params: PublishEventsParams,
+  options?: PublishStreamEventsOptions
 ): Promise<StreamEventEnvelope[]> {
   const startedAt = Date.now();
   assertRedisEnabled();
   const dbEvents = await dbStreamBusAdapter.publishEvents(params);
+  if (options?.onEventsPersisted) {
+    try {
+      await options.onEventsPersisted(dbEvents);
+    } catch (error) {
+      if (process.env.NODE_ENV === "production") {
+        console.error("[stream-bus] Persisted-events hook failed", {
+          chatId: params.chatId,
+          runId: params.runId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  }
   const redisWriteUnavailable = isRedisWriteTemporarilyUnavailable();
 
   if (redisWriteUnavailable) {
