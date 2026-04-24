@@ -1556,11 +1556,53 @@ function ChatInner({
     // Runs on rAF; drains pendingAssistantTextRef into upsertAssistantText at
     // a steady cadence (chars/sec scales with backlog so large bursts catch
     // up without ever stalling).
+    //
+    // IMPORTANT: requestAnimationFrame is throttled to ~1Hz in hidden/inactive
+    // tabs (and paused entirely in some browsers), which would look exactly
+    // like "the stream froze" to the user. We combine rAF with a setTimeout
+    // watchdog so reveal keeps flowing regardless of tab focus, and we also
+    // flush immediately whenever the document becomes hidden so nothing gets
+    // stuck in the buffer across a tab switch.
+    const isDocumentHidden = () =>
+      typeof document !== "undefined" && document.visibilityState === "hidden";
+
+    const cancelRevealHandle = () => {
+      if (revealAnimationFrameRef.current != null) {
+        if (typeof cancelAnimationFrame !== "undefined") {
+          cancelAnimationFrame(revealAnimationFrameRef.current);
+        } else {
+          clearTimeout(revealAnimationFrameRef.current as unknown as number);
+        }
+        revealAnimationFrameRef.current = null;
+      }
+    };
+
+    const requestRevealHandle = (): number => {
+      // In hidden tabs rAF is throttled to ~1Hz; fall back to setTimeout so
+      // the buffer still drains at a reasonable pace (and can't visually
+      // freeze even if the user switches tabs mid-stream).
+      if (
+        typeof requestAnimationFrame !== "undefined" &&
+        !isDocumentHidden()
+      ) {
+        return requestAnimationFrame(runRevealTick);
+      }
+      return setTimeout(runRevealTick, 32) as unknown as number;
+    };
+
     const runRevealTick = () => {
       revealAnimationFrameRef.current = null;
       const buffer = pendingAssistantTextRef.current;
       if (!buffer) {
         revealLastTickAtRef.current = 0;
+        return;
+      }
+      // If the tab is hidden, skip the typewriter animation entirely; drain
+      // everything so the user sees the full text the moment they come back.
+      if (isDocumentHidden()) {
+        pendingAssistantTextRef.current = "";
+        revealLastTickAtRef.current = 0;
+        upsertAssistantText(buffer);
         return;
       }
       const now =
@@ -1588,10 +1630,7 @@ function ChatInner({
         upsertAssistantText(toReveal);
       }
       if (pendingAssistantTextRef.current) {
-        revealAnimationFrameRef.current =
-          typeof requestAnimationFrame !== "undefined"
-            ? requestAnimationFrame(runRevealTick)
-            : (setTimeout(runRevealTick, 16) as unknown as number);
+        revealAnimationFrameRef.current = requestRevealHandle();
       } else {
         revealLastTickAtRef.current = 0;
       }
@@ -1599,21 +1638,11 @@ function ChatInner({
 
     const scheduleReveal = () => {
       if (revealAnimationFrameRef.current != null) return;
-      revealAnimationFrameRef.current =
-        typeof requestAnimationFrame !== "undefined"
-          ? requestAnimationFrame(runRevealTick)
-          : (setTimeout(runRevealTick, 16) as unknown as number);
+      revealAnimationFrameRef.current = requestRevealHandle();
     };
 
     const flushPendingAssistantText = () => {
-      if (revealAnimationFrameRef.current != null) {
-        if (typeof cancelAnimationFrame !== "undefined") {
-          cancelAnimationFrame(revealAnimationFrameRef.current);
-        } else {
-          clearTimeout(revealAnimationFrameRef.current as unknown as number);
-        }
-        revealAnimationFrameRef.current = null;
-      }
+      cancelRevealHandle();
       revealLastTickAtRef.current = 0;
       const remaining = pendingAssistantTextRef.current;
       pendingAssistantTextRef.current = "";
@@ -1627,6 +1656,20 @@ function ChatInner({
       pendingAssistantTextRef.current += text;
       scheduleReveal();
     };
+
+    // When the tab becomes hidden, flush immediately so nothing gets stuck
+    // behind rAF throttling. When it becomes visible again, reschedule so
+    // any text that arrived while hidden drains smoothly.
+    const handleVisibilityChange = () => {
+      if (isDocumentHidden()) {
+        flushPendingAssistantText();
+      } else if (pendingAssistantTextRef.current) {
+        scheduleReveal();
+      }
+    };
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", handleVisibilityChange);
+    }
 
     const finalizeTerminalEventIfReady = () => {
       if (!terminalEventPending) return;
@@ -2365,6 +2408,12 @@ function ChatInner({
       reconnectStreamRef.current = null;
       drainTriggerStreamRef.current = null;
       stopProgressTicker();
+      if (typeof document !== "undefined") {
+        document.removeEventListener(
+          "visibilitychange",
+          handleVisibilityChange
+        );
+      }
       if (revealAnimationFrameRef.current != null) {
         if (typeof cancelAnimationFrame !== "undefined") {
           cancelAnimationFrame(revealAnimationFrameRef.current);
