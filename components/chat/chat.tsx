@@ -410,6 +410,15 @@ function ChatInner({
   const lastTextDeltaAtRef = useRef<number | null>(null);
   const textDeltaCounterRef = useRef(0);
   const lastDebugUiUpdateAtRef = useRef(0);
+  // Client-side text reveal smoother: buffer incoming text_delta chunks and
+  // paint them at a steady rAF-driven cadence so bursts from the realtime
+  // transport (which can batch many deltas inside a single 24ms throttle
+  // window) appear as a continuous stream instead of visible pauses followed
+  // by big jumps. Flushed synchronously on tool_call/tool_result/terminal
+  // events to preserve ordering with the rest of the assistant message.
+  const pendingAssistantTextRef = useRef<string>("");
+  const revealAnimationFrameRef = useRef<number | null>(null);
+  const revealLastTickAtRef = useRef<number>(0);
   useEffect(() => {
     statusRef.current = status;
   }, [status]);
@@ -1543,8 +1552,89 @@ function ChatInner({
       });
     };
 
+    // --- Text reveal smoother ---------------------------------------------
+    // Runs on rAF; drains pendingAssistantTextRef into upsertAssistantText at
+    // a steady cadence (chars/sec scales with backlog so large bursts catch
+    // up without ever stalling).
+    const runRevealTick = () => {
+      revealAnimationFrameRef.current = null;
+      const buffer = pendingAssistantTextRef.current;
+      if (!buffer) {
+        revealLastTickAtRef.current = 0;
+        return;
+      }
+      const now =
+        typeof performance !== "undefined" ? performance.now() : Date.now();
+      const dtMs =
+        revealLastTickAtRef.current === 0
+          ? 16
+          : Math.max(0, now - revealLastTickAtRef.current);
+      revealLastTickAtRef.current = now;
+
+      const backlog = buffer.length;
+      // Baseline ~500 chars/sec (typewriter feel), scale up with backlog so
+      // we never fall more than ~1s behind the server.
+      const ratePerSec = Math.max(
+        500,
+        Math.min(2500, 500 + backlog * 4)
+      );
+      const charsThisTick = Math.max(
+        1,
+        Math.floor((ratePerSec * dtMs) / 1000)
+      );
+      const toReveal = buffer.slice(0, charsThisTick);
+      pendingAssistantTextRef.current = buffer.slice(charsThisTick);
+      if (toReveal) {
+        upsertAssistantText(toReveal);
+      }
+      if (pendingAssistantTextRef.current) {
+        revealAnimationFrameRef.current =
+          typeof requestAnimationFrame !== "undefined"
+            ? requestAnimationFrame(runRevealTick)
+            : (setTimeout(runRevealTick, 16) as unknown as number);
+      } else {
+        revealLastTickAtRef.current = 0;
+      }
+    };
+
+    const scheduleReveal = () => {
+      if (revealAnimationFrameRef.current != null) return;
+      revealAnimationFrameRef.current =
+        typeof requestAnimationFrame !== "undefined"
+          ? requestAnimationFrame(runRevealTick)
+          : (setTimeout(runRevealTick, 16) as unknown as number);
+    };
+
+    const flushPendingAssistantText = () => {
+      if (revealAnimationFrameRef.current != null) {
+        if (typeof cancelAnimationFrame !== "undefined") {
+          cancelAnimationFrame(revealAnimationFrameRef.current);
+        } else {
+          clearTimeout(revealAnimationFrameRef.current as unknown as number);
+        }
+        revealAnimationFrameRef.current = null;
+      }
+      revealLastTickAtRef.current = 0;
+      const remaining = pendingAssistantTextRef.current;
+      pendingAssistantTextRef.current = "";
+      if (remaining) {
+        upsertAssistantText(remaining);
+      }
+    };
+
+    const enqueueAssistantTextDelta = (text: string) => {
+      if (!text) return;
+      pendingAssistantTextRef.current += text;
+      scheduleReveal();
+    };
+
     const finalizeTerminalEventIfReady = () => {
       if (!terminalEventPending) return;
+
+      // Paint any buffered text immediately so the final on-screen snapshot
+      // reflects everything we received before run_completed triggers the
+      // loadMessages() replace.
+      flushPendingAssistantText();
 
       const terminalType = terminalEventPending;
       terminalEventPending = null;
@@ -1861,10 +1951,13 @@ function ChatInner({
       }
       if (eventType === "text_delta") {
         setStatus("streaming");
-        upsertAssistantText(String(payload.text ?? ""));
+        enqueueAssistantTextDelta(String(payload.text ?? ""));
         return;
       }
       if (eventType === "tool_call") {
+        // Ensure any buffered text paints before the tool indicator so the
+        // visual ordering (text -> tool -> text) matches the server stream.
+        flushPendingAssistantText();
         const toolCallId = String(payload.toolCallId ?? "");
         const toolName = String(payload.toolName ?? "unknown");
         const destination =
@@ -1888,6 +1981,7 @@ function ChatInner({
         return;
       }
       if (eventType === "tool_result") {
+        flushPendingAssistantText();
         const toolCallId = String(payload.toolCallId ?? "");
         const toolName = String(payload.toolName ?? "unknown");
         const result = payload.result ?? null;
@@ -2271,6 +2365,16 @@ function ChatInner({
       reconnectStreamRef.current = null;
       drainTriggerStreamRef.current = null;
       stopProgressTicker();
+      if (revealAnimationFrameRef.current != null) {
+        if (typeof cancelAnimationFrame !== "undefined") {
+          cancelAnimationFrame(revealAnimationFrameRef.current);
+        } else {
+          clearTimeout(revealAnimationFrameRef.current as unknown as number);
+        }
+        revealAnimationFrameRef.current = null;
+      }
+      pendingAssistantTextRef.current = "";
+      revealLastTickAtRef.current = 0;
       pushStreamDebug({
         eventType: "stream_cleanup",
         note: "Chat stream effect cleanup",
