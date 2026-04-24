@@ -1181,19 +1181,7 @@ function ChatInner({
       return;
     }
 
-    if (
-      status !== "ready" &&
-      !eventSourceRef.current &&
-      reconnectStreamRef.current
-    ) {
-      activeTransportRef.current = "sse";
-      pushStreamDebug({
-        eventType: "sse_reconnect_requested",
-        note: `afterEventId=${lastEventIdRef.current}`,
-      });
-      reconnectStreamRef.current();
-    }
-  }, [chatId, pushStreamDebug, status, triggerRealtime]);
+  }, [chatId, pushStreamDebug, triggerRealtime]);
 
   useEffect(() => {
     if (!chatId) return;
