@@ -410,15 +410,16 @@ function ChatInner({
   const lastTextDeltaAtRef = useRef<number | null>(null);
   const textDeltaCounterRef = useRef(0);
   const lastDebugUiUpdateAtRef = useRef(0);
-  // Client-side text reveal smoother: buffer incoming text_delta chunks and
-  // paint them at a steady rAF-driven cadence so bursts from the realtime
-  // transport (which can batch many deltas inside a single 24ms throttle
-  // window) appear as a continuous stream instead of visible pauses followed
-  // by big jumps. Flushed synchronously on tool_call/tool_result/terminal
-  // events to preserve ordering with the rest of the assistant message.
-  const pendingAssistantTextRef = useRef<string>("");
-  const revealAnimationFrameRef = useRef<number | null>(null);
-  const revealLastTickAtRef = useRef<number>(0);
+  // Diagnostic: total chars we painted from text_delta events. Previously we
+  // buffered deltas in a rAF-driven "smoother" to hide bursts, but once the
+  // server-side append chain was fixed (src/trigger/run-chat-turn.ts), the
+  // Realtime transport already delivers deltas at a natural ~300-500 ms
+  // cadence. The smoother's rate cap (500-2500 chars/sec) ended up causing a
+  // visible "tail dump" at run_completed — the last chunk would still be
+  // mid-reveal when the buffer was force-flushed, which looked exactly like
+  // "text only shows up when the stream finishes". We now paint each delta
+  // synchronously and rely on the server pacing.
+  const receivedAssistantCharsRef = useRef(0);
   useEffect(() => {
     statusRef.current = status;
   }, [status]);
@@ -1204,6 +1205,7 @@ function ChatInner({
     lastStreamEventAtRef.current = null;
     lastTextDeltaAtRef.current = null;
     textDeltaCounterRef.current = 0;
+    receivedAssistantCharsRef.current = 0;
     activeTransportRef.current = null;
     pushStreamDebug({
       eventType: "stream_bootstrap",
@@ -1552,135 +1554,32 @@ function ChatInner({
       });
     };
 
-    // --- Text reveal smoother ---------------------------------------------
-    // Runs on rAF; drains pendingAssistantTextRef into upsertAssistantText at
-    // a steady cadence (chars/sec scales with backlog so large bursts catch
-    // up without ever stalling).
-    //
-    // IMPORTANT: requestAnimationFrame is throttled to ~1Hz in hidden/inactive
-    // tabs (and paused entirely in some browsers), which would look exactly
-    // like "the stream froze" to the user. We combine rAF with a setTimeout
-    // watchdog so reveal keeps flowing regardless of tab focus, and we also
-    // flush immediately whenever the document becomes hidden so nothing gets
-    // stuck in the buffer across a tab switch.
-    const isDocumentHidden = () =>
-      typeof document !== "undefined" && document.visibilityState === "hidden";
-
-    const cancelRevealHandle = () => {
-      if (revealAnimationFrameRef.current != null) {
-        if (typeof cancelAnimationFrame !== "undefined") {
-          cancelAnimationFrame(revealAnimationFrameRef.current);
-        } else {
-          clearTimeout(revealAnimationFrameRef.current as unknown as number);
-        }
-        revealAnimationFrameRef.current = null;
-      }
-    };
-
-    const requestRevealHandle = (): number => {
-      // In hidden tabs rAF is throttled to ~1Hz; fall back to setTimeout so
-      // the buffer still drains at a reasonable pace (and can't visually
-      // freeze even if the user switches tabs mid-stream).
-      if (
-        typeof requestAnimationFrame !== "undefined" &&
-        !isDocumentHidden()
-      ) {
-        return requestAnimationFrame(runRevealTick);
-      }
-      return setTimeout(runRevealTick, 32) as unknown as number;
-    };
-
-    const runRevealTick = () => {
-      revealAnimationFrameRef.current = null;
-      const buffer = pendingAssistantTextRef.current;
-      if (!buffer) {
-        revealLastTickAtRef.current = 0;
-        return;
-      }
-      // If the tab is hidden, skip the typewriter animation entirely; drain
-      // everything so the user sees the full text the moment they come back.
-      if (isDocumentHidden()) {
-        pendingAssistantTextRef.current = "";
-        revealLastTickAtRef.current = 0;
-        upsertAssistantText(buffer);
-        return;
-      }
-      const now =
-        typeof performance !== "undefined" ? performance.now() : Date.now();
-      const dtMs =
-        revealLastTickAtRef.current === 0
-          ? 16
-          : Math.max(0, now - revealLastTickAtRef.current);
-      revealLastTickAtRef.current = now;
-
-      const backlog = buffer.length;
-      // Baseline ~500 chars/sec (typewriter feel), scale up with backlog so
-      // we never fall more than ~1s behind the server.
-      const ratePerSec = Math.max(
-        500,
-        Math.min(2500, 500 + backlog * 4)
-      );
-      const charsThisTick = Math.max(
-        1,
-        Math.floor((ratePerSec * dtMs) / 1000)
-      );
-      const toReveal = buffer.slice(0, charsThisTick);
-      pendingAssistantTextRef.current = buffer.slice(charsThisTick);
-      if (toReveal) {
-        upsertAssistantText(toReveal);
-      }
-      if (pendingAssistantTextRef.current) {
-        revealAnimationFrameRef.current = requestRevealHandle();
-      } else {
-        revealLastTickAtRef.current = 0;
-      }
-    };
-
-    const scheduleReveal = () => {
-      if (revealAnimationFrameRef.current != null) return;
-      revealAnimationFrameRef.current = requestRevealHandle();
-    };
-
-    const flushPendingAssistantText = () => {
-      cancelRevealHandle();
-      revealLastTickAtRef.current = 0;
-      const remaining = pendingAssistantTextRef.current;
-      pendingAssistantTextRef.current = "";
-      if (remaining) {
-        upsertAssistantText(remaining);
-      }
-    };
-
-    const enqueueAssistantTextDelta = (text: string) => {
+    // Text deltas are painted directly into state the moment they arrive
+    // from the realtime transport. We intentionally do NOT buffer them here:
+    //  - The server already batches small token events (TEXT_DELTA_FLUSH_CHARS
+    //    / TEXT_DELTA_FLUSH_MS) and the Trigger append chain spaces events
+    //    ~300–500 ms apart, so there is no burst to smooth out.
+    //  - A client-side rate-limited reveal would leave the tail of the last
+    //    text_delta still unrevealed when run_completed arrives, and the
+    //    subsequent loadMessages() would replace the DOM before the rest of
+    //    that chunk could render — which looks exactly like "text only shows
+    //    up once the stream is finished".
+    const paintAssistantTextDelta = (text: string) => {
       if (!text) return;
-      pendingAssistantTextRef.current += text;
-      scheduleReveal();
+      receivedAssistantCharsRef.current += text.length;
+      upsertAssistantText(text);
     };
-
-    // When the tab becomes hidden, flush immediately so nothing gets stuck
-    // behind rAF throttling. When it becomes visible again, reschedule so
-    // any text that arrived while hidden drains smoothly.
-    const handleVisibilityChange = () => {
-      if (isDocumentHidden()) {
-        flushPendingAssistantText();
-      } else if (pendingAssistantTextRef.current) {
-        scheduleReveal();
-      }
-    };
-    if (typeof document !== "undefined") {
-      document.addEventListener("visibilitychange", handleVisibilityChange);
-    }
 
     const finalizeTerminalEventIfReady = () => {
       if (!terminalEventPending) return;
 
-      // Paint any buffered text immediately so the final on-screen snapshot
-      // reflects everything we received before run_completed triggers the
-      // loadMessages() replace.
-      flushPendingAssistantText();
-
       const terminalType = terminalEventPending;
       terminalEventPending = null;
+
+      pushStreamDebug({
+        eventType: "run_terminal",
+        note: `type=${terminalType} receivedAssistantChars=${receivedAssistantCharsRef.current} textDeltaEvents=${textDeltaCounterRef.current}`,
+      });
 
       if (terminalType === "completed") {
         activeTurnRunIdRef.current = null;
@@ -1994,13 +1893,10 @@ function ChatInner({
       }
       if (eventType === "text_delta") {
         setStatus("streaming");
-        enqueueAssistantTextDelta(String(payload.text ?? ""));
+        paintAssistantTextDelta(String(payload.text ?? ""));
         return;
       }
       if (eventType === "tool_call") {
-        // Ensure any buffered text paints before the tool indicator so the
-        // visual ordering (text -> tool -> text) matches the server stream.
-        flushPendingAssistantText();
         const toolCallId = String(payload.toolCallId ?? "");
         const toolName = String(payload.toolName ?? "unknown");
         const destination =
@@ -2024,7 +1920,6 @@ function ChatInner({
         return;
       }
       if (eventType === "tool_result") {
-        flushPendingAssistantText();
         const toolCallId = String(payload.toolCallId ?? "");
         const toolName = String(payload.toolName ?? "unknown");
         const result = payload.result ?? null;
@@ -2408,22 +2303,7 @@ function ChatInner({
       reconnectStreamRef.current = null;
       drainTriggerStreamRef.current = null;
       stopProgressTicker();
-      if (typeof document !== "undefined") {
-        document.removeEventListener(
-          "visibilitychange",
-          handleVisibilityChange
-        );
-      }
-      if (revealAnimationFrameRef.current != null) {
-        if (typeof cancelAnimationFrame !== "undefined") {
-          cancelAnimationFrame(revealAnimationFrameRef.current);
-        } else {
-          clearTimeout(revealAnimationFrameRef.current as unknown as number);
-        }
-        revealAnimationFrameRef.current = null;
-      }
-      pendingAssistantTextRef.current = "";
-      revealLastTickAtRef.current = 0;
+      receivedAssistantCharsRef.current = 0;
       pushStreamDebug({
         eventType: "stream_cleanup",
         note: "Chat stream effect cleanup",
