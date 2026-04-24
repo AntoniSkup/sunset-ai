@@ -369,6 +369,10 @@ function ChatInner({
     Array<{ id: string; message: string; userMessageId?: string }>
   >([]);
   const [messages, setMessages] = useState<UIMessage[]>(initialMessages);
+  const messagesRef = useRef<UIMessage[]>(initialMessages);
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
   const [status, setStatus] = useState<"ready" | "submitted" | "streaming">(
     "ready"
   );
@@ -1576,9 +1580,37 @@ function ChatInner({
       const terminalType = terminalEventPending;
       terminalEventPending = null;
 
+      const activeAssistantId = activeAssistantMessageIdRef.current;
+      let stateTextLen = 0;
+      let stateTextHead = "";
+      let stateTextTail = "";
+      let statePartsSummary = "";
+      if (activeAssistantId) {
+        const currentMessages = messagesRef.current;
+        const msg = currentMessages.find((m) => m.id === activeAssistantId);
+        if (msg && Array.isArray(msg.parts)) {
+          statePartsSummary = msg.parts
+            .map((p: any) => {
+              const t = String(p?.type ?? "");
+              if (t === "text") {
+                return `text:${String(p?.text ?? "").length}`;
+              }
+              return t;
+            })
+            .join(",");
+          const joined = msg.parts
+            .filter((p: any) => String(p?.type ?? "") === "text")
+            .map((p: any) => String(p?.text ?? ""))
+            .join("");
+          stateTextLen = joined.length;
+          stateTextHead = joined.slice(0, 60).replace(/\n/g, "\\n");
+          stateTextTail = joined.slice(-60).replace(/\n/g, "\\n");
+        }
+      }
+
       pushStreamDebug({
         eventType: "run_terminal",
-        note: `type=${terminalType} receivedAssistantChars=${receivedAssistantCharsRef.current} textDeltaEvents=${textDeltaCounterRef.current}`,
+        note: `type=${terminalType} receivedAssistantChars=${receivedAssistantCharsRef.current} textDeltaEvents=${textDeltaCounterRef.current} stateTextLen=${stateTextLen} stateParts=[${statePartsSummary}] head="${stateTextHead}" tail="${stateTextTail}"`,
       });
 
       if (terminalType === "completed") {
@@ -1795,6 +1827,9 @@ function ChatInner({
         const shouldReportTextDelta =
           textDeltaCounterRef.current % 8 === 0 ||
           (typeof textGapMs === "number" && textGapMs >= 1000);
+        const snippetPreview = textPart
+          .slice(0, 60)
+          .replace(/\n/g, "\\n");
         if (timeline.firstTextDeltaAt == null) {
           timeline.firstTextDeltaAt = now;
           pushStreamDebug({
@@ -1815,7 +1850,7 @@ function ChatInner({
               timeline.firstRunStartedAt == null
                 ? "n/a"
                 : Math.max(0, now - timeline.firstRunStartedAt)
-            }`,
+            } snippet="${snippetPreview}"`,
           });
         }
         if (shouldReportTextDelta) {
@@ -1827,8 +1862,8 @@ function ChatInner({
             textDeltaChars: textPart.length,
             note:
               typeof textGapMs === "number" && textGapMs >= 1800
-                ? `Large text gap detected transport=${source}`
-                : `transport=${source}`,
+                ? `Large text gap detected transport=${source} snippet="${snippetPreview}"`
+                : `transport=${source} snippet="${snippetPreview}"`,
           });
         }
       } else {
