@@ -385,27 +385,265 @@ export function useParams() {
   }
 
   if (specifier === "motion/react") {
+    // Preview-only shim. The real Framer Motion runtime is intentionally not
+    // bundled into the iframe (size + cost). Components render statically as
+    // their underlying DOM tag, and hooks return stable values that won't
+    // crash render. Animations don't play in preview, but layout/markup
+    // matches what the production runtime would mount.
     return `
 import React from "react";
 
-function passthrough(tag) {
-  return function MotionComponent(props) {
-    return React.createElement(tag, props, props?.children);
+const noop = () => {};
+const noopAsync = () => Promise.resolve();
+
+function isMotionValue(v) {
+  return v && typeof v === "object" && typeof v.get === "function" && v.__isMV === true;
+}
+
+function createMotionValue(initial) {
+  let current = initial;
+  const subs = new Set();
+  const mv = {
+    __isMV: true,
+    get: () => current,
+    set: (v) => { current = v; subs.forEach((cb) => { try { cb(v); } catch {} }); },
+    on: (_event, cb) => { subs.add(cb); return () => subs.delete(cb); },
+    onChange: (cb) => { subs.add(cb); return () => subs.delete(cb); },
+    destroy: noop,
+    isAnimating: () => false,
+    getVelocity: () => 0,
+    stop: noop,
+    clearListeners: () => subs.clear(),
   };
+  return mv;
+}
+
+// motion components accept MotionValues in style/props in real Framer Motion,
+// but plain DOM elements would throw / warn. Flatten to current values so the
+// preview doesn't blow up if AI-generated code mixes useTransform + motion.div.
+function sanitizeStyle(style) {
+  if (!style || typeof style !== "object") return style;
+  const out = {};
+  for (const key in style) {
+    const v = style[key];
+    out[key] = isMotionValue(v) ? v.get() : v;
+  }
+  return out;
+}
+
+const STRIP_KEYS = new Set([
+  "initial",
+  "animate",
+  "exit",
+  "transition",
+  "variants",
+  "whileHover",
+  "whileTap",
+  "whileFocus",
+  "whileDrag",
+  "whileInView",
+  "viewport",
+  "drag",
+  "dragConstraints",
+  "dragElastic",
+  "dragMomentum",
+  "dragControls",
+  "dragListener",
+  "dragSnapToOrigin",
+  "dragTransition",
+  "layout",
+  "layoutId",
+  "layoutDependency",
+  "layoutScroll",
+  "layoutRoot",
+  "onAnimationStart",
+  "onAnimationComplete",
+  "onUpdate",
+  "onDrag",
+  "onDragStart",
+  "onDragEnd",
+  "onDirectionLock",
+  "onViewportEnter",
+  "onViewportLeave",
+  "onHoverStart",
+  "onHoverEnd",
+  "onTap",
+  "onTapStart",
+  "onTapCancel",
+  "custom",
+  "transformTemplate",
+  "transformValues",
+  "inherit",
+]);
+
+function sanitizeProps(props) {
+  if (!props) return props;
+  const out = {};
+  for (const key in props) {
+    if (STRIP_KEYS.has(key)) continue;
+    if (key === "style") {
+      out.style = sanitizeStyle(props.style);
+      continue;
+    }
+    out[key] = props[key];
+  }
+  return out;
+}
+
+function passthrough(tag) {
+  return React.forwardRef(function MotionComponent(props, ref) {
+    const safe = sanitizeProps(props);
+    return React.createElement(tag, { ...safe, ref }, props?.children);
+  });
 }
 
 export const AnimatePresence = ({ children }) =>
   React.createElement(React.Fragment, null, children);
 
+export const LayoutGroup = ({ children }) =>
+  React.createElement(React.Fragment, null, children);
+
+export const MotionConfig = ({ children }) =>
+  React.createElement(React.Fragment, null, children);
+
+export const LazyMotion = ({ children }) =>
+  React.createElement(React.Fragment, null, children);
+
+export const Reorder = {
+  Group: ({ children, as: As = "ul", ...rest }) =>
+    React.createElement(As, sanitizeProps(rest), children),
+  Item: ({ children, as: As = "li", ...rest }) =>
+    React.createElement(As, sanitizeProps(rest), children),
+};
+
 export const motion = new Proxy(
-  {},
+  { create: (tag) => passthrough(typeof tag === "string" ? tag : "div") },
   {
-    get(_target, prop) {
+    get(target, prop) {
+      if (prop === "create" && typeof target.create === "function") {
+        return target.create;
+      }
       if (typeof prop !== "string") return passthrough("div");
       return passthrough(prop);
     },
   }
 );
+
+export const m = motion;
+
+export function useInView() {
+  return true;
+}
+
+export function useScroll() {
+  return {
+    scrollX: createMotionValue(0),
+    scrollY: createMotionValue(0),
+    scrollXProgress: createMotionValue(0),
+    scrollYProgress: createMotionValue(0),
+  };
+}
+
+export function useTransform(_input, _inputRange, outputRange) {
+  if (Array.isArray(outputRange) && outputRange.length > 0) {
+    return createMotionValue(outputRange[0]);
+  }
+  return createMotionValue(0);
+}
+
+export function useMotionValue(initial) {
+  return createMotionValue(initial ?? 0);
+}
+
+export function useMotionValueEvent() {
+  return undefined;
+}
+
+export function useMotionTemplate(strings) {
+  if (Array.isArray(strings)) return createMotionValue(strings.join(""));
+  return createMotionValue("");
+}
+
+export function useSpring(initial) {
+  return createMotionValue(typeof initial === "number" ? initial : 0);
+}
+
+export function useVelocity() {
+  return createMotionValue(0);
+}
+
+export function useAnimation() {
+  return { start: noopAsync, stop: noop, set: noop, mount: noop };
+}
+
+export function useAnimate() {
+  const scope = React.useRef(null);
+  return [scope, noopAsync];
+}
+
+export function useAnimationFrame() {
+  return undefined;
+}
+
+export function useDragControls() {
+  return { start: noop };
+}
+
+export function useReducedMotion() {
+  return false;
+}
+
+export function useReducedMotionConfig() {
+  return false;
+}
+
+export function useCycle(...args) {
+  const [index, setIndex] = React.useState(0);
+  const cycle = (next) => {
+    if (typeof next === "number") {
+      const n = ((next % args.length) + args.length) % args.length;
+      setIndex(n);
+    } else {
+      setIndex((i) => (i + 1) % args.length);
+    }
+  };
+  return [args[index], cycle];
+}
+
+export function usePresence() {
+  return [true, noop];
+}
+
+export function useIsPresent() {
+  return true;
+}
+
+export function useTime() {
+  return createMotionValue(0);
+}
+
+export function useWillChange() {
+  return { get: () => "auto", set: noop, __isMV: true };
+}
+
+export function animate() {
+  const ctrl = {
+    then: (onResolve) => Promise.resolve().then(onResolve),
+    stop: noop,
+    pause: noop,
+    play: noop,
+    cancel: noop,
+    complete: noop,
+    time: 0,
+    speed: 1,
+  };
+  return ctrl;
+}
+
+export const stagger = () => 0;
+
+export const domAnimation = {};
+export const domMax = {};
 `.trim();
   }
 

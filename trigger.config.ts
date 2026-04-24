@@ -19,5 +19,14 @@ export default defineConfig({
       randomize: true,
     },
   },
+  build: {
+    // esbuild ships per-platform native binaries that are loaded via a relative
+    // path from the API entrypoint at runtime. Bundling it into the Trigger
+    // worker breaks that lookup ("The esbuild JavaScript API cannot be
+    // bundled..."). The package must be installed at runtime instead, which is
+    // exactly what `external` does (Trigger emits a generated package.json
+    // pinned to the version in node_modules).
+    external: ["esbuild"],
+  },
   dirs: ["./src/trigger"],
 });
