@@ -371,12 +371,82 @@ export default function StartPage() {
         scheduleUploadToastHide(1200);
       }
 
+      const pendingId = nanoid();
+
+      // Kick off the turn-run BEFORE navigation so Trigger's cold start
+      // overlaps with the navigation + Chat component bootstrap. On a cold
+      // worker this saves ~1-2s of perceived latency; on a warm worker it
+      // saves the ~200ms of client → /builder → effect → fetch round-trip.
+      // If this fails for any reason we fall back to the legacy client-side
+      // enqueue path by simply leaving `preEnqueued` unset.
+      let preEnqueued: {
+        runId: string;
+        triggerRealtime: { runId: string; accessToken: string } | null;
+      } | null = null;
+      const parts: Array<Record<string, unknown>> = [];
+      if (message) {
+        parts.push({ type: "text", text: message });
+      }
+      for (const attachment of uploadedAttachments) {
+        parts.push({
+          type: "file",
+          url: attachment.blobUrl,
+          mediaType: attachment.mimeType,
+          filename: attachment.alias,
+          assetId: attachment.id,
+          assetAlias: attachment.alias,
+          assetIntent: attachment.intent,
+          altHint: attachment.altHint ?? undefined,
+          label: attachment.label ?? undefined,
+        });
+      }
+      if (parts.length > 0) {
+        try {
+          const turnRes = await fetch(
+            `/api/chats/${encodeURIComponent(chatId)}/turn-runs`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                payload: {
+                  chatId,
+                  messages: [{ role: "user", parts }],
+                },
+                idempotencyKey: `turn-${chatId}-${pendingId}`,
+              }),
+            }
+          );
+          if (turnRes.ok) {
+            const turnData = await turnRes.json().catch(() => null);
+            const runId =
+              turnData?.run && typeof turnData.run.id === "string"
+                ? (turnData.run.id as string)
+                : null;
+            const realtime =
+              turnData?.triggerRealtime &&
+              typeof turnData.triggerRealtime.runId === "string" &&
+              typeof turnData.triggerRealtime.accessToken === "string"
+                ? (turnData.triggerRealtime as {
+                    runId: string;
+                    accessToken: string;
+                  })
+                : null;
+            if (runId) {
+              preEnqueued = { runId, triggerRealtime: realtime };
+            }
+          }
+        } catch {
+          // Ignore and let the /builder page enqueue normally.
+        }
+      }
+
       setPendingMessage({
-        id: nanoid(),
+        id: pendingId,
         chatId,
         message,
         attachments: uploadedAttachments,
         createdAt: Date.now(),
+        ...(preEnqueued ? { preEnqueued } : {}),
       });
 
       for (const attachment of attachments) {

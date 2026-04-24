@@ -17,6 +17,21 @@ export interface PendingMessage {
     label?: string | null;
   }>;
   createdAt: number;
+  /**
+   * When the turn-run was already enqueued before navigation (e.g. from the
+   * /start page handler), this carries the resulting run id and realtime
+   * session so the chat component can skip the duplicate POST and connect
+   * straight to the streaming run. The chat still renders the message
+   * optimistically from the surrounding fields; this metadata only controls
+   * the streaming/connection side.
+   */
+  preEnqueued?: {
+    runId: string;
+    triggerRealtime: {
+      runId: string;
+      accessToken: string;
+    } | null;
+  };
 }
 
 interface PendingMessageStore {

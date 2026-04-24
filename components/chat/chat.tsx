@@ -674,7 +674,6 @@ function ChatInner({
       if (typeof window !== "undefined") {
         window.sessionStorage.setItem(consumedStorageKey, "1");
       }
-      setPendingMessage(null);
 
       const parts: UIMessage["parts"] = [];
       if (pendingMessage.message.trim()) {
@@ -695,8 +694,51 @@ function ChatInner({
           } as UIMessage["parts"][number]);
         }
       }
-      if (parts.length === 0) return;
+      if (parts.length === 0) {
+        setPendingMessage(null);
+        return;
+      }
       lastUserMessagePartsRef.current = parts;
+
+      const preEnqueued = pendingMessage.preEnqueued;
+      setPendingMessage(null);
+
+      if (preEnqueued) {
+        // The /start page already POSTed to /api/chats/[id]/turn-runs, so we
+        // just need to mirror the optimistic rendering + realtime wiring that
+        // enqueueTurnRun normally does, without a second POST.
+        const userMessageId = `local-user-${Date.now()}-${Math.random()
+          .toString(36)
+          .slice(2)}`;
+        const assistantMessageId = `local-assistant-${Date.now()}-${Math.random()
+          .toString(36)
+          .slice(2)}`;
+        activeAssistantMessageIdRef.current = assistantMessageId;
+        setMessages((prev) => [
+          ...prev,
+          { id: userMessageId, role: "user", parts },
+          {
+            id: assistantMessageId,
+            role: "assistant",
+            parts: [{ type: "text", text: "" }],
+          },
+        ]);
+        activeTurnRunIdRef.current = preEnqueued.runId;
+        if (preEnqueued.triggerRealtime && chatId) {
+          setTriggerRealtime(preEnqueued.triggerRealtime);
+          triggerRealtimeRef.current = preEnqueued.triggerRealtime;
+          window.sessionStorage.setItem(
+            buildTriggerRealtimeSessionStorageKey(
+              chatId,
+              preEnqueued.triggerRealtime.runId
+            ),
+            preEnqueued.triggerRealtime.accessToken
+          );
+        }
+        setStatus("streaming");
+        return;
+      }
+
       void enqueueTurnRun(parts);
     }
   }, [
