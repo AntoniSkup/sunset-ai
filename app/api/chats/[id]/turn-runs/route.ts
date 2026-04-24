@@ -10,11 +10,8 @@ import {
   getLatestChatStreamEvent,
   getChatTurnRunByIdempotencyKey,
   getRunningChatTurnRun,
-  generateChatName,
-  updateChatByPublicId,
   getUser,
 } from "@/lib/db/queries";
-import { publishStreamEvents } from "@/lib/chat/stream-bus";
 import { diffMs, logChatStreamDiagnostic } from "@/lib/chat/stream-diagnostics";
 import { triggerChatTurnTask } from "@/lib/chat/trigger-chat-turn-task";
 import { createTriggerRealtimeSessionForRun } from "@/lib/chat/trigger-realtime-auth";
@@ -153,17 +150,6 @@ export async function POST(
           parts: persistedParts,
         })
       );
-      if (!chat.title && userText.trim()) {
-        const title = await measure("generateTitleMs", () =>
-          generateChatName(userText.trim(), {
-            userId: user.id,
-            chatId: chatPublicId,
-          })
-        );
-        await measure("persistTitleMs", () =>
-          updateChatByPublicId(chatPublicId, user.id, { title })
-        );
-      }
     }
   }
 
@@ -187,22 +173,7 @@ export async function POST(
     createdToNowMs: diffMs(Date.now(), run.createdAt),
   });
 
-  await measure("publishEnqueuedMs", () =>
-    publishStreamEvents({
-      chatId: chat.id,
-      runId: run.id,
-      events: [
-        {
-          eventType: "run_enqueued",
-          payload: {
-            runId: run.id,
-            sequence: run.sequence,
-            status: run.status,
-          },
-        },
-      ],
-    })
-  );
+  timings.publishEnqueuedMs = 0;
 
   // Trigger processing if there isn't already an active run for this chat.
   const processingEnabled = process.env.ENABLE_TRIGGER_CHAT_QUEUE === "1";

@@ -388,6 +388,7 @@ function ChatInner({
   const reconnectStreamRef = useRef<(() => void) | null>(null);
   const drainTriggerStreamRef = useRef<(() => void) | null>(null);
   const triggerStreamPartsRef = useRef<ChatTurnRealtimeStreamPart[]>([]);
+  const lastLoggedTriggerPartsCountRef = useRef(0);
   const triggerRealtimeRef = useRef<TriggerRealtimeSession | null>(null);
   const activeTransportRef = useRef<StreamTransport | null>(null);
   const activeTurnTimelineRef = useRef<{
@@ -420,6 +421,9 @@ function ChatInner({
   }, [chatId]);
   useEffect(() => {
     triggerRealtimeRef.current = triggerRealtime;
+    if (!triggerRealtime) {
+      lastLoggedTriggerPartsCountRef.current = 0;
+    }
   }, [triggerRealtime]);
   const loadMessages = useCallback(async () => {
     if (!chatId) return;
@@ -462,7 +466,8 @@ function ChatInner({
   }, []);
   const onTriggerRealtimeParts = useCallback(
     (parts: ChatTurnRealtimeStreamPart[]) => {
-      if (parts.length > 0) {
+      const previousCount = lastLoggedTriggerPartsCountRef.current;
+      if (parts.length > 0 && previousCount === 0) {
         const firstPart = parts[0] as unknown;
         pushStreamDebug({
           eventType: "trigger_realtime_first_part",
@@ -470,12 +475,17 @@ function ChatInner({
         });
       }
       triggerStreamPartsRef.current = parts;
-      if (parts.length > 0) {
+      if (
+        parts.length > 0 &&
+        parts.length !== previousCount &&
+        (parts.length <= 3 || parts.length % 8 === 0)
+      ) {
         pushStreamDebug({
           eventType: "trigger_realtime_parts",
           note: `count=${parts.length}`,
         });
       }
+      lastLoggedTriggerPartsCountRef.current = parts.length;
       if (drainTriggerStreamRef.current) {
         drainTriggerStreamRef.current();
       }
@@ -1154,6 +1164,8 @@ function ChatInner({
     ) {
       activeTransportRef.current = "trigger";
       if (eventSourceRef.current) {
+        eventSourceRef.current.onerror = null;
+        eventSourceRef.current.onopen = null;
         eventSourceRef.current.close();
         eventSourceRef.current = null;
       }
@@ -1170,7 +1182,7 @@ function ChatInner({
     }
 
     if (
-      statusRef.current !== "ready" &&
+      status !== "ready" &&
       !eventSourceRef.current &&
       reconnectStreamRef.current
     ) {
@@ -1181,7 +1193,7 @@ function ChatInner({
       });
       reconnectStreamRef.current();
     }
-  }, [chatId, pushStreamDebug, triggerRealtime]);
+  }, [chatId, pushStreamDebug, status, triggerRealtime]);
 
   useEffect(() => {
     if (!chatId) return;
@@ -2229,8 +2241,13 @@ function ChatInner({
           note: `runId=${triggerRealtimeRef.current?.runId}`,
         });
         drainTriggerStream();
-      } else {
+      } else if (statusRef.current !== "ready" || activeTurnRunIdRef.current) {
         connect(lastEventIdRef.current);
+      } else {
+        pushStreamDebug({
+          eventType: "sse_idle_skipped",
+          note: "No active run; skipping idle SSE connection",
+        });
       }
     };
 

@@ -246,6 +246,15 @@ async function publishEvents(
     return published;
   }
 
+  const pipeline = (redis as any).pipeline?.();
+  const queuedEvalCalls: Array<{
+    dbId: number;
+    logicalEventId: number;
+    eventType: string;
+    payload: Record<string, unknown>;
+    createdAt: string;
+  }> = [];
+
   for (const event of params.events) {
     const dbId = Number(event.dbId);
     const logicalEventId = Number(event.logicalEventId);
@@ -270,29 +279,60 @@ async function publishEvents(
       payload: event.payload ?? {},
       createdAt,
     } satisfies StreamEventEnvelope);
-    await redis.eval(
-      PUBLISH_EVENT_LUA,
-      [streamKey, streamIndexKey, streamPayloadKey],
-      [
-        String(dbId),
-        String(logicalEventId),
-        String(params.chatId),
-        params.runId,
-        event.eventType,
-        JSON.stringify(event.payload ?? {}),
-        createdAt,
-        serializedEnvelope,
-      ]
-    );
-    published.push({
-      dbId,
-      logicalEventId,
-      chatId: params.chatId,
-      runId: params.runId,
-      eventType: event.eventType,
-      payload: event.payload ?? {},
+    const args = [
+      String(dbId),
+      String(logicalEventId),
+      String(params.chatId),
+      params.runId,
+      event.eventType,
+      JSON.stringify(event.payload ?? {}),
       createdAt,
-    });
+      serializedEnvelope,
+    ];
+    if (pipeline) {
+      pipeline.eval(
+        PUBLISH_EVENT_LUA,
+        [streamKey, streamIndexKey, streamPayloadKey],
+        args
+      );
+      queuedEvalCalls.push({
+        dbId,
+        logicalEventId,
+        eventType: event.eventType,
+        payload: event.payload ?? {},
+        createdAt,
+      });
+    } else {
+      await redis.eval(
+        PUBLISH_EVENT_LUA,
+        [streamKey, streamIndexKey, streamPayloadKey],
+        args
+      );
+      published.push({
+        dbId,
+        logicalEventId,
+        chatId: params.chatId,
+        runId: params.runId,
+        eventType: event.eventType,
+        payload: event.payload ?? {},
+        createdAt,
+      });
+    }
+  }
+
+  if (pipeline && queuedEvalCalls.length > 0) {
+    await pipeline.exec();
+    for (const event of queuedEvalCalls) {
+      published.push({
+        dbId: event.dbId,
+        logicalEventId: event.logicalEventId,
+        chatId: params.chatId,
+        runId: params.runId,
+        eventType: event.eventType,
+        payload: event.payload,
+        createdAt: event.createdAt,
+      });
+    }
   }
 
   return published;

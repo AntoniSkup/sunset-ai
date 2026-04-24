@@ -164,6 +164,38 @@ export const runChatTurnTask = task({
           executionTimings[label] = Date.now() - startedAt;
         }
       };
+      let firstPublishedEventAtMs: number | null = null;
+      let firstTextDeltaAtMs: number | null = null;
+      const publishedRunStartedEvents = await publishStreamEvents({
+        chatId: claimed.chatId,
+        runId: claimed.id,
+        events: [
+          {
+            eventType: "run_started",
+            payload: {
+              chatId: chatPublicId,
+              turnRunId: claimed.id,
+            },
+          },
+        ],
+      });
+      firstPublishedEventAtMs = Date.now();
+      logChatStreamDiagnostic("Trigger published first turn events batch", {
+        triggerRunId: String(ctx.run.id),
+        chatTurnRunId: claimed.id,
+        chatId: claimed.chatId,
+        eventTypes: publishedRunStartedEvents.map((event) => event.eventType),
+        elapsedMs: firstPublishedEventAtMs - executionStartedAt,
+      });
+      for (const event of publishedRunStartedEvents) {
+        await chatTurnEventsStream.append(serializeRealtimeEvent(event));
+      }
+      await applyStreamEventsToChatTurnRunLiveState({
+        runId: claimed.id,
+        chatId: claimed.chatId,
+        userId: claimed.userId,
+        events: publishedRunStartedEvents,
+      });
       const [user, chat] = await Promise.all([
         measure("userLookupMs", () => getUserById(claimed.userId)),
         measure("chatLookupMs", () => getChatByPublicId(chatPublicId, claimed.userId)),
@@ -183,46 +215,36 @@ export const runChatTurnTask = task({
         taskDispatchMs: Date.now() - executionStartedAt,
       });
 
-      let firstPublishedEventAtMs: number | null = null;
-      let firstTextDeltaAtMs: number | null = null;
-
       await measure("executeChatTurnMs", () =>
         executeChatTurn({
-        user,
-        chat,
-        chatPublicId,
-        messages: messages as Array<Omit<UIMessage, "id">>,
-        turnRunId: claimed.id,
-        persistIncomingUserMessage: false,
-        onPublishedTurnEvents: async (events) => {
-          if (firstPublishedEventAtMs == null && events.length > 0) {
-            firstPublishedEventAtMs = Date.now();
-            logChatStreamDiagnostic("Trigger published first turn events batch", {
-              triggerRunId: String(ctx.run.id),
-              chatTurnRunId: claimed.id,
-              chatId: claimed.chatId,
-              eventTypes: events.map((event) => event.eventType),
-              elapsedMs: firstPublishedEventAtMs - executionStartedAt,
-            });
-          }
-          if (firstTextDeltaAtMs == null) {
-            const firstTextDelta = events.find((event) => event.eventType === "text_delta");
-            if (firstTextDelta) {
-              firstTextDeltaAtMs = Date.now();
-              logChatStreamDiagnostic("Trigger published first text delta batch", {
-                triggerRunId: String(ctx.run.id),
-                chatTurnRunId: claimed.id,
-                chatId: claimed.chatId,
-                logicalEventId: firstTextDelta.logicalEventId,
-                elapsedMs: firstTextDeltaAtMs - executionStartedAt,
-              });
+          user,
+          chat,
+          chatPublicId,
+          messages: messages as Array<Omit<UIMessage, "id">>,
+          turnRunId: claimed.id,
+          persistIncomingUserMessage: false,
+          emitRunStarted: false,
+          onPublishedTurnEvents: async (events) => {
+            if (firstTextDeltaAtMs == null) {
+              const firstTextDelta = events.find(
+                (event) => event.eventType === "text_delta"
+              );
+              if (firstTextDelta) {
+                firstTextDeltaAtMs = Date.now();
+                logChatStreamDiagnostic("Trigger published first text delta batch", {
+                  triggerRunId: String(ctx.run.id),
+                  chatTurnRunId: claimed.id,
+                  chatId: claimed.chatId,
+                  logicalEventId: firstTextDelta.logicalEventId,
+                  elapsedMs: firstTextDeltaAtMs - executionStartedAt,
+                });
+              }
             }
-          }
-          for (const event of events) {
-            await chatTurnEventsStream.append(serializeRealtimeEvent(event));
-          }
-        },
-      })
+            for (const event of events) {
+              await chatTurnEventsStream.append(serializeRealtimeEvent(event));
+            }
+          },
+        })
       );
 
       logChatStreamDiagnostic("Trigger direct chat execution completed", {

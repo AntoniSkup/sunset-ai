@@ -63,10 +63,10 @@ const BUILDER_TOOLS = new Set([
   "resolve_image_slots",
   "validate_completeness",
 ]);
-const TEXT_DELTA_FLUSH_MS = 60;
-const TEXT_DELTA_FLUSH_CHARS = 32;
-const TURN_EVENT_FLUSH_MS = 60;
-const TURN_EVENT_BATCH_SIZE = 24;
+const TEXT_DELTA_FLUSH_MS = 40;
+const TEXT_DELTA_FLUSH_CHARS = 24;
+const TURN_EVENT_FLUSH_MS = 32;
+const TURN_EVENT_BATCH_SIZE = 32;
 const MAX_CHAT_STEPS_PER_TURN = 20;
 
 function normalizeErrorMessage(
@@ -257,6 +257,7 @@ export type CreateChatTurnStreamParams = {
   messages: Array<Omit<UIMessage, "id">>;
   turnRunId?: string;
   persistIncomingUserMessage?: boolean;
+  emitRunStarted?: boolean;
   onPublishedTurnEvents?: (events: StreamEventEnvelope[]) => Promise<void> | void;
 };
 
@@ -267,6 +268,7 @@ export async function createChatTurnStream({
   messages,
   turnRunId,
   persistIncomingUserMessage = false,
+  emitRunStarted = true,
   onPublishedTurnEvents,
 }: CreateChatTurnStreamParams) {
   const streamStartedAt = Date.now();
@@ -384,7 +386,7 @@ export async function createChatTurnStream({
     }
   };
 
-  if (turnRunId) {
+  if (turnRunId && emitRunStarted) {
     await emitTurnEvent(
       "run_started",
       {
@@ -395,28 +397,34 @@ export async function createChatTurnStream({
     );
   }
 
-  const account = await measure("accountLookupMs", () =>
-    getOrCreateAccountForUser(user.id)
-  );
-  await measure("ensureDailyCreditsMs", () => ensureDailyCreditsForAccount(account.id));
+  let billingAccountId: number | null = null;
   const turnBillingIdempotencyKey =
     typeof turnRunId === "string" && turnRunId.trim()
       ? `chat-turn-bill-${turnRunId.trim()}`
       : `chat-turn-bill-${chatPublicId}-${user.id}-${messages.length}`;
 
-  const subscriptionForGate = await measure("subscriptionLookupMs", () =>
-    getSubscriptionByAccountId(account.id)
-  );
-  const { balance: balanceForGate } = await measure("creditsBreakdownMs", () =>
-    getCreditsBreakdown(account.id, subscriptionForGate)
-  );
-  const minCreditsToStartTurn = await measure("creditsCostLookupMs", () =>
-    getCreditsCostForAction("chat_message", subscriptionForGate?.planId ?? null)
-  );
-  if (balanceForGate < minCreditsToStartTurn) {
-    throw new Error(
-      "Insufficient credits. Please upgrade your plan or buy more credits."
+  if (!turnRunId) {
+    const account = await measure("accountLookupMs", () =>
+      getOrCreateAccountForUser(user.id)
     );
+    billingAccountId = account.id;
+    await measure("ensureDailyCreditsMs", () =>
+      ensureDailyCreditsForAccount(account.id)
+    );
+    const subscriptionForGate = await measure("subscriptionLookupMs", () =>
+      getSubscriptionByAccountId(account.id)
+    );
+    const { balance: balanceForGate } = await measure("creditsBreakdownMs", () =>
+      getCreditsBreakdown(account.id, subscriptionForGate)
+    );
+    const minCreditsToStartTurn = await measure("creditsCostLookupMs", () =>
+      getCreditsCostForAction("chat_message", subscriptionForGate?.planId ?? null)
+    );
+    if (balanceForGate < minCreditsToStartTurn) {
+      throw new Error(
+        "Insufficient credits. Please upgrade your plan or buy more credits."
+      );
+    }
   }
 
   const lastIncomingMessage = messages[messages.length - 1] as any;
@@ -436,11 +444,17 @@ export async function createChatTurnStream({
       });
 
       if (!chat.title && userText.trim()) {
-        const title = await generateChatName(userText.trim(), {
-          userId: user.id,
-          chatId: chatPublicId,
-        });
-        await updateChatByPublicId(chatPublicId, user.id, { title });
+        void (async () => {
+          try {
+            const title = await generateChatName(userText.trim(), {
+              userId: user.id,
+              chatId: chatPublicId,
+            });
+            await updateChatByPublicId(chatPublicId, user.id, { title });
+          } catch (error) {
+            console.error("Failed to persist generated chat title:", error);
+          }
+        })();
       }
     }
   }
@@ -878,6 +892,17 @@ export async function createChatTurnStream({
           console.error("Failed to persist assistant message:", e);
         }
       }
+      if (!chat.title && lastUserText.trim()) {
+        try {
+          const title = await generateChatName(lastUserText.trim(), {
+            userId: user.id,
+            chatId: chatPublicId,
+          });
+          await updateChatByPublicId(chatPublicId, user.id, { title });
+        } catch (error) {
+          console.error("Failed to generate chat title after completion:", error);
+        }
+      }
       if (lastSuccessfulRevision) {
         await emitTurnEvent("preview_update", {
           chatId: lastSuccessfulRevision.chatId,
@@ -886,8 +911,15 @@ export async function createChatTurnStream({
         });
       }
       try {
+        if (billingAccountId == null) {
+          billingAccountId = (
+            await measure("billingAccountLookupMs", () =>
+              getOrCreateAccountForUser(user.id)
+            )
+          ).id;
+        }
         await finalizeSuccessfulChatTurnBilling({
-          accountId: account.id,
+          accountId: billingAccountId,
           userId: user.id,
           observedTiers: billableTiersThisTurn,
           idempotencyKey: turnBillingIdempotencyKey,
