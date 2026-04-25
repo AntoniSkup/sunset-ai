@@ -1,134 +1,487 @@
-import { Button } from "@/components/ui/button";
+"use client";
+
+import { type FormEvent, useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import useSWR from "swr";
+import TextareaAutosize from "react-textarea-autosize";
+import { motion, useReducedMotion, type Variants } from "motion/react";
 import {
+  ArrowPathIcon,
   ArrowRightIcon,
-  CreditCardIcon,
-  CircleStackIcon,
+  BoltIcon,
+  ChatBubbleLeftRightIcon,
+  PaintBrushIcon,
+  SparklesIcon,
 } from "@heroicons/react/24/outline";
-import { Terminal } from "./terminal";
+
+import { Button } from "@/components/ui/button";
+import { BorderBeam } from "@/components/ui/border-beam";
+import TypingText from "@/components/ui/typewriter";
+import { SunsetLogoMenu } from "@/components/nav/sunset-logo-menu";
+import sunsetLogoTree from "@/components/icons/sunset_logo_tree.png";
+import type { User } from "@/lib/db/schema";
+
+export const STARTER_PROMPT_KEY = "landing-starter-prompt";
+
+const SUGGESTIONS: { label: string; prompt: string }[] = [
+  {
+    label: "Coffee shop",
+    prompt:
+      "Make a website for my coffee shop with a hero, menu highlights, opening hours, and a map.",
+  },
+  {
+    label: "Freelance portfolio",
+    prompt:
+      "Make a sleek portfolio site for my freelance design work with a project gallery and a contact form.",
+  },
+  {
+    label: "SaaS landing",
+    prompt:
+      "Make a modern SaaS landing page with hero, feature grid, pricing tiers, and an FAQ.",
+  },
+  {
+    label: "Local restaurant",
+    prompt:
+      "Make a website for my restaurant with the menu, opening hours, photo gallery, and reservations.",
+  },
+  {
+    label: "Wedding photographer",
+    prompt:
+      "Make a romantic portfolio for my wedding photography with a gallery and inquiry form.",
+  },
+];
+
+const HOW_IT_WORKS = [
+  {
+    icon: ChatBubbleLeftRightIcon,
+    title: "Describe it",
+    desc: "Tell Sunset what you want — your business, the vibe, the sections you need.",
+  },
+  {
+    icon: PaintBrushIcon,
+    title: "We design it",
+    desc: "Sunset ships a beautiful, on-brand site in seconds, ready to refine.",
+  },
+  {
+    icon: BoltIcon,
+    title: "You ship it",
+    desc: "Iterate by chat, drop in your assets, and publish when you're ready.",
+  },
+];
+
+const fetcher = (url: string) => fetch(url).then((res) => res.json());
+
+const heroContainer: Variants = {
+  hidden: {},
+  show: {
+    transition: { staggerChildren: 0.07, delayChildren: 0.05 },
+  },
+};
+
+const heroItem: Variants = {
+  hidden: { opacity: 0, y: 14 },
+  show: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.5, ease: [0.22, 1, 0.36, 1] },
+  },
+};
 
 export default function HomePage() {
+  const router = useRouter();
+  const prefersReducedMotion = useReducedMotion();
+  const [input, setInput] = useState("");
+  const [isFocused, setIsFocused] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const { data: user } = useSWR<User>("/api/user", fetcher);
+  const isAuthed = !!user?.id;
+
+  const [isScrolled, setIsScrolled] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setIsScrolled(window.scrollY > 8);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  const submitPrompt = (raw: string) => {
+    const message = raw.trim();
+    if (!message || isLoading) return;
+    setIsLoading(true);
+    try {
+      window.localStorage.setItem(STARTER_PROMPT_KEY, message);
+    } catch {
+      // localStorage may be unavailable; the destination still works.
+    }
+    router.push(isAuthed ? "/start" : "/sign-up?redirect=/start");
+  };
+
+  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    submitPrompt(input);
+  };
+
+  const handleSuggestion = (prompt: string) => {
+    setInput(prompt);
+    requestAnimationFrame(() => textareaRef.current?.focus());
+  };
+
+  const showPlaceholder = !input.trim() && !isFocused;
+
+  useEffect(() => {
+    if (!showPlaceholder || isLoading) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as Node;
+      if (textareaRef.current?.contains(target)) return;
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      textareaRef.current?.focus();
+      if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        setInput(e.key);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [showPlaceholder, isLoading]);
+
   return (
-    <main>
-      <section className="py-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="lg:grid lg:grid-cols-12 lg:gap-8">
-            <div className="sm:text-center md:max-w-2xl md:mx-auto lg:col-span-6 lg:text-left">
-              <h1 className="text-4xl font-bold text-gray-900 tracking-tight sm:text-5xl md:text-6xl">
-                Build Your SaaS
-                <span className="block text-orange-500">Faster Than Ever</span>
-              </h1>
-              <p className="mt-3 text-base text-gray-500 sm:mt-5 sm:text-xl lg:text-lg xl:text-xl">
-                Launch your SaaS product in record time with our powerful,
-                ready-to-use template. Packed with modern technologies and
-                essential integrations.
-              </p>
-              <div className="mt-8 sm:max-w-lg sm:mx-auto sm:text-center lg:text-left lg:mx-0">
-                <a
-                  href="https://vercel.com/templates/next.js/next-js-saas-starter"
-                  target="_blank"
-                >
-                  <Button
-                    size="lg"
-                    variant="outline"
-                    className="text-lg rounded-full"
-                  >
-                    Deploy your own
-                    <ArrowRightIcon className="ml-2 h-5 w-5" />
-                  </Button>
-                </a>
-              </div>
-            </div>
-            <div className="mt-12 relative sm:max-w-lg sm:mx-auto lg:mt-0 lg:max-w-none lg:mx-0 lg:col-span-6 lg:flex lg:items-center">
-              <Terminal />
-            </div>
-          </div>
-        </div>
-      </section>
+    <div className="relative min-h-full bg-white">
+      <BackgroundDecor />
 
-      <section className="py-16 bg-white w-full">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="lg:grid lg:grid-cols-3 lg:gap-8">
-            <div>
-              <div className="flex items-center justify-center h-12 w-12 rounded-md bg-orange-500 text-white">
-                <svg viewBox="0 0 24 24" className="h-6 w-6">
-                  <path
-                    fill="currentColor"
-                    d="M14.23 12.004a2.236 2.236 0 0 1-2.235 2.236 2.236 2.236 0 0 1-2.236-2.236 2.236 2.236 0 0 1 2.235-2.236 2.236 2.236 0 0 1 2.236 2.236zm2.648-10.69c-1.346 0-3.107.96-4.888 2.622-1.78-1.653-3.542-2.602-4.887-2.602-.41 0-.783.093-1.106.278-1.375.793-1.683 3.264-.973 6.365C1.98 8.917 0 10.42 0 12.004c0 1.59 1.99 3.097 5.043 4.03-.704 3.113-.39 5.588.988 6.38.32.187.69.275 1.102.275 1.345 0 3.107-.96 4.888-2.624 1.78 1.654 3.542 2.603 4.887 2.603.41 0 .783-.09 1.106-.275 1.374-.792 1.683-3.263.973-6.365C22.02 15.096 24 13.59 24 12.004c0-1.59-1.99-3.097-5.043-4.032.704-3.11.39-5.587-.988-6.38-.318-.184-.688-.277-1.092-.278zm-.005 1.09v.006c.225 0 .406.044.558.127.666.382.955 1.835.73 3.704-.054.46-.142.945-.25 1.44-.96-.236-2.006-.417-3.107-.534-.66-.905-1.345-1.727-2.035-2.447 1.592-1.48 3.087-2.292 4.105-2.295zm-9.77.02c1.012 0 2.514.808 4.11 2.28-.686.72-1.37 1.537-2.02 2.442-1.107.117-2.154.298-3.113.538-.112-.49-.195-.964-.254-1.42-.23-1.868.054-3.32.714-3.707.19-.09.4-.127.563-.132zm4.882 3.05c.455.468.91.992 1.36 1.564-.44-.02-.89-.034-1.345-.034-.46 0-.915.01-1.36.034.44-.572.895-1.096 1.345-1.565zM12 8.1c.74 0 1.477.034 2.202.093.406.582.802 1.203 1.183 1.86.372.64.71 1.29 1.018 1.946-.308.655-.646 1.31-1.013 1.95-.38.66-.773 1.288-1.18 1.87-.728.063-1.466.098-2.21.098-.74 0-1.477-.035-2.202-.093-.406-.582-.802-1.204-1.183-1.86-.372-.64-.71-1.29-1.018-1.946.303-.657.646-1.313 1.013-1.954.38-.66.773-1.286 1.18-1.868.728-.064 1.466-.098 2.21-.098zm-3.635.254c-.24.377-.48.763-.704 1.16-.225.39-.435.782-.635 1.174-.265-.656-.49-1.31-.676-1.947.64-.15 1.315-.283 2.015-.386zm7.26 0c.695.103 1.365.23 2.006.387-.18.632-.405 1.282-.66 1.933-.2-.39-.41-.783-.64-1.174-.225-.392-.465-.774-.705-1.146zm3.063.675c.484.15.944.317 1.375.498 1.732.74 2.852 1.708 2.852 2.476-.005.768-1.125 1.74-2.857 2.475-.42.18-.88.342-1.355.493-.28-.958-.646-1.956-1.1-2.98.45-1.017.81-2.01 1.085-2.964zm-13.395.004c.278.96.645 1.957 1.1 2.98-.45 1.017-.812 2.01-1.086 2.964-.484-.15-.944-.318-1.37-.5-1.732-.737-2.852-1.706-2.852-2.474 0-.768 1.12-1.742 2.852-2.476.42-.18.88-.342 1.356-.494zm11.678 4.28c.265.657.49 1.312.676 1.948-.64.157-1.316.29-2.016.39.24-.375.48-.762.705-1.158.225-.39.435-.788.636-1.18zm-9.945.02c.2.392.41.783.64 1.175.23.39.465.772.705 1.143-.695-.102-1.365-.23-2.006-.386.18-.63.406-1.282.66-1.933zM17.92 16.32c.112.493.2.968.254 1.423.23 1.868-.054 3.32-.714 3.708-.147.09-.338.128-.563.128-1.012 0-2.514-.807-4.11-2.28.686-.72 1.37-1.536 2.02-2.44 1.107-.118 2.154-.3 3.113-.54zm-11.83.01c.96.234 2.006.415 3.107.532.66.905 1.345 1.727 2.035 2.446-1.595 1.483-3.092 2.295-4.11 2.295-.22-.005-.406-.05-.553-.132-.666-.38-.955-1.834-.73-3.703.054-.46.142-.944.25-1.438zm4.56.64c.44.02.89.034 1.345.034.46 0 .915-.01 1.36-.034-.44.572-.895 1.095-1.345 1.565-.455-.47-.91-.993-1.36-1.565z"
-                  />
-                </svg>
-              </div>
-              <div className="mt-5">
-                <h2 className="text-lg font-medium text-gray-900">
-                  Next.js and React
-                </h2>
-                <p className="mt-2 text-base text-gray-500">
-                  Leverage the power of modern web technologies for optimal
-                  performance and developer experience.
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-10 lg:mt-0">
-              <div className="flex items-center justify-center h-12 w-12 rounded-md bg-orange-500 text-white">
-                <CircleStackIcon className="h-6 w-6" />
-              </div>
-              <div className="mt-5">
-                <h2 className="text-lg font-medium text-gray-900">
-                  Postgres and Drizzle ORM
-                </h2>
-                <p className="mt-2 text-base text-gray-500">
-                  Robust database solution with an intuitive ORM for efficient
-                  data management and scalability.
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-10 lg:mt-0">
-              <div className="flex items-center justify-center h-12 w-12 rounded-md bg-orange-500 text-white">
-                <CreditCardIcon className="h-6 w-6" />
-              </div>
-              <div className="mt-5">
-                <h2 className="text-lg font-medium text-gray-900">
-                  Stripe Integration
-                </h2>
-                <p className="mt-2 text-base text-gray-500">
-                  Seamless payment processing and subscription management with
-                  industry-leading Stripe integration.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="py-16 bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="lg:grid lg:grid-cols-2 lg:gap-8 lg:items-center">
-            <div>
-              <h2 className="text-3xl font-bold text-gray-900 sm:text-4xl">
-                Ready to launch your SaaS?
-              </h2>
-              <p className="mt-3 max-w-3xl text-lg text-gray-500">
-                Our template provides everything you need to get your SaaS up
-                and running quickly. Don't waste time on boilerplate - focus on
-                what makes your product unique.
-              </p>
-            </div>
-            <div className="mt-8 lg:mt-0 flex justify-center lg:justify-end">
-              <a href="https://github.com/nextjs/saas-starter" target="_blank">
+      <header
+        className={`sticky top-0 z-30 transition-all duration-500 ease-out ${
+          isScrolled
+            ? "border-b border-gray-200/60 bg-white/65 backdrop-blur-md backdrop-saturate-150 supports-[backdrop-filter]:bg-white/55"
+            : "border-b border-transparent bg-transparent backdrop-blur-0"
+        }`}
+      >
+        <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
+          <SunsetLogoMenu />
+          <nav className="flex items-center gap-2">
+            <Link
+              href="/pricing"
+              className="hidden sm:inline-flex h-9 items-center rounded-full px-4 text-sm font-medium text-gray-600 transition-colors hover:text-gray-900"
+            >
+              Pricing
+            </Link>
+            {isAuthed ? (
+              <Button
+                asChild
+                className="h-9 rounded-full bg-gray-900 px-4 text-sm font-medium text-white hover:bg-gray-800"
+              >
+                <Link href="/start">
+                  Open app
+                  <ArrowRightIcon className="ml-1 h-4 w-4" />
+                </Link>
+              </Button>
+            ) : (
+              <>
                 <Button
-                  size="lg"
-                  variant="outline"
-                  className="text-lg rounded-full"
+                  asChild
+                  variant="ghost"
+                  className="hidden sm:inline-flex h-9 rounded-full px-4 text-sm font-medium text-gray-700 hover:bg-white"
                 >
-                  View the code
-                  <ArrowRightIcon className="ml-3 h-6 w-6" />
+                  <Link href="/sign-in">Log in</Link>
                 </Button>
-              </a>
+                <Button
+                  asChild
+                  className="h-9 rounded-full bg-gray-900 px-4 text-sm font-medium text-white hover:bg-gray-800"
+                >
+                  <Link href="/sign-up">
+                    Get started
+                    <ArrowRightIcon className="ml-1 h-4 w-4" />
+                  </Link>
+                </Button>
+              </>
+            )}
+          </nav>
+        </div>
+      </header>
+
+      <div className="relative z-10 mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
+        <section className="relative pt-16 pb-20 sm:pt-24 md:pt-28">
+          <motion.div
+            variants={heroContainer}
+            initial="hidden"
+            animate="show"
+            className="mx-auto flex w-full max-w-3xl flex-col items-center text-center [transform:translateZ(0)] [will-change:transform,opacity]"
+          >
+            <motion.div
+              variants={heroItem}
+              className="mb-6 inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white/70 px-3 py-1 text-xs font-medium text-gray-600 backdrop-blur"
+            >
+              <SparklesIcon className="h-3.5 w-3.5 text-gray-900" />
+              Build a website by chatting
+            </motion.div>
+
+            <div className="flex flex-col items-center gap-3">
+              <motion.img
+                variants={heroItem}
+                src={sunsetLogoTree.src}
+                alt="Sunset"
+                className="h-12 w-12 select-none drop-shadow-sm"
+                draggable={false}
+              />
+              <motion.h1
+                variants={heroItem}
+                className="text-balance text-4xl font-bold tracking-tight text-gray-900 sm:text-5xl md:text-6xl [transform:translateZ(0)]"
+              >
+                Your website,
+                <br className="hidden sm:block" />{" "}
+                <span className="bg-gradient-to-r from-[#ff6313] via-[#ff8a3d] to-[#ffb066] bg-clip-text text-transparent">
+                  one message away.
+                </span>
+              </motion.h1>
+              <motion.p
+                variants={heroItem}
+                className="mt-2 max-w-xl text-base text-gray-500 sm:text-lg"
+              >
+                Describe it. Sunset designs, builds, and ships it — beautifully,
+                in seconds.
+              </motion.p>
+            </div>
+
+            <motion.form
+              variants={heroItem}
+              onSubmit={handleSubmit}
+              className="mt-10 w-full"
+            >
+              <div className="relative overflow-hidden rounded-2xl border border-gray-400/80 bg-[#ffffffe9] px-5 py-4 shadow-[0_10px_40px_-12px_rgba(15,23,42,0.18)] transition-[box-shadow,border-color] focus-within:border-gray-900 sm:px-7 sm:py-5">
+                <div className="relative min-h-[4.5rem] text-left">
+                  {showPlaceholder && (
+                    <div
+                      className="pointer-events-none absolute inset-0 flex items-start pt-2 text-base leading-normal"
+                      aria-hidden
+                    >
+                      <span className="text-base text-gray-400">
+                        Make a website&nbsp;
+                        <TypingText
+                          text={[
+                            "for my coffee shop.",
+                            "for my freelance portfolio.",
+                            "for my SaaS launch.",
+                            "for my photography studio.",
+                          ]}
+                          pauseDuration={2500}
+                          typingSpeed={32}
+                        />
+                      </span>
+                    </div>
+                  )}
+                  <TextareaAutosize
+                    ref={textareaRef}
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onFocus={() => setIsFocused(true)}
+                    onBlur={() => setIsFocused(false)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        if (!isLoading && input.trim()) {
+                          (
+                            e.target as HTMLTextAreaElement
+                          ).form?.requestSubmit();
+                        }
+                      }
+                    }}
+                    disabled={isLoading}
+                    minRows={3}
+                    maxRows={8}
+                    placeholder={
+                      isFocused ? "Make a website for my business" : ""
+                    }
+                    className="relative w-full resize-none bg-transparent pt-2 text-base leading-normal text-gray-900 placeholder:text-gray-400 focus:outline-none disabled:opacity-50"
+                  />
+                </div>
+
+                <div className="mt-2 flex items-center justify-between">
+                  <span className="hidden text-xs text-gray-400 sm:inline">
+                    Press{" "}
+                    <kbd className="rounded border border-gray-200 bg-white px-1.5 py-0.5 font-mono text-[10px] text-gray-500 shadow-sm">
+                      Enter
+                    </kbd>{" "}
+                    to start
+                  </span>
+                  <Button
+                    type="submit"
+                    disabled={isLoading || !input.trim()}
+                    className="ml-auto h-9 rounded-md bg-gray-900 px-5 text-sm text-white hover:bg-gray-800 disabled:bg-gray-200 disabled:text-gray-500"
+                    aria-label="Start building"
+                  >
+                    {isLoading ? (
+                      <ArrowPathIcon className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <span>START</span>
+                    )}
+                  </Button>
+                </div>
+
+                {!prefersReducedMotion && (
+                  <BorderBeam
+                    duration={22}
+                    size={240}
+                    className="from-transparent via-gray-900 to-transparent"
+                  />
+                )}
+              </div>
+
+              <motion.div
+                variants={heroItem}
+                className="mt-5 flex flex-wrap items-center justify-center gap-2"
+              >
+                {SUGGESTIONS.map((suggestion) => (
+                  <button
+                    key={suggestion.label}
+                    type="button"
+                    onClick={() => handleSuggestion(suggestion.prompt)}
+                    className="group inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white/80 px-3.5 py-1.5 text-xs font-medium text-gray-700 backdrop-blur transition-[color,border-color,transform] duration-150 hover:-translate-y-0.5 hover:border-gray-900 hover:text-gray-900 active:translate-y-0"
+                  >
+                    <SparklesIcon className="h-3 w-3 text-gray-400 transition-colors group-hover:text-[#ff6313]" />
+                    {suggestion.label}
+                  </button>
+                ))}
+              </motion.div>
+            </motion.form>
+          </motion.div>
+        </section>
+
+        <motion.section
+          variants={heroContainer}
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: true, margin: "-80px" }}
+          className="pb-20"
+        >
+          <div className="mb-10 text-center">
+            <motion.h2
+              variants={heroItem}
+              className="text-2xl font-semibold tracking-tight text-gray-900 sm:text-3xl"
+            >
+              Ship a site in three steps
+            </motion.h2>
+            <motion.p
+              variants={heroItem}
+              className="mt-2 text-sm text-gray-500 sm:text-base"
+            >
+              No templates. No drag-and-drop. Just a conversation.
+            </motion.p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            {HOW_IT_WORKS.map((step, i) => (
+              <motion.div
+                key={step.title}
+                variants={heroItem}
+                className="group relative overflow-hidden rounded-2xl border border-gray-200 bg-white/80 p-6 backdrop-blur transition-[transform,box-shadow] duration-200 hover:-translate-y-1 hover:shadow-[0_12px_40px_-16px_rgba(15,23,42,0.18)]"
+              >
+                <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-gray-900 text-white transition-transform duration-200 group-hover:scale-105">
+                  <step.icon className="h-5 w-5" />
+                </div>
+                <div className="mb-1 flex items-baseline gap-2">
+                  <span className="text-xs font-mono text-gray-400">
+                    0{i + 1}
+                  </span>
+                  <h3 className="text-base font-semibold text-gray-900">
+                    {step.title}
+                  </h3>
+                </div>
+                <p className="text-sm leading-relaxed text-gray-500">
+                  {step.desc}
+                </p>
+              </motion.div>
+            ))}
+          </div>
+        </motion.section>
+
+        <section className="pb-24">
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-80px" }}
+            transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+            className="relative overflow-hidden rounded-3xl border border-gray-900/90 bg-gray-900 px-6 py-12 text-white sm:px-12 sm:py-16"
+          >
+            <div className="absolute inset-0 -z-10 opacity-60 [background:radial-gradient(80%_120%_at_50%_0%,rgba(255,99,19,0.35),transparent_60%),radial-gradient(60%_120%_at_100%_100%,rgba(255,138,61,0.25),transparent_60%)]" />
+            <div className="relative flex flex-col items-start gap-6 sm:flex-row sm:items-center sm:justify-between">
+              <div className="max-w-xl">
+                <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+                  Ready to build something beautiful?
+                </h2>
+                <p className="mt-2 text-sm text-white/70 sm:text-base">
+                  Start with a sentence. Iterate by chat. Publish when it feels
+                  right.
+                </p>
+              </div>
+              <div className="flex w-full flex-wrap gap-3 sm:w-auto">
+                <Button
+                  type="button"
+                  onClick={() => {
+                    textareaRef.current?.focus();
+                    textareaRef.current?.scrollIntoView({
+                      behavior: "smooth",
+                      block: "center",
+                    });
+                  }}
+                  className="h-10 rounded-full bg-white px-5 text-sm font-medium text-gray-900 hover:bg-white/90"
+                >
+                  Try the chat
+                  <ArrowRightIcon className="ml-1 h-4 w-4" />
+                </Button>
+                <Button
+                  asChild
+                  variant="outline"
+                  className="h-10 rounded-full border-white/30 bg-transparent px-5 text-sm font-medium text-white hover:bg-white/10 hover:text-white"
+                >
+                  <Link href={isAuthed ? "/start" : "/sign-up"}>
+                    {isAuthed ? "Open app" : "Create account"}
+                  </Link>
+                </Button>
+              </div>
+            </div>
+          </motion.div>
+        </section>
+
+        <footer className="border-t border-gray-100 py-8 text-xs text-gray-400">
+          <div className="flex flex-col items-center justify-between gap-3 sm:flex-row">
+            <span>© {new Date().getFullYear()} Sunset.</span>
+            <div className="flex items-center gap-4">
+              <Link href="/pricing" className="hover:text-gray-700">
+                Pricing
+              </Link>
+              <Link href="/sign-in" className="hover:text-gray-700">
+                Log in
+              </Link>
+              <Link href="/sign-up" className="hover:text-gray-700">
+                Sign up
+              </Link>
             </div>
           </div>
-        </div>
-      </section>
-    </main>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
+function BackgroundDecor() {
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none absolute inset-0 -z-0 isolate overflow-hidden [contain:paint]"
+    >
+      <div className="absolute inset-0 [background:radial-gradient(60%_50%_at_50%_-10%,rgba(255,138,61,0.18),transparent_70%),radial-gradient(40%_30%_at_85%_15%,rgba(255,99,19,0.12),transparent_70%)]" />
+      <div
+        className="landing-orb-a absolute -top-40 left-1/2 h-[560px] w-[560px] rounded-full bg-[radial-gradient(closest-side,rgba(255,176,102,0.45),transparent)] opacity-90 [filter:blur(80px)] [transform:translate3d(-50%,0,0)] [will-change:transform]"
+        style={{ animation: "landing-orb-a 22s ease-in-out infinite" }}
+      />
+      <div
+        className="landing-orb-b absolute right-[-12%] top-2/3 h-80 w-80 rounded-full bg-[radial-gradient(closest-side,rgba(255,176,102,0.32),transparent)] opacity-80 [filter:blur(80px)] [transform:translate3d(0,0,0)] [will-change:transform]"
+        style={{ animation: "landing-orb-b 28s ease-in-out infinite" }}
+      />
+      <div className="absolute inset-0 [background-image:linear-gradient(to_bottom,transparent,white_85%)]" />
+    </div>
   );
 }

@@ -324,3 +324,35 @@
     transform: scale(1);
   }
 }
+
+@keyframes landing-orb-a {
+
+  0%,
+  100% {
+    transform: translate3d(-50%, 0, 0);
+  }
+
+  50% {
+    transform: translate3d(-48%, 14px, 0);
+  }
+}
+
+@keyframes landing-orb-b {
+
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+
+  50% {
+    transform: translate3d(-14px, -18px, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  .landing-orb-a,
+  .landing-orb-b {
+    animation: none !important;
+  }
+}

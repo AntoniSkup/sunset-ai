@@ -175,6 +175,20 @@ export default function StartPage() {
   }, [loadPage]);
 
   useEffect(() => {
+    try {
+      const STARTER_PROMPT_KEY = "landing-starter-prompt";
+      const stored = window.localStorage.getItem(STARTER_PROMPT_KEY);
+      if (stored && stored.trim()) {
+        setInput(stored);
+        window.localStorage.removeItem(STARTER_PROMPT_KEY);
+        requestAnimationFrame(() => textareaRef.current?.focus());
+      }
+    } catch {
+      // localStorage may be unavailable; ignore.
+    }
+  }, []);
+
+  useEffect(() => {
     if (loadingMore || nextCursor === undefined || nextCursor === null) return;
     const el = loadMoreRef.current;
     if (!el) return;
