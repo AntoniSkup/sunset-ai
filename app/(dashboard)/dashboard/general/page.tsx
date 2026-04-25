@@ -3,9 +3,15 @@
 import { useActionState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { ArrowPathIcon } from "@heroicons/react/24/outline";
+import { ArrowPathIcon, CheckIcon } from "@heroicons/react/24/outline";
 import { updateAccount } from "@/app/(login)/actions";
 import { User } from "@/lib/db/schema";
 import useSWR from "swr";
@@ -33,7 +39,7 @@ function AccountForm({
   return (
     <>
       <div>
-        <Label htmlFor="name" className="mb-2">
+        <Label htmlFor="name" className="mb-2 text-sm text-gray-700">
           Name
         </Label>
         <Input
@@ -42,10 +48,11 @@ function AccountForm({
           placeholder="Enter your name"
           defaultValue={state.name || nameValue}
           required
+          className="h-10 rounded-lg border-gray-200 bg-white/70"
         />
       </div>
       <div>
-        <Label htmlFor="email" className="mb-2">
+        <Label htmlFor="email" className="mb-2 text-sm text-gray-700">
           Email
         </Label>
         <Input
@@ -55,6 +62,7 @@ function AccountForm({
           placeholder="Enter your email"
           defaultValue={emailValue}
           required
+          className="h-10 rounded-lg border-gray-200 bg-white/70"
         />
       </div>
     </>
@@ -79,43 +87,58 @@ export default function GeneralPage() {
   );
 
   return (
-    <section className="flex-1 p-4 lg:p-8">
-      <h1 className="text-lg lg:text-2xl font-medium text-gray-900 mb-6">
-        General Settings
-      </h1>
+    <section className="flex-1 px-4 py-6 lg:px-8">
+      <div className="mx-auto w-full max-w-3xl">
+        <div className="mb-8">
+          <h1 className="text-2xl font-semibold tracking-tight text-gray-900 sm:text-3xl">
+            General settings
+          </h1>
+          <p className="mt-2 text-sm text-gray-500">
+            Update your account information and personal details.
+          </p>
+        </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Account Information</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form className="space-y-4" action={formAction}>
-            <Suspense fallback={<AccountForm state={state} />}>
-              <AccountFormWithData state={state} />
-            </Suspense>
-            {state.error && (
-              <p className="text-red-500 text-sm">{state.error}</p>
-            )}
-            {state.success && (
-              <p className="text-green-500 text-sm">{state.success}</p>
-            )}
-            <Button
-              type="submit"
-              className="bg-orange-500 hover:bg-orange-600 text-white"
-              disabled={isPending}
-            >
-              {isPending ? (
-                <>
-                  <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                "Save Changes"
+        <Card className="rounded-2xl border border-gray-200 bg-white/80 backdrop-blur shadow-[0_8px_30px_-12px_rgba(15,23,42,0.08)]">
+          <CardHeader>
+            <CardTitle className="text-base font-semibold tracking-tight text-gray-900">
+              Account information
+            </CardTitle>
+            <CardDescription>
+              This information is visible to your teammates.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form className="space-y-4" action={formAction}>
+              <Suspense fallback={<AccountForm state={state} />}>
+                <AccountFormWithData state={state} />
+              </Suspense>
+              {state.error && (
+                <p className="text-sm text-red-500">{state.error}</p>
               )}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+              {state.success && (
+                <p className="text-sm text-green-600">{state.success}</p>
+              )}
+              <Button
+                type="submit"
+                className="h-10 rounded-full bg-gray-900 px-5 text-sm font-medium text-white hover:bg-gray-800 disabled:bg-gray-200 disabled:text-gray-500"
+                disabled={isPending}
+              >
+                {isPending ? (
+                  <>
+                    <ArrowPathIcon className="h-4 w-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <CheckIcon className="h-4 w-4" />
+                    Save changes
+                  </>
+                )}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
     </section>
   );
 }
