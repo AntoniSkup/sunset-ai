@@ -97,11 +97,13 @@ export default function StartPage() {
   );
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const fileDragDepthRef = useRef(0);
   const [isFileDragActive, setIsFileDragActive] = useState(false);
   const attachmentUrlsRef = useRef<string[]>([]);
   const uploadToastTimerRef = useRef<number | null>(null);
+  const autoSubmitPendingRef = useRef(false);
   const router = useRouter();
   const setPendingMessage = usePendingMessageStore((s) => s.setPendingMessage);
 
@@ -181,12 +183,24 @@ export default function StartPage() {
       if (stored && stored.trim()) {
         setInput(stored);
         window.localStorage.removeItem(STARTER_PROMPT_KEY);
-        requestAnimationFrame(() => textareaRef.current?.focus());
+        autoSubmitPendingRef.current = true;
       }
     } catch {
       // localStorage may be unavailable; ignore.
     }
   }, []);
+
+  // After the starter prompt has been hydrated into state, kick off the
+  // exact same submit flow the user would have triggered manually. This
+  // gives them an end-to-end "type → sign up → start building" handoff
+  // without ever touching the form on /start.
+  useEffect(() => {
+    if (!autoSubmitPendingRef.current) return;
+    if (isLoading) return;
+    if (!input.trim() && attachments.length === 0) return;
+    autoSubmitPendingRef.current = false;
+    formRef.current?.requestSubmit();
+  }, [input, isLoading, attachments.length]);
 
   useEffect(() => {
     if (loadingMore || nextCursor === undefined || nextCursor === null) return;
@@ -511,7 +525,7 @@ export default function StartPage() {
             </motion.h1>
           </div>
 
-          <form onSubmit={handleSubmit} className="mt-8 w-full">
+          <form ref={formRef} onSubmit={handleSubmit} className="mt-8 w-full">
             <div
               className={`relative rounded-xl border bg-[#ffffffe9] border-gray-500 px-8 py-6 overflow-hidden shadow transition-[box-shadow,border-color] ${
                 isFileDragActive ? "border-gray-900 ring-2 ring-gray-900/15" : ""
