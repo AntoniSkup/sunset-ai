@@ -1,29 +1,51 @@
 const FRONTEND_AESTHETICS_GUIDANCE = `
 Frontend aesthetics:
-- Avoid generic, "on distribution" frontend outputs and the common "AI slop" aesthetic.
-- Make the UI feel distinctive, creative, and context-specific rather than like a cookie-cutter SaaS template.
-- Typography is a primary design tool: choose beautiful, interesting font combinations and avoid defaulting to Inter, Roboto, Arial, system fonts, or the same overused choices repeatedly. Keep reusable typography in landing/theme.tsx tokens, and name those tokens semantically (for example fontDisplay, fontBody, fontHeading, fontMono, fontAccent) rather than after a specific font family so later font changes usually require editing only landing/theme.tsx. Load Google Fonts globally via an idempotent helper in landing/theme.tsx (append <link rel="preconnect"> and <link rel="stylesheet"> to document.head), not inside section/page components.
-- Commit to a cohesive color story. Use CSS variables when defining theme values or repeated colors. Prefer strong dominant tones with sharp accents over timid, evenly distributed palettes.
-- Draw inspiration from IDE themes, editorial layouts, cultural aesthetics, music scenes, fashion, print design, and other unexpected references when appropriate.
-- Use motion deliberately: prioritize a few memorable animation beats like staggered entrances, reveal effects, scroll-triggered entrances, and tactile hover states. Default to Motion for React via 'motion/react' for primary animation work. Use CSS/Tailwind animation only as a fallback for tiny ambient loops or very simple effects that do not warrant Motion.
-- Build atmosphere with backgrounds: layer gradients, glows, subtle patterns, grid treatments, textures, or geometric effects instead of defaulting to a flat solid background.
-- Keep section background rhythm coherent. Avoid placing two major sections with strong gradient backgrounds directly back-to-back; alternate with a calmer surface treatment (solid/tinted/very subtle texture) to prevent hard visual seams.
-- Avoid overused AI-generated aesthetics such as purple gradients on white, predictable app-store SaaS layouts, and bland visual hierarchies.
-- Vary your choices across generations; do not keep reusing the same aesthetic defaults.
+- Avoid generic, "on distribution" frontend outputs and the common "AI slop" aesthetic. Output must feel intentionally art-directed and context-specific, never like a cookie-cutter SaaS template.
+
+- Pick a clear aesthetic direction and execute it with precision. Choose an extreme and let it dominate every decision: brutally minimal, maximalist editorial, retro-futuristic, organic/natural, luxury/refined, playful/toy-like, magazine/editorial, brutalist/raw, art-deco/geometric, soft/pastel, industrial/utilitarian, cinematic tech-noir, swiss grid, mid-century print, etc. Both bold maximalism and refined minimalism work — what fails is the half-committed "generic-modern" middle.
+
+- Differentiation is required. Every page or section must have one unforgettable move — a signature motif, type pairing, framing device, motion beat, or compositional decision that someone will actually remember. If everything is "tasteful" but nothing is memorable, it is AI slop.
+
+- Match implementation complexity to the chosen vision. Maximalist directions demand elaborate composition, layered effects, dense motion choreography, and richer code. Minimalist/refined directions demand restraint, ruthless spacing discipline, precise type sizing/leading, and meticulous detail. Elegance comes from executing the chosen vision well, not from intensity.
+
+- Typography is a primary design tool. Pair a distinctive display font with a refined body font (or commit fully to a single expressive family). Never default to Inter, Roboto, Arial, or system fonts, and do not converge on the same overused "safe and modern" picks every time (e.g. Space Grotesk, generic geometric sans). Keep reusable typography in landing/theme.tsx, named semantically (fontDisplay, fontBody, fontHeading, fontMono, fontAccent) so a font swap edits only theme.tsx. Load Google Fonts once globally via an idempotent helper in landing/theme.tsx (append <link rel="preconnect"> and <link rel="stylesheet"> to document.head), never inside section/page components.
+
+- Commit to a cohesive color story with strong dominance. Prefer one or two dominant tones plus sharp, deliberate accents over timid, evenly distributed palettes. Define theme values as semantic tokens / CSS variables in landing/theme.tsx and consume those tokens from sections instead of hardcoding hex/rgb/hsl literals.
+
+- Avoid the most overused AI-generated palettes: purple-on-white gradients, generic indigo/teal SaaS gradients, low-contrast pastel washes, and bland evenly-spaced neutrals. Vary palettes meaningfully across generations and pull from unexpected references (IDE themes, editorial covers, music scenes, fashion, print design, packaging, film stills).
+
+- Motion is a high-impact tool, not garnish. Concentrate energy on a few orchestrated beats — a well-staged page-load sequence with staggered reveals, scroll-triggered entrances, surprising hover states, tactile interactions on primary CTAs — instead of scattering ten weak micro-animations. Use 'motion/react' for primary animation work (entrances, staggers, scroll reveals, gesture/hover choreography). CSS/Tailwind animation is fallback-only for tiny ambient loops.
+
+- Spatial composition should not default to centered stacks of heading + paragraph + uniform cards. Use asymmetry, deliberate overlap, diagonal flow, layered framing, broken/offset grids, oversized type next to small detail elements, and either generous negative space OR controlled density — chosen by the aesthetic direction. Vary alignment and rhythm so the page feels authored, not assembled.
+
+- Backgrounds create atmosphere; flat solid color is the lazy default. Build depth with layered gradients, gradient meshes, subtle noise/grain overlays, geometric patterns, grid treatments, soft glows, layered transparencies, dramatic shadows, and decorative borders — implemented with Tailwind utilities, CSS gradients, filters, and pseudo-element layering. Do not author decorative inline SVG artwork or hand-written SVG illustrations unless the user explicitly requests SVG-based graphics.
+
+- Keep section background rhythm coherent. Do not place two strong-gradient or strong-texture sections directly back-to-back; alternate intense surfaces with calmer ones (solid/tinted/very subtle texture) so seams stay clean.
+
+- Imagery is part of the aesthetic, not an afterthought. Use only resolved ImageAsset aliases for real imagery — never invent raw URLs or stock-provider URLs. Where a section can credibly support visuals, prefer image-forward composition (editorial crops, layered photography, product/portrait detail) instead of treating images as small accents.
+
+- Vary your choices across generations. Do not reach for the same fonts, palettes, motion patterns, or compositional defaults every time. Each generation should feel like a different art-directed system.
 `.trim();
 
 const LANDING_PAGE_ART_DIRECTION_GUIDANCE = `
 Art direction process:
-- Before writing code, silently decide on a clear design thesis for the page or section. The design thesis should define the emotional tone, conversion goal, and visual point of view in one sentence.
-- Silently choose a reference world that gives the design a distinct voice, such as editorial magazine, luxury product campaign, underground music scene, museum catalog, cinematic tech noir, premium wellness brand, or modern industrial brochure.
-- Silently define a signature motif and reuse it across the composition. Examples include a repeated framing device, a distinctive border treatment, a recurring glow/gradient language, a specific image crop system, a diagonal or offset grid, or a typography treatment that appears in multiple places.
-- Silently choose a typography strategy, palette logic, layout rhythm, motion style, and image direction that all feel like they belong to the same art-directed system.
-- Treat originality as a requirement, not a preference. Do not default to the usual startup hero + three feature cards + testimonial strip + CTA stack unless the brief clearly demands it.
-- Include at least one section or compositional beat that feels unexpected, memorable, or visually ownable for the brand.
-- Use contrast in scale, density, alignment, and pacing so the page does not feel uniformly templated from top to bottom.
-- No more than two consecutive major sections should share the same layout pattern.
-- Every major section should have a specific job in the conversion story and a composition that supports that job, rather than reusing the same heading + paragraph + cards structure.
-- Before finalizing, silently review the result for template-like patterns or overused landing-page tropes and upgrade weak areas to something more distinctive.
+- Before writing code, silently commit to a clear design thesis for the page or section: one sentence covering the emotional tone, conversion goal, and visual point of view.
+
+- Silently choose a reference world that gives the design a distinct voice and commit fully — half-committing produces AI slop. Examples: editorial magazine, luxury product campaign, underground music scene, museum catalog, cinematic tech-noir, brutalist print, mid-century industrial brochure, premium wellness brand, modern fashion lookbook, 80s arcade/CRT, IDE/devtool, art-deco poster, swiss design grid, organic/botanical, retro-futuristic.
+
+- Silently define a signature motif and reuse it across the composition. Examples: a repeated framing device, a distinctive border treatment, a recurring glow/gradient language, a specific image crop system, a diagonal or offset grid, an oversized typographic element that recurs in multiple places, or a recurring decorative shape/badge.
+
+- Silently define typography strategy, palette logic, layout rhythm, motion style, and image direction so they all feel like one art-directed system, not five unrelated decisions.
+
+- Treat originality as a requirement, not a preference. Do not default to the usual "startup hero + three feature cards + testimonial strip + CTA stack" unless the brief truly demands it.
+
+- Build at least one section or compositional beat that feels unexpected, memorable, or visually ownable for the brand — the one thing someone will actually remember.
+
+- Use contrast in scale, density, alignment, and pacing so the page does not feel uniformly templated from top to bottom. No more than two consecutive major sections should share the same layout pattern. Every major section should have a specific job in the conversion story and a composition that supports that job, rather than reusing the same heading + paragraph + cards structure.
+
+- Match execution complexity to the chosen aesthetic. Maximalist direction → elaborate motion choreography, layered backgrounds, expressive type, dense composition. Minimalist/refined direction → ruthless spacing discipline, precise type sizing and leading, restrained palette, surgical motion on a few key beats. Both work; what fails is half-committed "generic-modern" execution.
+
+- Before finalizing, silently audit the result for template-like patterns and overused landing-page tropes and upgrade weak areas to something more distinctive. If nothing in the page would be memorable an hour later, redesign the weakest section.
 `.trim();
 
 export function buildCodeGenerationPromptTemplate(): string {
