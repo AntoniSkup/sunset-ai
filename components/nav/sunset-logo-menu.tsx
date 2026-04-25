@@ -19,17 +19,24 @@ import { signOut } from "@/app/(login)/actions";
 import { mutate } from "swr";
 import useSWR from "swr";
 import type { User } from "@/lib/db/schema";
+import { CreditsSection } from "@/components/billing/credits-section";
 
 type SunsetLogoMenuProps = {
   variant?: "default" | "dashboard";
   className?: string;
   contentClassName?: string;
+  /**
+   * When true, render the credits widget at the top of the dropdown.
+   * Defaults to true; pass false for menus where credits aren't relevant.
+   */
+  showCredits?: boolean;
 };
 
 export function SunsetLogoMenu({
   variant = "default",
   className,
-  contentClassName = "w-40",
+  contentClassName = "w-64",
+  showCredits = true,
 }: SunsetLogoMenuProps) {
   const router = useRouter();
   const { data: user } = useSWR<User>("/api/user", (url: string) =>
@@ -57,6 +64,12 @@ export function SunsetLogoMenu({
       </DropdownMenuTrigger>
 
       <DropdownMenuContent className={contentClassName} align="start">
+        {showCredits ? (
+          <>
+            <CreditsSection />
+            <DropdownMenuSeparator />
+          </>
+        ) : null}
         <DropdownMenuGroup>
           <DropdownMenuLabel
             className="text-gray-500 text-xs font-medium"

@@ -474,7 +474,7 @@ export default function StartPage() {
 
   return (
     <div className="rounded-2xl border border-gray-200 bg-white px-4 py-6 sm:px-8 md:px-12">
-      <SunsetLogoMenu contentClassName="w-40" />
+      <SunsetLogoMenu />
 
       <section className="flex min-h-[70vh] items-center justify-center flex-row">
         <div className="mx-auto flex w-full max-w-3xl flex-col items-start text-start">

@@ -68,7 +68,7 @@ export default function DashboardLayout({
         >
           <nav className="h-full overflow-y-auto p-4 flex flex-col ">
             <div className="flex items-center justify-between">
-              <SunsetLogoMenu variant="dashboard" contentClassName="w-48" />
+              <SunsetLogoMenu variant="dashboard" />
             </div>
 
             <div className="flex-1">
@@ -94,10 +94,7 @@ export default function DashboardLayout({
                 variant="ghost"
                 className="w-full justify-start text-gray-600 hover:text-gray-900 hover:bg-gray-100"
               >
-                <Link
-                  href="/start"
-                  onClick={() => setIsSidebarOpen(false)}
-                >
+                <Link href="/start" onClick={() => setIsSidebarOpen(false)}>
                   <ArrowLeftIcon className="h-4 w-4 mr-2" />
                   Back to account
                 </Link>
