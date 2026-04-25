@@ -177,11 +177,17 @@ export function LoginForm({
       </Card>
       <FieldDescription className="px-6 text-center">
         By signing in, you agree to our{" "}
-        <Link href="#" className="underline underline-offset-4">
-          Terms of Service
+        <Link
+          href="/terms"
+          className="underline underline-offset-4 hover:text-[#ff6313]"
+        >
+          Terms of Use
         </Link>{" "}
         and{" "}
-        <Link href="#" className="underline underline-offset-4">
+        <Link
+          href="/privacy"
+          className="underline underline-offset-4 hover:text-[#ff6313]"
+        >
           Privacy Policy
         </Link>
         .

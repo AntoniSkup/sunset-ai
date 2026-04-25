@@ -452,6 +452,12 @@ export default function HomePage() {
               <Link href="/pricing" className="hover:text-gray-700">
                 Pricing
               </Link>
+              <Link href="/privacy" className="hover:text-gray-700">
+                Privacy
+              </Link>
+              <Link href="/terms" className="hover:text-gray-700">
+                Terms
+              </Link>
               <Link href="/sign-in" className="hover:text-gray-700">
                 Log in
               </Link>
