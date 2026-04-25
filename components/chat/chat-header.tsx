@@ -27,15 +27,28 @@ function CreditsSection() {
   const { data: billing } = useSWR<BillingApiResponse>("/api/billing", fetcher);
   if (!billing) return null;
 
-  const { balance, credits } = billing;
-  const { daily, monthly } = credits;
+  const { credits } = billing;
+  const { daily, monthly, topup } = credits;
 
-  const totalCapacity = daily.total + (monthly?.total ?? 0);
+  // "Subscription" bucket = monthly cycle credits + persistent top-up credits.
+  // Both are priority-1 grants that consume after the daily bonus, so for the
+  // user they are interchangeable "non-daily" credits.
+  const monthlyRemaining = monthly?.remaining ?? 0;
+  const topupRemaining = topup?.remaining ?? 0;
+  const subscriptionRemaining = monthlyRemaining + topupRemaining;
+
+  const monthlyTotal = monthly?.total ?? 0;
+  // Top-ups have no fixed cap, so add their remaining amount to capacity so
+  // the bar reflects what the user can actually spend right now.
+  const subscriptionCapacity = monthlyTotal + topupRemaining;
+
+  const hasSubscriptionBucket = subscriptionCapacity > 0;
+  const totalCapacity = daily.total + subscriptionCapacity;
   const dailyPct =
     totalCapacity > 0 ? (daily.remaining / totalCapacity) * 100 : 0;
-  const monthlyPct =
-    totalCapacity > 0 && monthly
-      ? (monthly.remaining / totalCapacity) * 100
+  const subscriptionPct =
+    totalCapacity > 0 && hasSubscriptionBucket
+      ? (subscriptionRemaining / totalCapacity) * 100
       : 0;
 
   return (
@@ -46,8 +59,8 @@ function CreditsSection() {
       <div className="flex items-center justify-between mb-2">
         <span className="text-sm font-medium text-gray-900">Credits</span>
         <span className="text-sm text-gray-600 flex items-center gap-0.5">
-          {monthly
-            ? `${monthly.remaining} + ${daily.remaining} left`
+          {hasSubscriptionBucket
+            ? `${subscriptionRemaining} + ${daily.remaining} left`
             : `${daily.remaining} left`}
           <ChevronRightIcon className="h-4 w-4 text-gray-400" />
         </span>
@@ -55,10 +68,10 @@ function CreditsSection() {
       {totalCapacity > 0 && (
         <div className="space-y-1.5 mb-2 ">
           <div className="h-3 w-full rounded-full bg-gray-200 overflow-hidden flex">
-            {monthlyPct > 0 && (
+            {subscriptionPct > 0 && (
               <div
                 className="h-full bg-orange-500 transition-all"
-                style={{ width: `${monthlyPct}%` }}
+                style={{ width: `${subscriptionPct}%` }}
               />
             )}
             {dailyPct > 0 && (

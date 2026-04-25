@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db/drizzle";
 import {
   accounts,
@@ -87,7 +87,15 @@ export async function getOrCreateAccountForUser(
 }
 
 /**
- * Get active subscription for an account (if any).
+ * Get the most relevant subscription for an account (if any).
+ *
+ * An account can have multiple subscription rows over time (e.g. a trial that
+ * converts, or a re-subscribe after a cancel). We deterministically prefer:
+ *   1. Currently usable subscriptions (`active` or `trialing`)
+ *   2. Most recently updated row as a tiebreaker
+ *
+ * This guarantees that callers (billing breakdown, plan resolution, customer
+ * portal, etc.) see the subscription the user actually expects.
  */
 export async function getSubscriptionByAccountId(
   accountId: number
@@ -96,6 +104,10 @@ export async function getSubscriptionByAccountId(
     .select()
     .from(subscriptions)
     .where(eq(subscriptions.accountId, accountId))
+    .orderBy(
+      sql`CASE WHEN ${subscriptions.status} IN ('active', 'trialing') THEN 0 ELSE 1 END`,
+      desc(subscriptions.updatedAt)
+    )
     .limit(1);
   return result[0] ?? null;
 }

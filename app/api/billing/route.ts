@@ -7,6 +7,7 @@ import {
 import { getPlanById } from "@/lib/billing/plans";
 import { getCreditsBreakdown } from "@/lib/billing/credits-breakdown";
 import { ensureDailyCreditsForAccount } from "@/lib/billing/daily-credits";
+import { expireCreditsForAccount } from "@/lib/billing/expire-credits";
 
 export type BillingApiResponse = {
   balance: number;
@@ -28,6 +29,12 @@ export async function GET() {
   }
 
   const account = await getOrCreateAccountForUser(user.id);
+  // Expire first so stale daily grants from previous days (and any expired
+  // subscription_cycle/rollover grants) are zeroed before we count remaining.
+  // Without this, the daily cron is the only thing that runs expiry, so a
+  // user logging in after a multi-day gap would see leftover daily credits
+  // counted into "today's" remaining.
+  await expireCreditsForAccount(account.id);
   await ensureDailyCreditsForAccount(account.id);
 
   const subscription = await getSubscriptionByAccountId(account.id);

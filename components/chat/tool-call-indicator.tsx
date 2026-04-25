@@ -57,7 +57,11 @@ function getFriendlyTarget(toolName: string, fileName: string): string {
 
   if (raw) {
     const name = humanizeName(raw.split("/").pop() || raw);
-    if (/navbar|footer|hero|about|products|features|process|testimonials|cta/i.test(name)) {
+    if (
+      /navbar|footer|hero|about|products|features|process|testimonials|cta/i.test(
+        name
+      )
+    ) {
       return `${name} section`;
     }
     return name.toLowerCase();
@@ -76,7 +80,10 @@ function getActionLabel(
   if (toolName === "resolve_image_slots") {
     return `${isComplete ? "Prepared" : "Preparing"} ${target}`;
   }
-  if (toolName === "validate_completeness" || toolName === "validate_ui_consistency") {
+  if (
+    toolName === "validate_completeness" ||
+    toolName === "validate_ui_consistency"
+  ) {
     return `${isComplete ? "Checked" : "Checking"} ${target}`;
   }
   return `${isComplete ? "Built" : "Building"} ${target}`;
@@ -85,7 +92,10 @@ function getActionLabel(
 function getContentIcon(toolName: string, target: string): React.ReactNode {
   const normalizedTarget = target.trim().toLowerCase();
 
-  if (toolName === "resolve_image_slots" || normalizedTarget === "page visuals") {
+  if (
+    toolName === "resolve_image_slots" ||
+    normalizedTarget === "page visuals"
+  ) {
     return <PhotoIcon className="h-4 w-4 text-muted-foreground" />;
   }
 
