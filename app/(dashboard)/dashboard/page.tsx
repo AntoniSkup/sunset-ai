@@ -8,24 +8,17 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
-  CardFooter,
-  CardDescription,
 } from "@/components/ui/card";
 import { customerPortalAction } from "@/lib/payments/actions";
 import { useActionState } from "react";
 import { TeamDataWithMembers, User } from "@/lib/db/schema";
-import { removeTeamMember, inviteTeamMember } from "@/app/(login)/actions";
+import { removeTeamMember } from "@/app/(login)/actions";
 import useSWR from "swr";
 import { Suspense } from "react";
-import { Input } from "@/components/ui/input";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Label } from "@/components/ui/label";
 import type { BillingApiResponse } from "@/app/api/billing/route";
 import {
-  ArrowPathIcon,
   ArrowRightIcon,
   BanknotesIcon,
-  PlusCircleIcon,
 } from "@heroicons/react/24/outline";
 
 type ActionState = {
@@ -243,110 +236,6 @@ function TeamMembers() {
   );
 }
 
-function InviteTeamMemberSkeleton() {
-  return (
-    <Card className={`${cardClass} h-[260px]`}>
-      <CardHeader>
-        <CardTitle className="text-base font-semibold tracking-tight text-gray-900">
-          Invite team member
-        </CardTitle>
-      </CardHeader>
-    </Card>
-  );
-}
-
-function InviteTeamMember() {
-  const { data: user } = useSWR<User>("/api/user", fetcher);
-  const isOwner = user?.role === "owner";
-  const [inviteState, inviteAction, isInvitePending] = useActionState<
-    ActionState,
-    FormData
-  >(inviteTeamMember, {});
-
-  return (
-    <Card className={cardClass}>
-      <CardHeader>
-        <CardTitle className="text-base font-semibold tracking-tight text-gray-900">
-          Invite team member
-        </CardTitle>
-        <CardDescription>
-          Add a teammate to collaborate on your projects.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form action={inviteAction} className="space-y-4">
-          <div>
-            <Label htmlFor="email" className="mb-2 text-sm text-gray-700">
-              Email
-            </Label>
-            <Input
-              id="email"
-              name="email"
-              type="email"
-              placeholder="teammate@example.com"
-              required
-              disabled={!isOwner}
-              className="h-10 rounded-lg border-gray-200 bg-white/70"
-            />
-          </div>
-          <div>
-            <Label className="text-sm text-gray-700">Role</Label>
-            <RadioGroup
-              defaultValue="member"
-              name="role"
-              className="mt-2 flex space-x-4"
-              disabled={!isOwner}
-            >
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="member" id="member" />
-                <Label htmlFor="member" className="text-sm">
-                  Member
-                </Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="owner" id="owner" />
-                <Label htmlFor="owner" className="text-sm">
-                  Owner
-                </Label>
-              </div>
-            </RadioGroup>
-          </div>
-          {inviteState?.error && (
-            <p className="text-sm text-red-500">{inviteState.error}</p>
-          )}
-          {inviteState?.success && (
-            <p className="text-sm text-green-600">{inviteState.success}</p>
-          )}
-          <Button
-            type="submit"
-            className="h-10 rounded-full bg-gray-900 px-5 text-sm font-medium text-white hover:bg-gray-800 disabled:bg-gray-200 disabled:text-gray-500"
-            disabled={isInvitePending || !isOwner}
-          >
-            {isInvitePending ? (
-              <>
-                <ArrowPathIcon className="h-4 w-4 animate-spin" />
-                Inviting...
-              </>
-            ) : (
-              <>
-                <PlusCircleIcon className="h-4 w-4" />
-                Invite member
-              </>
-            )}
-          </Button>
-        </form>
-      </CardContent>
-      {!isOwner && (
-        <CardFooter>
-          <p className="text-sm text-gray-500">
-            You must be a team owner to invite new members.
-          </p>
-        </CardFooter>
-      )}
-    </Card>
-  );
-}
-
 export default function SettingsPage() {
   return (
     <section className="flex-1 px-4 py-6 lg:px-8">
@@ -356,7 +245,7 @@ export default function SettingsPage() {
             Team settings
           </h1>
           <p className="mt-2 text-sm text-gray-500">
-            Manage your billing, teammates, and invitations.
+            Manage your billing and teammates.
           </p>
         </div>
         <Suspense fallback={<SubscriptionSkeleton />}>
@@ -364,9 +253,6 @@ export default function SettingsPage() {
         </Suspense>
         <Suspense fallback={<TeamMembersSkeleton />}>
           <TeamMembers />
-        </Suspense>
-        <Suspense fallback={<InviteTeamMemberSkeleton />}>
-          <InviteTeamMember />
         </Suspense>
       </div>
     </section>

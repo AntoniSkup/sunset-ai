@@ -31,7 +31,8 @@ export function LoginForm({
 
   const errorFromGoogle =
     oauthError === "email_exists"
-      ? oauthMessage || "An account with this email already exists. Please sign in with your password."
+      ? oauthMessage ||
+        "An account with this email already exists. Please sign in with your password."
       : oauthError === "config"
         ? "Google sign-in is not configured. Please sign in with your password."
         : oauthError === "denied"
@@ -55,17 +56,29 @@ export function LoginForm({
 
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>
-      <Card className="overflow-hidden p-0">
+      <Card className="overflow-hidden rounded-2xl border-gray-200 bg-white/85 p-0 shadow-[0_20px_60px_-24px_rgba(15,23,42,0.25)] backdrop-blur">
         <CardContent className="grid p-0 md:grid-cols-2">
           <form className="p-6 md:p-8" action={formAction}>
             <input type="hidden" name="redirect" value={redirect || ""} />
             <input type="hidden" name="priceId" value={priceId || ""} />
             <input type="hidden" name="inviteId" value={inviteId || ""} />
             <FieldGroup>
-              <div className="flex flex-col items-center gap-2 text-center">
-                <h1 className="text-2xl font-bold">Welcome back</h1>
-                <p className="text-muted-foreground text-balance">
-                  Sign in to your account
+              <div className="flex flex-col items-center gap-3 text-center">
+                <img
+                  src="/sunset-logo.png"
+                  alt="Sunset"
+                  className="h-9 w-auto select-none object-contain drop-shadow-sm"
+                  draggable={false}
+                />
+                <h1 className="text-2xl font-semibold tracking-tight text-gray-900">
+                  Welcome back
+                </h1>
+                <p className="text-balance text-sm text-gray-500">
+                  Sign in to your{" "}
+                  <span className="bg-gradient-to-r from-[#ff6313] via-[#ff8a3d] to-[#ffb066] bg-clip-text font-medium text-transparent">
+                    Sunset
+                  </span>{" "}
+                  account
                 </p>
               </div>
               <Field>
@@ -101,7 +114,11 @@ export function LoginForm({
                 </p>
               )}
               <Field>
-                <Button type="submit" disabled={isPending} className="w-full">
+                <Button
+                  type="submit"
+                  disabled={isPending}
+                  className="h-10 w-full rounded-full bg-gray-900 text-sm font-medium text-white hover:bg-gray-800 disabled:bg-gray-200 disabled:text-gray-500"
+                >
                   {isPending ? (
                     <>
                       <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
@@ -119,7 +136,7 @@ export function LoginForm({
                 <Button
                   type="button"
                   variant="outline"
-                  className="w-full"
+                  className="h-10 w-full rounded-full border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-900"
                   asChild
                 >
                   <a href={googleAuthHref}>
@@ -139,18 +156,22 @@ export function LoginForm({
               </Field>
               <FieldDescription className="text-center">
                 Don&apos;t have an account?{" "}
-                <Link href={signUpHref} className="underline underline-offset-4">
+                <Link
+                  href={signUpHref}
+                  className="font-medium text-gray-900 underline underline-offset-4 hover:text-[#ff6313]"
+                >
                   Sign up
                 </Link>
               </FieldDescription>
             </FieldGroup>
           </form>
-          <div className="bg-muted relative hidden md:block">
+          <div className="relative hidden bg-gray-900 md:block">
             <img
               src="/login-sunset.png"
               alt=""
               className="absolute inset-0 h-full w-full object-cover"
             />
+            <div className="absolute inset-0 bg-gradient-to-tr from-[#ff6313]/15 via-transparent to-transparent" />
           </div>
         </CardContent>
       </Card>

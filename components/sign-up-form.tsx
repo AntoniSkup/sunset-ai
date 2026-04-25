@@ -32,7 +32,7 @@ export function SignUpForm({
   const errorFromGoogle =
     oauthError === "email_exists"
       ? oauthMessage ||
-      "An account with this email already exists. Please sign in with your password."
+        "An account with this email already exists. Please sign in with your password."
       : oauthError === "config"
         ? "Google sign-up is not configured. Please sign up with your email."
         : oauthError === "denied"
@@ -56,18 +56,23 @@ export function SignUpForm({
 
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>
-      <Card className="overflow-hidden p-0">
+      <Card className="overflow-hidden rounded-2xl border-gray-200 bg-white/85 p-0 shadow-[0_20px_60px_-24px_rgba(15,23,42,0.25)] backdrop-blur">
         <CardContent className="grid p-0 md:grid-cols-2">
           <form className="p-6 md:p-8" action={formAction}>
             <input type="hidden" name="redirect" value={redirect || ""} />
             <input type="hidden" name="priceId" value={priceId || ""} />
             <input type="hidden" name="inviteId" value={inviteId || ""} />
             <FieldGroup>
-              <div className="flex flex-col items-center gap-2 text-center">
-                <h1 className="text-2xl font-bold">Create an account</h1>
-                <p className="text-muted-foreground text-balance">
-                  Get started with your free account
-                </p>
+              <div className="flex flex-col items-center gap-3 text-center">
+                <img
+                  src="/sunset-logo.png"
+                  alt="Sunset"
+                  className="h-9 w-auto select-none object-contain drop-shadow-sm"
+                  draggable={false}
+                />
+                <h1 className="text-2xl font-semibold tracking-tight text-gray-900">
+                  Create your account
+                </h1>
               </div>
               <Field>
                 <FieldLabel htmlFor="email">Email</FieldLabel>
@@ -102,7 +107,11 @@ export function SignUpForm({
                 </p>
               )}
               <Field>
-                <Button type="submit" disabled={isPending} className="w-full">
+                <Button
+                  type="submit"
+                  disabled={isPending}
+                  className="h-10 w-full rounded-full bg-gray-900 text-sm font-medium text-white hover:bg-gray-800 disabled:bg-gray-200 disabled:text-gray-500"
+                >
                   {isPending ? (
                     <>
                       <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
@@ -120,7 +129,7 @@ export function SignUpForm({
                 <Button
                   type="button"
                   variant="outline"
-                  className="w-full"
+                  className="h-10 w-full rounded-full border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-900"
                   asChild
                 >
                   <a href={googleAuthHref}>
@@ -140,18 +149,22 @@ export function SignUpForm({
               </Field>
               <FieldDescription className="text-center">
                 Already have an account?{" "}
-                <Link href={signInHref} className="underline underline-offset-4">
+                <Link
+                  href={signInHref}
+                  className="font-medium text-gray-900 underline underline-offset-4 hover:text-[#ff6313]"
+                >
                   Sign in
                 </Link>
               </FieldDescription>
             </FieldGroup>
           </form>
-          <div className="bg-muted relative hidden md:block">
+          <div className="relative hidden bg-gray-900 md:block">
             <img
               src="/login-sunset.png"
               alt=""
               className="absolute inset-0 h-full w-full object-cover"
             />
+            <div className="absolute inset-0 bg-gradient-to-tr from-[#ff6313]/15 via-transparent to-transparent" />
           </div>
         </CardContent>
       </Card>

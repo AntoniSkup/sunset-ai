@@ -74,9 +74,6 @@ export default function DashboardLayout({
           <nav className="flex h-full flex-col overflow-y-auto p-4">
             <div className="mb-4 hidden items-center gap-2 lg:flex">
               <SunsetLogoMenu variant="dashboard" />
-              <span className="text-sm font-medium tracking-tight text-gray-900">
-                Settings
-              </span>
             </div>
 
             <div className="flex-1 space-y-1">
