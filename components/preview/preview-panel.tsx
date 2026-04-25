@@ -302,28 +302,6 @@ export function PreviewPanel({
   useEffect(() => {
     let cancelled = false;
 
-    async function hasActiveGenerationRun(): Promise<boolean> {
-      if (!chatId || typeof chatId !== "string") {
-        return false;
-      }
-
-      try {
-        const summaryRes = await fetch(
-          `/api/chats/${encodeURIComponent(chatId)}/turn-runs?summary=1`,
-          { cache: "no-store" }
-        );
-        if (!summaryRes.ok) {
-          return false;
-        }
-        const summaryData = (await summaryRes.json()) as {
-          summary?: { hasActiveRuns?: boolean };
-        };
-        return Boolean(summaryData?.summary?.hasActiveRuns);
-      } catch {
-        return false;
-      }
-    }
-
     async function canLoadPreview(previewUrl: string): Promise<boolean> {
       try {
         const previewRes = await fetch(previewUrl, { cache: "no-store" });
@@ -339,12 +317,11 @@ export function PreviewPanel({
       }
 
       try {
-        const hasActiveRun = await hasActiveGenerationRun();
-        if (!cancelled && hasActiveRun) {
-          setIsLoading(true);
-          setLoadingMessage("Generating landing page...");
-          setLoadingStep("Generating landing page...");
-        }
+        // Don't preemptively show the loader just because a run is active —
+        // the AI may still be planning before any builder tool has fired.
+        // `chat.tsx` will dispatch `showPreviewLoader` via the LOADING event
+        // on the first tracked tool call (and replays past tool calls when
+        // resuming an in-progress run), which our event listener picks up.
 
         const res = await fetch(`/api/preview/${chatId}/latest`, {
           cache: "no-store",

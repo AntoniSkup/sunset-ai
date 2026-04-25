@@ -727,25 +727,58 @@ function ChatInner({
       setPendingMessage(null);
 
       if (preEnqueued) {
-        // The /start page already POSTed to /api/chats/[id]/turn-runs, so we
-        // just need to mirror the optimistic rendering + realtime wiring that
-        // enqueueTurnRun normally does, without a second POST.
-        const userMessageId = `local-user-${Date.now()}-${Math.random()
-          .toString(36)
-          .slice(2)}`;
+        // The /start page already POSTed to /api/chats/[id]/turn-runs, which
+        // persisted the user message in the DB before we navigated here. The
+        // initial /messages fetch (or a re-render from the ChatWithHistory
+        // wrapper) may therefore have already inserted that same user message
+        // into local state by the time we run, e.g. when this effect bailed
+        // earlier because billing was still loading and is only re-running now.
+        // Detect that case and skip re-adding it optimistically so the prompt
+        // doesn't render twice.
+        const pendingText = pendingMessage.message.trim();
+        const pendingAssetIds = (pendingMessage.attachments ?? [])
+          .map((a) => a.id)
+          .filter((id): id is number => typeof id === "number")
+          .sort((a, b) => a - b);
+
+        const userAlreadyInChat = messagesRef.current.some((m) => {
+          if (m.role !== "user") return false;
+          const messageText = (m.parts ?? [])
+            .filter(
+              (p): p is { type: "text"; text: string } => p.type === "text"
+            )
+            .map((p) => p.text)
+            .join("")
+            .trim();
+          if (messageText !== pendingText) return false;
+          const fileAssetIds = (m.parts ?? [])
+            .filter((p) => p.type === "file")
+            .map((p) => (p as { assetId?: unknown }).assetId)
+            .filter((id): id is number => typeof id === "number")
+            .sort((a, b) => a - b);
+          if (fileAssetIds.length !== pendingAssetIds.length) return false;
+          return pendingAssetIds.every((id, i) => id === fileAssetIds[i]);
+        });
+
         const assistantMessageId = `local-assistant-${Date.now()}-${Math.random()
           .toString(36)
           .slice(2)}`;
         activeAssistantMessageIdRef.current = assistantMessageId;
-        setMessages((prev) => [
-          ...prev,
-          { id: userMessageId, role: "user", parts },
-          {
+        setMessages((prev) => {
+          const next = [...prev];
+          if (!userAlreadyInChat) {
+            const userMessageId = `local-user-${Date.now()}-${Math.random()
+              .toString(36)
+              .slice(2)}`;
+            next.push({ id: userMessageId, role: "user", parts });
+          }
+          next.push({
             id: assistantMessageId,
             role: "assistant",
             parts: [{ type: "text", text: "" }],
-          },
-        ]);
+          });
+          return next;
+        });
         activeTurnRunIdRef.current = preEnqueued.runId;
         if (preEnqueued.triggerRealtime && chatId) {
           setTriggerRealtime(preEnqueued.triggerRealtime);
