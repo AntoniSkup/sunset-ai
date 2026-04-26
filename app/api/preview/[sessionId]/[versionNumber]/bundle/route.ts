@@ -1,12 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   getLatestLandingSiteRevision,
-  getLatestRevisionNumberWithFile,
   getUser,
 } from "@/lib/db/queries";
 import { getPreviewBrowserBundle } from "@/lib/preview/compose-react";
-
-const ENTRY_PATH = "landing/index.tsx";
 
 export async function GET(
   _request: NextRequest,
@@ -51,23 +48,18 @@ export async function GET(
       revisionNumber: requestedRevision,
     });
 
-    // Mirror the HTML route's fallback: if the requested revision predates the
-    // entry file, retry at the latest revision that contains it so a direct
-    // bundle request still produces something renderable.
-    if (!bundle) {
-      const fallbackRevision = await getLatestRevisionNumberWithFile({
+    // Mirror the HTML route's fallback: when the requested revision can't be
+    // bundled (entry not yet written, or compile failure), retry at the chat's
+    // latest revision so the at-or-before file lookup picks up the entry from
+    // whichever revision actually contains it.
+    if (!bundle && latestRevision.revisionNumber !== requestedRevision) {
+      console.warn(
+        `[preview/bundle] Bundle failed at chat=${chatId} revision=${requestedRevision}; retrying at chat's latest revision=${latestRevision.revisionNumber}`
+      );
+      bundle = await getPreviewBrowserBundle({
         chatId,
-        path: ENTRY_PATH,
+        revisionNumber: latestRevision.revisionNumber,
       });
-      if (fallbackRevision != null && fallbackRevision !== requestedRevision) {
-        console.warn(
-          `[preview/bundle] Entry missing at chat=${chatId} revision=${requestedRevision}; retrying at latest renderable revision=${fallbackRevision}`
-        );
-        bundle = await getPreviewBrowserBundle({
-          chatId,
-          revisionNumber: fallbackRevision,
-        });
-      }
     }
 
     if (!bundle) {

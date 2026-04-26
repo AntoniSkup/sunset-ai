@@ -126,6 +126,37 @@ async function collectFileMap(params: {
 const TAILWIND_CDN =
   '<script src="https://cdn.tailwindcss.com"></script>';
 
+/**
+ * The browser bundle treats React as external because:
+ *   - On Vercel, NFT does not always ship `react-dom/client.js`,
+ *     `react/jsx-runtime.js`, or `react/cjs/react.development.js` into the
+ *     serverless function bundle, so esbuild can't resolve them at build
+ *     time when bundling for the browser.
+ *   - Bundling React would also significantly inflate the iframe payload.
+ *
+ * Instead, the iframe HTML declares an importmap pointing every React
+ * specifier to esm.sh, and the bundled browser code uses bare `import`s
+ * which the browser resolves through that map.
+ */
+const REACT_BROWSER_EXTERNALS = [
+  "react",
+  "react-dom",
+  "react-dom/client",
+  "react/jsx-runtime",
+  "react/jsx-dev-runtime",
+] as const;
+
+function getBrowserReactImportMap(): string {
+  const reactVersion = "19";
+  const entries = {
+    react: `https://esm.sh/react@${reactVersion}`,
+    "react/": `https://esm.sh/react@${reactVersion}/`,
+    "react-dom": `https://esm.sh/react-dom@${reactVersion}`,
+    "react-dom/": `https://esm.sh/react-dom@${reactVersion}/`,
+  };
+  return `<script type="importmap">${JSON.stringify({ imports: entries })}</script>`;
+}
+
 function getMockBrowserBaseUrl(): string {
   const fromEnv = firstHttpOriginFromCandidates([
     process.env.SCREENSHOT_BROWSER_BASE_URL,
@@ -284,6 +315,7 @@ export function getPreviewHtml(params: {
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Landing Page</title>
+  ${getBrowserReactImportMap()}
   ${TAILWIND_CDN}
 </head>
 <body>
@@ -681,6 +713,8 @@ export async function getPreviewBrowserBundle(params: {
     allFiles: allFilesWithRuntime,
   });
 
+  const reactExternalsSet = new Set<string>(REACT_BROWSER_EXTERNALS);
+
   try {
     const result = await esbuild.build({
       stdin: {
@@ -693,6 +727,11 @@ export async function getPreviewBrowserBundle(params: {
       format: "esm",
       platform: "browser",
       jsx: "automatic",
+      // Externalize React so the iframe loads it from the importmap (esm.sh)
+      // declared in `getPreviewHtml`. We can't reliably resolve these from
+      // node_modules at build time on Vercel because NFT does not always
+      // ship the client-side React entry points into the function bundle.
+      external: [...REACT_BROWSER_EXTERNALS],
       write: false,
       plugins: [
         {
@@ -703,6 +742,9 @@ export async function getPreviewBrowserBundle(params: {
               (args) => {
                 if (PREVIEW_SHIM_MODULES.has(args.path)) {
                   return { path: args.path, namespace: PREVIEW_SHIM_NAMESPACE };
+                }
+                if (reactExternalsSet.has(args.path)) {
+                  return { path: args.path, external: true };
                 }
                 try {
                   const p = runtimeRequire.resolve(args.path, {
@@ -965,15 +1007,15 @@ export async function getComposedReactHtml(params: {
   }
 
   let RootComponent: ComponentType | undefined;
-  // Vercel/Lambda runtimes mount /var/task read-only and only allow writes to
-  // os.tmpdir() (i.e. /tmp). Locally this still resolves to a writable temp
-  // directory, so we don't need a separate code path.
-  const tmpDir = path.join(os.tmpdir(), "landing-preview");
-  fs.mkdirSync(tmpDir, { recursive: true });
-  const tmpFile = path.join(
-    tmpDir,
-    `landing-${chatId}-${revisionNumber}-${Date.now()}.cjs`
-  );
+  // We deliberately evaluate the CJS bundle inline rather than writing it to
+  // /tmp and `require()`-ing it. On Vercel/Lambda the project's node_modules
+  // live at `/var/task`, but a temp file at `/tmp/...` cannot resolve `react`
+  // through Node's normal lookup (resolution starts from the temp file's
+  // directory and never walks into `/var/task`). By passing our own
+  // `runtimeRequire` (anchored at the project root) into the wrapper, every
+  // `require('react')` / `require('react/jsx-runtime')` etc. emitted by
+  // esbuild resolves correctly without any disk I/O.
+  const bundleFilename = `landing-${chatId}-${revisionNumber}.cjs`;
 
   const mockBaseUrl = getMockBrowserBaseUrl();
   const mockHistoryState = { idx: 0 };
@@ -1018,33 +1060,53 @@ export async function getComposedReactHtml(params: {
   const previousWindow = (global as any).window;
   const previousLocation = (global as any).location;
   const previousDocument = (global as any).document;
-  let loadedBundleOk = false;
   try {
     (global as any).window = mockWindow;
     (global as any).location = mockWindow.location;
     (global as any).document = mockDocument;
-    fs.writeFileSync(tmpFile, bundle, "utf-8");
-    const loadBundle = new Function("r", "p", "return r(p)");
-    const mod = loadBundle(runtimeRequire, tmpFile);
-    RootComponent = mod.default ?? mod;
-    loadedBundleOk = true;
+    const moduleObj: { exports: Record<string, unknown> } = { exports: {} };
+    const evaluator = new Function(
+      "module",
+      "exports",
+      "require",
+      "__filename",
+      "__dirname",
+      bundle
+    );
+    evaluator(
+      moduleObj,
+      moduleObj.exports,
+      runtimeRequire,
+      bundleFilename,
+      process.cwd()
+    );
+    const mod = moduleObj.exports as unknown as
+      | { default?: ComponentType }
+      | ComponentType;
+    RootComponent =
+      (mod as { default?: ComponentType }).default ??
+      (mod as ComponentType);
   } catch (err) {
     console.error("[compose-react] load bundle failed:", err);
     if (KEEP_BUNDLE_ON_ERROR) {
-      console.warn("[compose-react] bundle preserved for debugging:", tmpFile);
+      try {
+        const dbgDir = path.join(os.tmpdir(), "landing-preview");
+        fs.mkdirSync(dbgDir, { recursive: true });
+        const dbgFile = path.join(
+          dbgDir,
+          `landing-${chatId}-${revisionNumber}-${Date.now()}.cjs`
+        );
+        fs.writeFileSync(dbgFile, bundle, "utf-8");
+        console.warn("[compose-react] bundle preserved for debugging:", dbgFile);
+      } catch {
+        // ignore
+      }
     }
     return null;
   } finally {
     (global as any).window = previousWindow;
     (global as any).location = previousLocation;
     (global as any).document = previousDocument;
-    try {
-      if (fs.existsSync(tmpFile) && (loadedBundleOk || !KEEP_BUNDLE_ON_ERROR)) {
-        fs.unlinkSync(tmpFile);
-      }
-    } catch {
-      // ignore
-    }
   }
 
   if (RootComponent == null || typeof RootComponent !== "function") {

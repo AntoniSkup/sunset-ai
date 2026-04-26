@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   getLatestLandingSiteRevision,
-  getLatestRevisionNumberWithFile,
   getLatestVersion,
   getUser,
 } from "@/lib/db/queries";
@@ -11,8 +10,6 @@ import {
   getPreviewHtml,
   getPreviewBrowserBundle,
 } from "@/lib/preview/compose-react";
-
-const ENTRY_PATH = "landing/index.tsx";
 
 async function tryComposeAtRevision(params: {
   chatId: string;
@@ -81,29 +78,24 @@ export async function GET(
 
       // Each tool call produces its own revision containing only the file it
       // wrote, so an early revision can exist before `landing/index.tsx` is
-      // created (e.g. a section file was generated first). Try the requested
-      // revision first; if it can't compose, fall back to the latest revision
-      // that actually contains the entry file so the user sees something
-      // renderable instead of a 404.
+      // created (e.g. a section was generated first). When the requested
+      // revision can't compose, retry at the chat's latest revision: the
+      // at-or-before lookup in `getAllLandingSiteFilesAtOrBeforeRevision`
+      // then aggregates every file ever written, including a `landing/index.tsx`
+      // that landed in a later revision than the one originally requested.
       let result = await tryComposeAtRevision({
         chatId,
         revisionNumber: requestedRevision,
       });
 
-      if (!result) {
-        const fallbackRevision = await getLatestRevisionNumberWithFile({
+      if (!result && latestRevision.revisionNumber !== requestedRevision) {
+        console.warn(
+          `[preview] Compose failed at chat=${chatId} revision=${requestedRevision}; retrying at chat's latest revision=${latestRevision.revisionNumber}`
+        );
+        result = await tryComposeAtRevision({
           chatId,
-          path: ENTRY_PATH,
+          revisionNumber: latestRevision.revisionNumber,
         });
-        if (fallbackRevision != null && fallbackRevision !== requestedRevision) {
-          console.warn(
-            `[preview] Entry missing at chat=${chatId} revision=${requestedRevision}; retrying at latest renderable revision=${fallbackRevision}`
-          );
-          result = await tryComposeAtRevision({
-            chatId,
-            revisionNumber: fallbackRevision,
-          });
-        }
       }
 
       if (!result) {
