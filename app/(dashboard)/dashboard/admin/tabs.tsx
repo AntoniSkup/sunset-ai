@@ -1,9 +1,17 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import type { ColumnDef } from "@tanstack/react-table";
 import { EllipsisHorizontalIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { DataTable } from "@/components/ui/data-table";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -11,14 +19,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 
 type InspirationItem = {
   id: number;
@@ -288,196 +288,245 @@ export function InspirationsPanel() {
     }
   }
 
-  return (
-    <Card className="border-border/70">
-      <CardHeader>
-        <CardTitle>Inspiration</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        <div className="space-y-2">
-          <label
-            htmlFor="inspiration-description"
-            className="text-sm font-medium"
-          >
-            Description
-          </label>
-          <textarea
-            id="inspiration-description"
-            value={description}
-            onChange={(event) => setDescription(event.target.value)}
-            placeholder="Paste or write the detailed inspiration outline..."
-            className="border-input placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 min-h-36 w-full rounded-md border bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none focus-visible:ring-[3px]"
-          />
-          <p className="text-xs text-muted-foreground">
-            Paste regular text, a JSON object with <code>description</code>,{" "}
-            <code>section</code>, and <code>tags</code>, or a quoted tag list. We
-            auto-extract tags and section when present.
+  const columns = useMemo<ColumnDef<InspirationItem>[]>(
+    () => [
+      {
+        accessorKey: "description",
+        header: "Description",
+        cell: ({ row }) => (
+          <p className="line-clamp-3 max-w-[560px] whitespace-pre-wrap text-sm leading-6">
+            {row.original.description}
           </p>
-        </div>
-
-        <div className="space-y-2">
-          <label htmlFor="inspiration-section" className="text-sm font-medium">
-            Section
-          </label>
-          <Input
-            id="inspiration-section"
-            value={sectionInput}
-            onChange={(event) => setSectionInput(event.target.value)}
-            placeholder="e.g. hero, footer, map (optional; defaults to unknown)"
-          />
-          <p className="text-xs text-muted-foreground">
-            Overrides <code>section</code> from pasted JSON when filled.
-          </p>
-        </div>
-
-        <div className="space-y-2">
-          <label htmlFor="inspiration-tags" className="text-sm font-medium">
-            Tags
-          </label>
-          <div className="flex gap-2">
-            <Input
-              id="inspiration-tags"
-              value={tagInput}
-              onChange={(event) => setTagInput(event.target.value)}
-              onKeyDown={handleTagKeyDown}
-              placeholder='Add tags (e.g. "fintech", "dark-ui", "saas")'
-            />
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => addTag(tagInput)}
-            >
-              Add tag
-            </Button>
-          </div>
-          {normalizedTagPreview.length > 0 ? (
-            <p className="text-xs text-muted-foreground">
-              Tag preview:{" "}
-              <span className="font-mono">
-                {normalizedTagPreview.join(", ")}
-              </span>
-            </p>
-          ) : null}
-          {tags.length > 0 ? (
-            <div className="flex flex-wrap gap-2 pt-1">
-              {tags.map((tag) => (
-                <button
-                  key={tag}
-                  type="button"
-                  onClick={() => removeTag(tag)}
-                  className="bg-secondary text-secondary-foreground inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs transition-opacity hover:opacity-80"
-                  aria-label={`Remove ${tag}`}
+        ),
+      },
+      {
+        accessorKey: "section",
+        header: "Section",
+        cell: ({ row }) => (
+          <span className="font-mono text-xs">{row.original.section}</span>
+        ),
+        size: 140,
+      },
+      {
+        accessorKey: "tags",
+        header: "Tags",
+        enableSorting: false,
+        cell: ({ row }) =>
+          row.original.tags.length > 0 ? (
+            <div className="flex max-w-[360px] flex-wrap gap-1.5">
+              {row.original.tags.map((tag) => (
+                <span
+                  key={`${row.original.id}-${tag}`}
+                  className="bg-secondary text-secondary-foreground rounded-full px-2 py-0.5 text-xs"
                 >
                   {tag}
-                  <XMarkIcon className="h-3.5 w-3.5" />
-                </button>
+                </span>
               ))}
             </div>
           ) : (
+            <span className="text-xs text-muted-foreground">No tags</span>
+          ),
+        filterFn: (row, _columnId, filterValue) => {
+          if (!filterValue) return true;
+          const search = String(filterValue).toLowerCase();
+          return row.original.tags.some((tag) =>
+            tag.toLowerCase().includes(search)
+          );
+        },
+      },
+      {
+        accessorKey: "createdAt",
+        header: "Created",
+        cell: ({ row }) => (
+          <span className="text-xs text-muted-foreground">
+            {new Date(row.original.createdAt).toLocaleString()}
+          </span>
+        ),
+        sortingFn: (a, b) =>
+          new Date(a.original.createdAt).getTime() -
+          new Date(b.original.createdAt).getTime(),
+        size: 200,
+      },
+      {
+        id: "actions",
+        header: () => <span className="sr-only">Actions</span>,
+        enableSorting: false,
+        enableHiding: false,
+        size: 56,
+        cell: ({ row }) => (
+          <div className="flex justify-end">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Open row actions"
+                >
+                  <EllipsisHorizontalIcon className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  variant="destructive"
+                  onClick={() => handleDeleteInspiration(row.original.id)}
+                >
+                  Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        ),
+      },
+    ],
+    []
+  );
+
+  return (
+    <div className="grid gap-6 xl:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
+      <Card className="border-border/70 self-start">
+        <CardHeader>
+          <CardTitle>Add inspiration</CardTitle>
+          <CardDescription>
+            Paste a description, JSON, or quoted tag list — we&apos;ll extract
+            sections and tags automatically.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="space-y-2">
+            <label
+              htmlFor="inspiration-description"
+              className="text-sm font-medium"
+            >
+              Description
+            </label>
+            <textarea
+              id="inspiration-description"
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              placeholder="Paste or write the detailed inspiration outline..."
+              className="border-input placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 min-h-36 w-full rounded-md border bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none focus-visible:ring-[3px]"
+            />
             <p className="text-xs text-muted-foreground">
-              No tags yet. Add as many freeform tags as you want.
+              Paste regular text, a JSON object with <code>description</code>,{" "}
+              <code>section</code>, and <code>tags</code>, or a quoted tag list.
+              We auto-extract tags and section when present.
             </p>
-          )}
-        </div>
+          </div>
 
-        <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            onClick={handleAddInspiration}
-            disabled={!canSubmit || isSaving}
-          >
-            {isSaving ? "Saving..." : "Add inspiration"}
-          </Button>
-          <Button type="button" variant="outline" onClick={resetForm}>
-            Reset
-          </Button>
-        </div>
+          <div className="space-y-2">
+            <label htmlFor="inspiration-section" className="text-sm font-medium">
+              Section
+            </label>
+            <Input
+              id="inspiration-section"
+              value={sectionInput}
+              onChange={(event) => setSectionInput(event.target.value)}
+              placeholder="e.g. hero, footer, map (optional; defaults to unknown)"
+            />
+            <p className="text-xs text-muted-foreground">
+              Overrides <code>section</code> from pasted JSON when filled.
+            </p>
+          </div>
 
-        <div className="space-y-3">
-          <h3 className="text-sm font-medium">Preview entries</h3>
+          <div className="space-y-2">
+            <label htmlFor="inspiration-tags" className="text-sm font-medium">
+              Tags
+            </label>
+            <div className="flex gap-2">
+              <Input
+                id="inspiration-tags"
+                value={tagInput}
+                onChange={(event) => setTagInput(event.target.value)}
+                onKeyDown={handleTagKeyDown}
+                placeholder='Add tags (e.g. "fintech", "dark-ui", "saas")'
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => addTag(tagInput)}
+              >
+                Add tag
+              </Button>
+            </div>
+            {normalizedTagPreview.length > 0 ? (
+              <p className="text-xs text-muted-foreground">
+                Tag preview:{" "}
+                <span className="font-mono">
+                  {normalizedTagPreview.join(", ")}
+                </span>
+              </p>
+            ) : null}
+            {tags.length > 0 ? (
+              <div className="flex flex-wrap gap-2 pt-1">
+                {tags.map((tag) => (
+                  <button
+                    key={tag}
+                    type="button"
+                    onClick={() => removeTag(tag)}
+                    className="bg-secondary text-secondary-foreground inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs transition-opacity hover:opacity-80"
+                    aria-label={`Remove ${tag}`}
+                  >
+                    {tag}
+                    <XMarkIcon className="h-3.5 w-3.5" />
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                No tags yet. Add as many freeform tags as you want.
+              </p>
+            )}
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              onClick={handleAddInspiration}
+              disabled={!canSubmit || isSaving}
+            >
+              {isSaving ? "Saving..." : "Add inspiration"}
+            </Button>
+            <Button type="button" variant="outline" onClick={resetForm}>
+              Reset
+            </Button>
+          </div>
+
           {error ? (
             <p className="text-sm text-destructive">{error}</p>
           ) : null}
+        </CardContent>
+      </Card>
+
+      <Card className="border-border/70">
+        <CardHeader>
+          <CardTitle>
+            Inspirations{" "}
+            <span className="text-muted-foreground text-sm font-normal">
+              ({items.length})
+            </span>
+          </CardTitle>
+          <CardDescription>
+            All saved inspiration entries. Filter by description, section, or
+            tags.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
           {isLoading ? (
-            <p className="text-sm text-muted-foreground">Loading inspirations...</p>
-          ) : items.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              No entries yet. Add your first inspiration above.
+              Loading inspirations...
             </p>
           ) : (
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Description</TableHead>
-                    <TableHead className="w-28">Section</TableHead>
-                    <TableHead>Tags</TableHead>
-                    <TableHead className="w-48">Created</TableHead>
-                    <TableHead className="w-14 text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {items.map((item) => (
-                    <TableRow key={item.id}>
-                      <TableCell className="max-w-[560px] align-top">
-                        <p className="line-clamp-4 whitespace-pre-wrap text-sm leading-6">
-                          {item.description}
-                        </p>
-                      </TableCell>
-                      <TableCell className="align-top font-mono text-xs">
-                        {item.section}
-                      </TableCell>
-                      <TableCell className="max-w-[320px] align-top">
-                        {item.tags.length > 0 ? (
-                          <div className="flex flex-wrap gap-1.5">
-                            {item.tags.map((tag) => (
-                              <span
-                                key={`${item.id}-${tag}`}
-                                className="bg-secondary text-secondary-foreground rounded-full px-2 py-0.5 text-xs"
-                              >
-                                {tag}
-                              </span>
-                            ))}
-                          </div>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">
-                            No tags
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell className="align-top text-xs text-muted-foreground">
-                        {new Date(item.createdAt).toLocaleString()}
-                      </TableCell>
-                      <TableCell className="text-right align-top">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon-sm"
-                              aria-label="Open row actions"
-                            >
-                              <EllipsisHorizontalIcon className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                              variant="destructive"
-                              onClick={() => handleDeleteInspiration(item.id)}
-                            >
-                              Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+            <DataTable
+              columns={columns}
+              data={items}
+              searchPlaceholder="Search by description, section, or tags..."
+              emptyState="No entries yet. Add your first inspiration on the left."
+              pageSize={25}
+            />
           )}
-        </div>
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+    </div>
   );
 }

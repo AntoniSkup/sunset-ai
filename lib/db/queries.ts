@@ -10,6 +10,8 @@ import {
   or,
   gt,
   sql,
+  count,
+  inArray,
 } from "drizzle-orm";
 import { db } from "./drizzle";
 import {
@@ -31,6 +33,9 @@ import {
   siteAssets,
   publishedSites,
   inspirations,
+  accounts,
+  subscriptions,
+  plans,
 } from "./schema";
 import type {
   ChatTurnRunLivePreviewState,
@@ -1476,4 +1481,149 @@ export async function searchInspirationsByEmbedding(params: {
     .from(inspirations)
     .orderBy(desc(inspirations.createdAt))
     .limit(limit);
+}
+
+export type AdminUserRow = {
+  id: number;
+  email: string;
+  name: string | null;
+  role: string;
+  createdAt: Date;
+  lastMessageAt: Date | null;
+  planName: string | null;
+  chatCount: number;
+  messageCount: number;
+};
+
+export async function listAdminUsers(limit = 500): Promise<AdminUserRow[]> {
+  const safeLimit = Math.min(Math.max(limit, 1), 2000);
+
+  const userRows = await db
+    .select({
+      id: users.id,
+      email: users.email,
+      name: users.name,
+      role: users.role,
+      createdAt: users.createdAt,
+    })
+    .from(users)
+    .where(isNull(users.deletedAt))
+    .orderBy(desc(users.createdAt))
+    .limit(safeLimit);
+
+  if (userRows.length === 0) {
+    return [];
+  }
+
+  const userIds = userRows.map((u) => u.id);
+
+  const [chatCountRows, messageStatsRows, subscriptionRows] = await Promise.all([
+    db
+      .select({
+        userId: chats.userId,
+        chatCount: count(chats.id),
+      })
+      .from(chats)
+      .where(inArray(chats.userId, userIds))
+      .groupBy(chats.userId),
+
+    // One pass over user-authored chat messages gives us both the count and
+    // the most recent message timestamp per user — a more reliable signal
+    // for "last activity" than sign-in events.
+    db
+      .select({
+        userId: chats.userId,
+        messageCount: count(chatMessages.id),
+        lastMessageAt: max(chatMessages.createdAt),
+      })
+      .from(chatMessages)
+      .innerJoin(chats, eq(chatMessages.chatId, chats.id))
+      .where(
+        and(eq(chatMessages.role, "user"), inArray(chats.userId, userIds))
+      )
+      .groupBy(chats.userId),
+
+    db
+      .select({
+        ownerUserId: accounts.ownerUserId,
+        planName: plans.name,
+        status: subscriptions.status,
+        updatedAt: subscriptions.updatedAt,
+      })
+      .from(accounts)
+      .leftJoin(subscriptions, eq(subscriptions.accountId, accounts.id))
+      .leftJoin(plans, eq(plans.id, subscriptions.planId))
+      .where(inArray(accounts.ownerUserId, userIds)),
+  ]);
+
+  const chatCountByUser = new Map<number, number>();
+  for (const row of chatCountRows) {
+    chatCountByUser.set(row.userId, Number(row.chatCount ?? 0));
+  }
+
+  const messageCountByUser = new Map<number, number>();
+  const lastMessageByUser = new Map<number, Date>();
+  for (const row of messageStatsRows) {
+    messageCountByUser.set(row.userId, Number(row.messageCount ?? 0));
+    if (row.lastMessageAt) {
+      lastMessageByUser.set(row.userId, row.lastMessageAt);
+    }
+  }
+
+  // Pick the most relevant subscription per user. Mirrors getSubscriptionByAccountId:
+  // prefer active/trialing, then most recently updated row.
+  const planByUser = new Map<number, string>();
+  const subscriptionPriorityByUser = new Map<
+    number,
+    { rank: number; updatedAt: Date | null; planName: string | null }
+  >();
+
+  for (const row of subscriptionRows) {
+    if (row.ownerUserId == null) continue;
+    const rank =
+      row.status === "active" || row.status === "trialing" ? 0 : 1;
+    const current = subscriptionPriorityByUser.get(row.ownerUserId);
+    const candidateUpdatedAt = row.updatedAt ?? null;
+
+    if (!current) {
+      subscriptionPriorityByUser.set(row.ownerUserId, {
+        rank,
+        updatedAt: candidateUpdatedAt,
+        planName: row.planName,
+      });
+      continue;
+    }
+
+    const isBetter =
+      rank < current.rank ||
+      (rank === current.rank &&
+        (candidateUpdatedAt?.getTime() ?? 0) >
+          (current.updatedAt?.getTime() ?? 0));
+
+    if (isBetter) {
+      subscriptionPriorityByUser.set(row.ownerUserId, {
+        rank,
+        updatedAt: candidateUpdatedAt,
+        planName: row.planName,
+      });
+    }
+  }
+
+  for (const [userId, value] of subscriptionPriorityByUser) {
+    if (value.planName) {
+      planByUser.set(userId, value.planName);
+    }
+  }
+
+  return userRows.map((user) => ({
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    createdAt: user.createdAt,
+    lastMessageAt: lastMessageByUser.get(user.id) ?? null,
+    planName: planByUser.get(user.id) ?? null,
+    chatCount: chatCountByUser.get(user.id) ?? 0,
+    messageCount: messageCountByUser.get(user.id) ?? 0,
+  }));
 }
