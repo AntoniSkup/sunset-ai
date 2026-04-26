@@ -2,9 +2,9 @@ import {
   getExistingLandingSiteFilesContent,
   getLatestLandingSiteRevision,
 } from "@/lib/db/queries";
-import { getComposedReactHtml } from "@/lib/preview/compose-react";
 import { createRenderSnapshotToken } from "@/lib/render-snapshot-token";
-import { getPublicAppOrigin } from "@/lib/screenshots/public-app-origin";
+import { getDeployOriginOrNull } from "@/lib/preview/deploy-host";
+import { isLoopbackHttpOrigin } from "@/lib/url/resolve-http-origin";
 import { captureUrlWithScreenshotOne } from "@/lib/screenshots/screenshot-one-url";
 import { generateText } from "ai";
 import { getAIModel } from "@/lib/ai/get-ai-model";
@@ -631,90 +631,47 @@ async function maybeRunScreenshotCheck(params: {
   }
   const revisionNumber = latestRev.revisionNumber;
 
-  const origin = getPublicAppOrigin();
+  const deployOrigin = getDeployOriginOrNull();
+  if (!deployOrigin || isLoopbackHttpOrigin(deployOrigin)) {
+    return [
+      {
+        severity: "warning",
+        issueCode: "SCREENSHOT_DEPLOY_ORIGIN_MISSING",
+        message:
+          "Skipped screenshot-assisted validation because NEXT_PUBLIC_DEPLOY_ORIGIN is not set to a public URL ScreenshotOne can reach.",
+      },
+    ];
+  }
+
   const token = await createRenderSnapshotToken({
     chatId: params.chatId,
     revisionNumber,
   });
+  if (!token) {
+    return [
+      {
+        severity: "warning",
+        issueCode: "SCREENSHOT_TOKEN_UNAVAILABLE",
+        message:
+          "Skipped screenshot-assisted validation because RENDER_SNAPSHOT_SECRET / AUTH_SECRET is missing.",
+      },
+    ];
+  }
 
   try {
-    if (origin && token) {
-      const renderUrl = `${origin}/api/render-snapshot?token=${encodeURIComponent(token)}`;
-      const imageBytes = await captureUrlWithScreenshotOne({
-        url: renderUrl,
-        viewportWidth: 1440,
-        viewportHeight: 900,
-        imageWidth: 720,
-        imageHeight: 450,
-        imageQuality: 70,
-      });
-      if (imageBytes && imageBytes.byteLength >= 10_000) {
-        return [];
-      }
-      if (imageBytes && imageBytes.byteLength < 10_000) {
-        return [
-          {
-            severity: "warning",
-            issueCode: "SCREENSHOT_TOO_SMALL",
-            message:
-              "Screenshot output looks unusually small; review visual rendering manually.",
-          },
-        ];
-      }
-      return [
-        {
-          severity: "warning",
-          issueCode: "SCREENSHOT_CAPTURE_FAILED",
-          message:
-            "Screenshot API URL capture failed during UI validation; using code-only checks.",
-        },
-      ];
-    }
-
-    const html = await getComposedReactHtml({
-      chatId: params.chatId,
-      revisionNumber,
+    const renderUrl = `${deployOrigin}/p/${encodeURIComponent(token)}`;
+    const imageBytes = await captureUrlWithScreenshotOne({
+      url: renderUrl,
+      viewportWidth: 1440,
+      viewportHeight: 900,
+      imageWidth: 720,
+      imageHeight: 450,
+      imageQuality: 70,
     });
-    if (!html) {
-      return [
-        {
-          severity: "warning",
-          issueCode: "SCREENSHOT_COMPOSE_FAILED",
-          message:
-            "Could not compose HTML for screenshot-assisted validation; using code-only checks.",
-        },
-      ];
+    if (imageBytes && imageBytes.byteLength >= 10_000) {
+      return [];
     }
-
-    const response = await fetch("https://api.screenshotone.com/take", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Access-Key": key,
-      },
-      body: JSON.stringify({
-        html,
-        format: "jpeg",
-        viewport_width: 1440,
-        viewport_height: 900,
-        full_page: false,
-        image_width: 720,
-        image_height: 450,
-        image_quality: 70,
-      }),
-    });
-    if (!response.ok) {
-      return [
-        {
-          severity: "warning",
-          issueCode: "SCREENSHOT_CAPTURE_FAILED",
-          message:
-            "Screenshot API request failed during UI validation; using code-only checks.",
-        },
-      ];
-    }
-    const imageBytes = await response.arrayBuffer();
-    if (imageBytes.byteLength < 10_000) {
+    if (imageBytes && imageBytes.byteLength < 10_000) {
       return [
         {
           severity: "warning",
@@ -724,7 +681,14 @@ async function maybeRunScreenshotCheck(params: {
         },
       ];
     }
-    return [];
+    return [
+      {
+        severity: "warning",
+        issueCode: "SCREENSHOT_CAPTURE_FAILED",
+        message:
+          "Screenshot API URL capture failed during UI validation; using code-only checks.",
+      },
+    ];
   } catch {
     return [
       {

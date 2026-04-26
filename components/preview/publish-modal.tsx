@@ -59,9 +59,13 @@ export function PublishModal({
         const data = await response.json();
         if (data.publishedUrl) {
           setPublishedUrl(data.publishedUrl);
-          const urlParts = data.publishedUrl.split('/');
-          const siteId = urlParts[urlParts.length - 1];
-          setCustomUrl(siteId);
+          if (data.publicId) {
+            setCustomUrl(data.publicId);
+          } else {
+            // Fallback: derive the trailing slug from the URL.
+            const urlParts = String(data.publishedUrl).split('/');
+            setCustomUrl(urlParts[urlParts.length - 1] ?? '');
+          }
         }
       }
     } catch (err) {
@@ -94,9 +98,12 @@ export function PublishModal({
       }
 
       setPublishedUrl(data.publishedUrl);
-      const urlParts = data.publishedUrl.split('/');
-      const siteId = urlParts[urlParts.length - 1];
-      setCustomUrl(siteId);
+      if (data.publicId) {
+        setCustomUrl(data.publicId);
+      } else {
+        const urlParts = String(data.publishedUrl).split('/');
+        setCustomUrl(urlParts[urlParts.length - 1] ?? '');
+      }
 
       if (onPublishSuccess) {
         onPublishSuccess(data.publishedUrl);
@@ -113,9 +120,12 @@ export function PublishModal({
   };
 
   const getFullUrl = () => {
+    // The publish API now returns an absolute URL on the deploy origin
+    // (`https://sunset-deploy.com/s/<publicId>`); use it verbatim. Falling
+    // back to a relative path only when the API hasn't responded yet.
+    if (publishedUrl) return publishedUrl;
     if (!customUrl) return '';
-    const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
-    return `${baseUrl}/api/published/${customUrl}`;
+    return `/s/${customUrl}`;
   };
 
   return (

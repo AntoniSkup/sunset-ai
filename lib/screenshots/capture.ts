@@ -1,9 +1,9 @@
 import { put } from "@vercel/blob";
 import { getComposedHtml } from "@/lib/preview/compose-html";
-import { getComposedReactHtml } from "@/lib/preview/compose-react";
 import { updateChatScreenshotUrl } from "@/lib/db/queries";
 import { createRenderSnapshotToken } from "@/lib/render-snapshot-token";
-import { getPublicAppOrigin } from "@/lib/screenshots/public-app-origin";
+import { getDeployOriginOrNull } from "@/lib/preview/deploy-host";
+import { isLoopbackHttpOrigin } from "@/lib/url/resolve-http-origin";
 import { captureUrlWithScreenshotOne } from "@/lib/screenshots/screenshot-one-url";
 
 const SCREENSHOTONE_API = "https://api.screenshotone.com/take";
@@ -15,6 +15,14 @@ const MIN_URL_CAPTURE_JPEG_BYTES = 12_000;
  * Captures a screenshot of the landing page at the given revision,
  * uploads to Vercel Blob, and updates the chat's screenshot_url.
  * Designed to run in the background (fire-and-forget).
+ *
+ * Capture strategy:
+ *   1. URL capture via the deploy origin (`https://sunset-deploy.com/p/<token>`).
+ *      This is the only path that supports React/Tailwind landings, and it
+ *      runs the same bundle the user sees in the builder iframe.
+ *   2. Legacy `landing/index.html` fallback: send static composed HTML inline
+ *      to ScreenshotOne. Only used for older HTML-include chats; never
+ *      executes user JS server-side.
  */
 export async function captureLandingPageScreenshot(params: {
   chatId: string;
@@ -30,11 +38,11 @@ export async function captureLandingPageScreenshot(params: {
   }
 
   try {
-    const origin = getPublicAppOrigin();
+    const deployOrigin = getDeployOriginOrNull();
     const token = await createRenderSnapshotToken({ chatId, revisionNumber });
 
-    if (origin && token) {
-      const renderUrl = `${origin}/api/render-snapshot?token=${encodeURIComponent(token)}`;
+    if (deployOrigin && !isLoopbackHttpOrigin(deployOrigin) && token) {
+      const renderUrl = `${deployOrigin}/p/${encodeURIComponent(token)}`;
       const imageBuffer = await captureUrlWithScreenshotOne({
         url: renderUrl,
         viewportWidth: 1920,
@@ -67,9 +75,13 @@ export async function captureLandingPageScreenshot(params: {
           "[Screenshot] URL capture failed or empty; falling back to static HTML"
         );
       }
-    } else if (!origin) {
+    } else if (!deployOrigin) {
       console.warn(
-        "[Screenshot] No public origin for ScreenshotOne (localhost is ignored). Set SCREENSHOT_BROWSER_BASE_URL to a tunnel URL, e.g. run `ngrok http 3000` and paste the https origin. See `pnpm dev:ngrok`. Deployed: use VERCEL_URL or your production origin. Falling back to static HTML."
+        "[Screenshot] NEXT_PUBLIC_DEPLOY_ORIGIN not set; URL-capture path skipped. Falling back to static HTML if available."
+      );
+    } else if (isLoopbackHttpOrigin(deployOrigin)) {
+      console.warn(
+        "[Screenshot] NEXT_PUBLIC_DEPLOY_ORIGIN is loopback; ScreenshotOne cannot reach it. Set it to a public tunnel URL (ngrok) for local dev or use a real domain in prod."
       );
     } else if (!token) {
       console.warn(
@@ -77,9 +89,10 @@ export async function captureLandingPageScreenshot(params: {
       );
     }
 
-    const html =
-      (await getComposedReactHtml({ chatId, revisionNumber })) ??
-      (await getComposedHtml({ chatId, revisionNumber }));
+    // Legacy fallback for chats whose entry file is `landing/index.html`
+    // (no React bundle). The composed HTML is purely static and safe to
+    // render in the ScreenshotOne sandbox.
+    const html = await getComposedHtml({ chatId, revisionNumber });
     if (!html) {
       console.warn(`[Screenshot] No composed HTML for chat ${chatId} revision ${revisionNumber}`);
       return;

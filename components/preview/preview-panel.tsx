@@ -246,6 +246,40 @@ export function PreviewPanel({
   }, [realProgress]);
 
   useEffect(() => {
+    let cancelled = false;
+
+    async function fetchTokenAndPoint() {
+      if (cancelled) return;
+      // Mints a new short-lived JWT and returns an absolute URL on the deploy
+      // origin (`sunset-deploy.com/p/<token>`). Fetched fresh on every
+      // revision change because tokens encode `(chatId, revisionNumber)`.
+      try {
+        const res = await fetch(`/api/preview/${chatId}/token`, {
+          cache: "no-store",
+        });
+        if (cancelled) return;
+        if (res.status === 204 || res.status === 404) return;
+        if (!res.ok) {
+          console.error(`Failed to mint preview token: ${res.status}`);
+          return;
+        }
+        const data = (await res.json()) as {
+          revisionId: number;
+          revisionNumber: number;
+          previewUrl: string;
+        };
+        if (cancelled) return;
+        if (data.previewUrl && iframeRef.current) {
+          setCurrentVersionId(data.revisionId);
+          setRevisionNumber(data.revisionNumber);
+          setIsIframeLoading(true);
+          iframeRef.current.src = data.previewUrl;
+        }
+      } catch (e) {
+        console.error("Failed to load latest preview:", e);
+      }
+    }
+
     const handlePreviewUpdate = (event: CustomEvent<PreviewMessagePayload>) => {
       const payload = event.detail;
 
@@ -275,14 +309,9 @@ export function PreviewPanel({
         setRealProgress(0);
         setCurrentVersionId(updatePayload.versionId);
         setRevisionNumber(updatePayload.versionNumber);
-
-        if (iframeRef.current) {
-          const previewUrl =
-            updatePayload.previewUrl ||
-            `/api/preview/${updatePayload.chatId}/${updatePayload.versionNumber}`;
-          setIsIframeLoading(true);
-          iframeRef.current.src = previewUrl;
-        }
+        // Re-mint the JWT for the new revision so the iframe URL points at
+        // the fresh bundle on the deploy origin.
+        void fetchTokenAndPoint();
       }
     };
 
@@ -292,73 +321,37 @@ export function PreviewPanel({
     );
 
     return () => {
+      cancelled = true;
       window.removeEventListener(
         PREVIEW_EVENT_TYPE,
         handlePreviewUpdate as EventListener
       );
     };
-  }, []);
+  }, [chatId]);
 
   useEffect(() => {
     let cancelled = false;
 
-    async function canLoadPreview(previewUrl: string): Promise<boolean> {
-      try {
-        const previewRes = await fetch(previewUrl, { cache: "no-store" });
-        return previewRes.ok;
-      } catch {
-        return false;
-      }
-    }
-
     async function loadLatestPreview() {
-      if (!chatId || typeof chatId !== "string") {
-        return;
-      }
-
+      if (!chatId || typeof chatId !== "string") return;
       try {
-        // Don't preemptively show the loader just because a run is active —
-        // the AI may still be planning before any builder tool has fired.
-        // `chat.tsx` will dispatch `showPreviewLoader` via the LOADING event
-        // on the first tracked tool call (and replays past tool calls when
-        // resuming an in-progress run), which our event listener picks up.
-
-        const res = await fetch(`/api/preview/${chatId}/latest`, {
+        const res = await fetch(`/api/preview/${chatId}/token`, {
           cache: "no-store",
         });
-
-        if (res.status === 204 || res.status === 404) {
-          return;
-        }
-
+        if (cancelled) return;
+        if (res.status === 204 || res.status === 404) return;
         if (!res.ok) {
-          throw new Error(`Failed to load latest preview: ${res.status}`);
+          throw new Error(`Failed to mint preview token: ${res.status}`);
         }
-
         const data = (await res.json()) as {
-          versionId?: number;
-          versionNumber?: number;
-          revisionId?: number;
-          revisionNumber?: number;
+          revisionId: number;
+          revisionNumber: number;
           previewUrl: string;
         };
-
-        if (cancelled) {
-          return;
-        }
-
-        const id = Number(data?.revisionId ?? data?.versionId ?? 0);
-        const revNum = data?.revisionNumber ?? data?.versionNumber ?? null;
-        if (id && data?.previewUrl && iframeRef.current) {
-          const previewReady = await canLoadPreview(data.previewUrl);
-          if (!previewReady) {
-            return;
-          }
-          if (cancelled) {
-            return;
-          }
-          setCurrentVersionId(id);
-          setRevisionNumber(revNum ?? null);
+        if (cancelled) return;
+        if (data.previewUrl && iframeRef.current) {
+          setCurrentVersionId(data.revisionId);
+          setRevisionNumber(data.revisionNumber);
           setIsIframeLoading(true);
           iframeRef.current.src = data.previewUrl;
         }
@@ -396,13 +389,24 @@ export function PreviewPanel({
               </div>
             </div>
           )}
+          {/*
+            * The preview iframe is loaded from the deploy origin
+            * (`sunset-deploy.com`) — a different host than the main app — so
+            * the AI-generated React bundle runs in a separate browser origin
+            * with no access to the main app's cookies, storage, or APIs.
+            * `allow-same-origin` is intentionally omitted: dropping it makes
+            * the iframe an opaque origin so it cannot even touch its own
+            * deploy-origin cookies/storage. We only need scripts (to render
+            * the React app), forms (so AI-generated landing forms can submit
+            * to e.g. mailto:), and popups (CTAs that open external links).
+            */}
           <iframe
             ref={iframeRef}
             data-preview="true"
             id="preview-iframe"
             className="h-full w-full  rounded-lg"
             title="Website Preview"
-            sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
+            sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
             onLoad={() => setIsIframeLoading(false)}
             onError={() => setIsIframeLoading(false)}
           />

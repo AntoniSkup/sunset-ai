@@ -31,6 +31,9 @@ export function PublishedSuccessModal({
 
   const getFullUrl = () => {
     if (!publishedUrl) return '';
+    // The publish API returns an absolute URL on the deploy origin already;
+    // legacy callers may still pass a path, so handle both.
+    if (/^https?:\/\//i.test(publishedUrl)) return publishedUrl;
     const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
     return `${baseUrl}${publishedUrl}`;
   };

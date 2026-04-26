@@ -1,9 +1,7 @@
 import "server-only";
-import type { ComponentType } from "react";
 import { createRequire } from "node:module";
 import * as esbuild from "esbuild";
 import * as fs from "fs";
-import * as os from "os";
 import * as path from "path";
 import {
   getLandingSiteFileContentAtOrBeforeRevision,
@@ -14,14 +12,12 @@ import {
   IMAGE_ASSET_COMPONENT_PATH,
   IMAGE_ASSET_MAP_PATH,
 } from "@/lib/site-assets/conventions";
-import { firstHttpOriginFromCandidates } from "@/lib/url/resolve-http-origin";
 
 const ENTRY_PATH = "landing/index.tsx";
 const THEME_PATH = "landing/theme.tsx";
 const MAX_FILES = 50;
 const MAX_DEPTH = 10;
 const COMPOSE_REACT_DEBUG = process.env.COMPOSE_REACT_DEBUG === "1";
-const KEEP_BUNDLE_ON_ERROR = process.env.COMPOSE_REACT_KEEP_BUNDLE_ON_ERROR === "1";
 
 function debugLog(...args: unknown[]) {
   if (!COMPOSE_REACT_DEBUG) return;
@@ -155,32 +151,6 @@ function getBrowserReactImportMap(): string {
     "react-dom/": `https://esm.sh/react-dom@${reactVersion}/`,
   };
   return `<script type="importmap">${JSON.stringify({ imports: entries })}</script>`;
-}
-
-function getMockBrowserBaseUrl(): string {
-  const fromEnv = firstHttpOriginFromCandidates([
-    process.env.SCREENSHOT_BROWSER_BASE_URL,
-    process.env.APP_BASE_URL,
-    process.env.BASE_URL,
-    process.env.NEXT_PUBLIC_APP_URL,
-    process.env.VERCEL_URL,
-  ]);
-  return (fromEnv ?? "http://localhost:3000").replace(/\/+$/, "");
-}
-
-function wrapInHtml(bodyHtml: string): string {
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Landing Page</title>
-  ${TAILWIND_CDN}
-</head>
-<body>
-  <div id="root">${bodyHtml}</div>
-</body>
-</html>`;
 }
 
 function escapeForJsString(value: string): string {
@@ -762,6 +732,19 @@ export async function getPreviewBrowserBundle(params: {
         {
           name: "landing-browser",
           setup(build) {
+            // Defense in depth: the bundle is intended for the browser, but
+            // if a malicious or buggy AI-generated file imports a Node
+            // built-in (e.g. `child_process`, `fs`), the bundle MUST fail
+            // loudly rather than silently producing a broken-but-loadable
+            // module — and definitely never accidentally execute server-side.
+            // The `node:` prefix variants are blocked too.
+            build.onResolve({ filter: /^(node:)?(fs|child_process|net|dns|http|https|tls|os|path|process|vm|worker_threads|cluster|crypto|stream|zlib|util|module|querystring|url|buffer|inspector|perf_hooks|readline|repl|v8|trace_events|async_hooks)(\/.*)?$/ }, (args) => ({
+              errors: [
+                {
+                  text: `Refusing to bundle Node built-in "${args.path}" — landing pages are browser-only.`,
+                },
+              ],
+            }));
             build.onResolve(
               { filter: /^(react|react-dom|react-router-dom)(\/.*)?$/ },
               (args) => {
@@ -891,273 +874,12 @@ export async function getPreviewBrowserBundle(params: {
   }
 }
 
-export async function getComposedReactHtml(params: {
-  chatId: string;
-  revisionNumber: number;
-}): Promise<string | null> {
-  const { chatId, revisionNumber } = params;
-  debugLog("start", { chatId, revisionNumber });
-
-  const entry = await getLandingSiteFileContentAtOrBeforeRevision({
-    chatId,
-    path: ENTRY_PATH,
-    revisionNumber,
-  });
-
-  if (!entry?.content) {
-    return null;
-  }
-
-  const allFiles = await getAllLandingSiteFilesAtOrBeforeRevision({
-    chatId,
-    revisionNumber,
-  });
-  const runtimeFiles = buildRuntimeFiles(await getReadySiteAssetsByChatId(chatId));
-  const allFilesWithRuntime = [...allFiles, ...runtimeFiles];
-  debugLog("revision files", {
-    chatId,
-    revisionNumber,
-    count: allFilesWithRuntime.length,
-    paths: allFilesWithRuntime.map((f) => f.path),
-  });
-
-  const fileMap = new Map<string, string>();
-  await collectFileMap({
-    chatId,
-    revisionNumber,
-    entryPath: ENTRY_PATH,
-    map: fileMap,
-    depth: 0,
-    allFiles: allFilesWithRuntime,
-  });
-  debugLog("fileMap keys", Array.from(fileMap.keys()));
-
-  let bundle: string;
-  try {
-    const result = await esbuild.build({
-      stdin: {
-        contents: entry.content,
-        sourcefile: ENTRY_PATH,
-        loader: "tsx",
-        resolveDir: process.cwd(),
-      },
-      bundle: true,
-      format: "cjs",
-      platform: "node",
-      jsx: "automatic",
-      write: false,
-      external: [
-        "react",
-        "react-dom",
-        "react-dom/server",
-        "react/jsx-runtime",
-        "react/jsx-dev-runtime",
-      ],
-      plugins: [
-        {
-          name: "landing-resolve",
-          setup(build) {
-            build.onResolve({ filter: /^(react-router-dom|motion\/react)$/ }, (args) => ({
-              path: args.path,
-              namespace: PREVIEW_SHIM_NAMESPACE,
-            }));
-            build.onResolve({ filter: /^\.\.?\// }, (args) => {
-              const importerPath =
-                args.importer && args.importer.startsWith("landing/")
-                  ? args.importer
-                  : ENTRY_PATH;
-              const fromDir = path.dirname(importerPath);
-              const joined = path.join(fromDir, args.path).replace(/\\/g, "/");
-              let resolved = joined.replace(/\/{2,}/g, "/");
-              if (!resolved.startsWith("landing/")) return null;
-              if (
-                !resolved.endsWith(".tsx") &&
-                !resolved.endsWith(".ts") &&
-                !resolved.endsWith(".jsx")
-              ) {
-                resolved = resolved + ".tsx";
-              }
-              if (fileMap.has(resolved)) {
-                debugLog("resolved import", {
-                  importer: args.importer,
-                  request: args.path,
-                  resolved,
-                });
-                return { path: resolved, namespace: "landing" };
-              }
-              debugLog("UNRESOLVED import", {
-                importer: args.importer,
-                request: args.path,
-                attempted: resolved,
-                available: Array.from(fileMap.keys()),
-              });
-              return null;
-            });
-            build.onLoad({ filter: /.*/, namespace: "landing" }, (args) => {
-              const content = fileMap.get(args.path);
-              if (content == null) return null;
-              const patchedContent =
-                args.path === THEME_PATH
-                  ? ensureThemeTypographyCompatExports(content)
-                  : content;
-              return {
-                contents: patchedContent,
-                loader: "tsx",
-                resolveDir: process.cwd(),
-              };
-            });
-            build.onLoad({ filter: /.*/, namespace: PREVIEW_SHIM_NAMESPACE }, (args) => {
-              const contents = getPreviewShimModule(args.path);
-              if (!contents) return null;
-              return {
-                contents,
-                loader: "tsx",
-                resolveDir: process.cwd(),
-              };
-            });
-          },
-        },
-      ],
-      outfile: "out.js",
-    });
-
-    if (result.outputFiles == null || result.outputFiles.length === 0) {
-      console.error("[compose-react] esbuild produced no output");
-      return null;
-    }
-    bundle = result.outputFiles[0].text;
-  } catch (err) {
-    console.error("[compose-react] esbuild failed:", err);
-    return null;
-  }
-
-  let RootComponent: ComponentType | undefined;
-  // We deliberately evaluate the CJS bundle inline rather than writing it to
-  // /tmp and `require()`-ing it. On Vercel/Lambda the project's node_modules
-  // live at `/var/task`, but a temp file at `/tmp/...` cannot resolve `react`
-  // through Node's normal lookup (resolution starts from the temp file's
-  // directory and never walks into `/var/task`). By passing our own
-  // `runtimeRequire` (anchored at the project root) into the wrapper, every
-  // `require('react')` / `require('react/jsx-runtime')` etc. emitted by
-  // esbuild resolves correctly without any disk I/O.
-  const bundleFilename = `landing-${chatId}-${revisionNumber}.cjs`;
-
-  const mockBaseUrl = getMockBrowserBaseUrl();
-  const mockHistoryState = { idx: 0 };
-  const mockDocument = {
-    documentElement: {},
-    body: {},
-    defaultView: null as unknown,
-    createElement: () => ({}),
-    querySelector: () => null,
-    getElementById: () => null,
-  };
-  const mockWindow = {
-    location: {
-      hash: "#/",
-      href: `${mockBaseUrl}/#/`,
-      pathname: "/",
-      search: "",
-      origin: mockBaseUrl,
-    },
-    history: {
-      state: mockHistoryState,
-      pushState: () => {},
-      replaceState: () => {},
-      go: () => {},
-    },
-    document: mockDocument,
-    addEventListener: () => {},
-    removeEventListener: () => {},
-    matchMedia: () => ({
-      matches: false,
-      addListener: () => {},
-      removeListener: () => {},
-      addEventListener: () => {},
-      removeEventListener: () => {},
-      dispatchEvent: () => false,
-      media: "",
-      onchange: null,
-    }),
-  };
-  (mockDocument as { defaultView: typeof mockWindow }).defaultView = mockWindow;
-
-  const previousWindow = (global as any).window;
-  const previousLocation = (global as any).location;
-  const previousDocument = (global as any).document;
-  try {
-    (global as any).window = mockWindow;
-    (global as any).location = mockWindow.location;
-    (global as any).document = mockDocument;
-    const moduleObj: { exports: Record<string, unknown> } = { exports: {} };
-    const evaluator = new Function(
-      "module",
-      "exports",
-      "require",
-      "__filename",
-      "__dirname",
-      bundle
-    );
-    evaluator(
-      moduleObj,
-      moduleObj.exports,
-      runtimeRequire,
-      bundleFilename,
-      process.cwd()
-    );
-    const mod = moduleObj.exports as unknown as
-      | { default?: ComponentType }
-      | ComponentType;
-    RootComponent =
-      (mod as { default?: ComponentType }).default ??
-      (mod as ComponentType);
-  } catch (err) {
-    console.error("[compose-react] load bundle failed:", err);
-    if (KEEP_BUNDLE_ON_ERROR) {
-      try {
-        const dbgDir = path.join(os.tmpdir(), "landing-preview");
-        fs.mkdirSync(dbgDir, { recursive: true });
-        const dbgFile = path.join(
-          dbgDir,
-          `landing-${chatId}-${revisionNumber}-${Date.now()}.cjs`
-        );
-        fs.writeFileSync(dbgFile, bundle, "utf-8");
-        console.warn("[compose-react] bundle preserved for debugging:", dbgFile);
-      } catch {
-        // ignore
-      }
-    }
-    return null;
-  } finally {
-    (global as any).window = previousWindow;
-    (global as any).location = previousLocation;
-    (global as any).document = previousDocument;
-  }
-
-  if (RootComponent == null || typeof RootComponent !== "function") {
-    console.error("[compose-react] bundle did not export a default component");
-    return null;
-  }
-
-  const ReactDefault = runtimeRequire("react");
-  const ReactDOMServerDefault = runtimeRequire("react-dom/server");
-
-  let bodyHtml: string;
-  try {
-    (global as any).window = mockWindow;
-    (global as any).location = mockWindow.location;
-    (global as any).document = mockDocument;
-    bodyHtml = ReactDOMServerDefault.renderToStaticMarkup(
-      ReactDefault.createElement(RootComponent, {})
-    );
-  } catch (err) {
-    console.error("[compose-react] render failed:", err);
-    return null;
-  } finally {
-    (global as any).window = previousWindow;
-    (global as any).location = previousLocation;
-    (global as any).document = previousDocument;
-  }
-
-  return wrapInHtml(bodyHtml);
-}
+// NOTE: A previous SSR fallback (`getComposedReactHtml`) compiled the bundle
+// for `platform: "node"` and ran it via `new Function(...)` with a real
+// project-anchored `require`. That gave any AI-generated landing file
+// effective RCE on the server (could `require("child_process")`,
+// `require("fs")`, read `process.env`). It has been removed: every consumer
+// (builder iframe, ScreenshotOne capture, published share links, UI-validation
+// screenshot) now goes through `getPreviewBrowserBundle` and renders only in
+// the browser, on a separate origin. AI-generated JavaScript is never
+// evaluated on the server.

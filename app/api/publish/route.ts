@@ -7,6 +7,11 @@ import {
   getPublishedSiteByChatId,
   updatePublishedSite,
 } from "@/lib/db/queries";
+import { buildDeployUrl } from "@/lib/preview/deploy-host";
+
+function publishedUrlFor(publicId: string): string {
+  return buildDeployUrl(`/s/${encodeURIComponent(publicId)}`);
+}
 
 export async function GET(request: NextRequest) {
   const user = await getUser();
@@ -41,7 +46,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       published: true,
       publicId: published.publicId,
-      publishedUrl: `/api/published/${published.publicId}`,
+      publishedUrl: publishedUrlFor(published.publicId),
       revisionNumber: published.revisionNumber,
     });
   } catch (error) {
@@ -109,7 +114,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         success: true,
         publicId: updated.publicId,
-        publishedUrl: `/api/published/${updated.publicId}`,
+        publishedUrl: publishedUrlFor(updated.publicId),
         revisionNumber: updated.revisionNumber,
       });
     } else {
@@ -122,7 +127,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         success: true,
         publicId: published.publicId,
-        publishedUrl: `/api/published/${published.publicId}`,
+        publishedUrl: publishedUrlFor(published.publicId),
         revisionNumber: published.revisionNumber,
       });
     }

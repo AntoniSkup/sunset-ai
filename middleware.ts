@@ -1,11 +1,49 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { signToken, verifyToken } from "@/lib/auth/session";
+import { isDeployHost } from "@/lib/preview/deploy-host";
 
 const protectedRoutePrefixes = ["/dashboard", "/start"];
 
+const DEPLOY_HOST_ALLOWED_PREFIXES = ["/p/", "/s/"];
+const DEPLOY_HOST_ALLOWED_EXACT = new Set(["/favicon.ico", "/robots.txt"]);
+
+/**
+ * Path is considered "preview-shell-only" — only renderable on the deploy
+ * origin (`sunset-deploy.com`), never on the main app.
+ */
+function isDeployOnlyPath(pathname: string): boolean {
+  return DEPLOY_HOST_ALLOWED_PREFIXES.some((p) => pathname.startsWith(p));
+}
+
+function isDeployHostAllowedPath(pathname: string): boolean {
+  if (isDeployOnlyPath(pathname)) return true;
+  if (DEPLOY_HOST_ALLOWED_EXACT.has(pathname)) return true;
+  return false;
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const host =
+    request.headers.get("x-forwarded-host") ?? request.headers.get("host");
+  const onDeploy = isDeployHost(host);
+
+  // Deploy origin: serve only the preview/published shells. Everything else
+  // (dashboard, sign-in, billing, /api/*) is invisible here so a misconfig
+  // can never leak the main app surface onto sunset-deploy.com.
+  if (onDeploy) {
+    if (!isDeployHostAllowedPath(pathname)) {
+      return new NextResponse("Not Found", { status: 404 });
+    }
+    return NextResponse.next();
+  }
+
+  // Main app: deploy-only routes must not be reachable here. Defense in depth
+  // against URL leaks (e.g. someone pasting a /p/<token> link into the app).
+  if (isDeployOnlyPath(pathname)) {
+    return new NextResponse("Not Found", { status: 404 });
+  }
+
   const sessionCookie = request.cookies.get("session");
   const isProtectedRoute = protectedRoutePrefixes.some((prefix) =>
     pathname.startsWith(prefix)
