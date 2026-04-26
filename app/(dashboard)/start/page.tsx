@@ -751,14 +751,14 @@ export default function StartPage() {
                   >
                     <PlusIcon className="h-4 w-4" />
                   </button>
-
+                  {/* 
                   <span className="hidden flex-1 text-xs text-gray-400 sm:inline">
                     Press{" "}
                     <kbd className="rounded border border-gray-200 bg-white px-1.5 py-0.5 font-mono text-[10px] text-gray-500 shadow-sm">
                       Enter
                     </kbd>{" "}
                     to send
-                  </span>
+                  </span> */}
 
                   <Button
                     type="submit"

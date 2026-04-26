@@ -333,14 +333,32 @@ const root = document.getElementById('root');
 function landingHasRenderableSubtree(el) {
   return Boolean(el && el.querySelector('*'));
 }
+let snapshotMarked = false;
+function markSnapshotReady() {
+  if (snapshotMarked) return;
+  snapshotMarked = true;
+  document.documentElement.setAttribute('data-landing-snapshot', '1');
+}
 function scheduleSnapshotReadyMark() {
-  setTimeout(() => {
-    document.documentElement.setAttribute('data-landing-snapshot', '1');
-  }, ${snapshotPostPaintDelayMs()});
+  setTimeout(markSnapshotReady, ${snapshotPostPaintDelayMs()});
+}
+function tryRender() {
+  try {
+    createRoot(root).render(React.createElement(App));
+    return true;
+  } catch (err) {
+    try { console.error('[landing] render failed', err); } catch {}
+    return false;
+  }
 }
 if (root) {
-  createRoot(root).render(React.createElement(App));
-  if (landingHasRenderableSubtree(root)) {
+  const rendered = tryRender();
+  if (!rendered) {
+    // Render itself blew up; mark immediately so external screenshotters
+    // capture *something* (the empty/error shell) instead of timing out on
+    // wait_for_selector and producing nothing.
+    markSnapshotReady();
+  } else if (landingHasRenderableSubtree(root)) {
     scheduleSnapshotReadyMark();
   } else {
     const mo = new MutationObserver(() => {
@@ -350,12 +368,19 @@ if (root) {
       }
     });
     mo.observe(root, { childList: true, subtree: true });
+    // Hard cap: if React never commits a tree (runtime crash on mount,
+    // suspended forever, etc.), we still mark the page ready so the
+    // ScreenshotOne wait_for_selector doesn't block until the 90s
+    // request timeout. Better to capture an empty shell than to hang.
     setTimeout(() => {
-      try {
-        mo.disconnect();
-      } catch {}
+      try { mo.disconnect(); } catch {}
+      markSnapshotReady();
     }, 25000);
   }
+} else {
+  // No root element at all — extremely unlikely, but mark anyway so we
+  // don't leave external capture services waiting forever.
+  markSnapshotReady();
 }
 `.trim();
 

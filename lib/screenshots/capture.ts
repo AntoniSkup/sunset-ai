@@ -100,6 +100,15 @@ export async function captureLandingPageScreenshot(params: {
         image_width: 624,
         image_height: 350,
         image_quality: 80,
+        // The composed HTML pulls Tailwind from the play CDN at runtime.
+        // Without these waits ScreenshotOne captures before the CDN script
+        // injects the generated stylesheet, producing an unstyled JPEG that
+        // still passes our size threshold and gets persisted as the project
+        // thumbnail. Mirror the URL-capture timings.
+        wait_until: ["load", "networkidle2"],
+        navigation_timeout: 30,
+        timeout: 90,
+        delay: 3,
       }),
     });
 

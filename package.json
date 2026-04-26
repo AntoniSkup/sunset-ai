@@ -13,7 +13,8 @@
     "db:backfill-inspiration-embeddings": "npx tsx scripts/backfill-inspiration-embeddings.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "trigger:deploy": "npx trigger.dev@4.4.4 deploy"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.64",

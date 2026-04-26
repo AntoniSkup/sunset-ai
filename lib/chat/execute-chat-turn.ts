@@ -42,7 +42,7 @@ import {
   buildChatSystemPrompt,
   buildChatSystemPromptParts,
 } from "@/prompts/chat-system-prompt";
-import { captureLandingPageScreenshot } from "@/lib/screenshots/capture";
+import { scheduleLandingScreenshotCapture } from "@/lib/screenshots/trigger-capture-screenshot";
 import {
   extractTextFromMessageParts,
   hasDisplayableMessageParts,
@@ -875,11 +875,21 @@ export async function createChatTurnStream({
       updateActiveTrace({ output: finalText || undefined });
 
       if (lastSuccessfulRevision) {
-        void captureLandingPageScreenshot({
-          chatId: lastSuccessfulRevision.chatId,
-          revisionNumber: lastSuccessfulRevision.revisionNumber,
-          userId: user.id,
-        });
+        // Schedule the screenshot via a dedicated Trigger task (when the
+        // queue is enabled) so it survives the chat worker exiting. The
+        // helper handles the inline fallback for environments without
+        // Trigger enabled. We `await` only the *scheduling*, not the
+        // capture itself — the actual ScreenshotOne round-trip happens in
+        // the dedicated task and can take ~30-90s.
+        try {
+          await scheduleLandingScreenshotCapture({
+            chatId: lastSuccessfulRevision.chatId,
+            revisionNumber: lastSuccessfulRevision.revisionNumber,
+            userId: user.id,
+          });
+        } catch (error) {
+          console.error("[chat] Failed to schedule screenshot capture", error);
+        }
       }
     },
     onError: async (event: { error: unknown }) => {
