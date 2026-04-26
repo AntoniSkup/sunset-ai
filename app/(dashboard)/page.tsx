@@ -1,9 +1,19 @@
 "use client";
 
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import {
+  type ChangeEvent,
+  type ClipboardEvent,
+  type DragEvent,
+  type FormEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
+import { nanoid } from "nanoid";
 import TextareaAutosize from "react-textarea-autosize";
 import { motion, useReducedMotion, type Variants } from "motion/react";
 import {
@@ -12,6 +22,7 @@ import {
   BoltIcon,
   ChatBubbleLeftRightIcon,
   PaintBrushIcon,
+  PlusIcon,
   SparklesIcon,
 } from "@heroicons/react/24/outline";
 
@@ -20,9 +31,24 @@ import { BorderBeam } from "@/components/ui/border-beam";
 import TypingText from "@/components/ui/typewriter";
 import { SunsetLogoMenu } from "@/components/nav/sunset-logo-menu";
 import sunsetLogoTree from "@/components/icons/sunset_logo_tree.png";
+import {
+  MessageAttachment,
+  MessageAttachments,
+} from "@/components/ai-elements/message";
+import type { FileUIPart } from "ai";
+import {
+  dataTransferHasFilePayload,
+  isAcceptedChatImageFile,
+  pickAcceptedChatImageFilesFromDataTransfer,
+} from "@/lib/files/chat-image-files";
+import { saveLandingHandoff } from "@/lib/storage/landing-handoff";
 import type { User } from "@/lib/db/schema";
 
-export const STARTER_PROMPT_KEY = "landing-starter-prompt";
+type LandingAttachment = {
+  localId: string;
+  file: File;
+  previewUrl: string;
+};
 
 const SUGGESTIONS: { label: string; prompt: string }[] = [
   {
@@ -94,7 +120,12 @@ export default function HomePage() {
   const [input, setInput] = useState("");
   const [isFocused, setIsFocused] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [attachments, setAttachments] = useState<LandingAttachment[]>([]);
+  const [isFileDragActive, setIsFileDragActive] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileDragDepthRef = useRef(0);
+  const attachmentUrlsRef = useRef<string[]>([]);
 
   const { data: user } = useSWR<User>("/api/user", fetcher);
   const isAuthed = !!user?.id;
@@ -107,27 +138,108 @@ export default function HomePage() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  const submitPrompt = (raw: string) => {
+  useEffect(() => {
+    attachmentUrlsRef.current = attachments.map((a) => a.previewUrl);
+  }, [attachments]);
+
+  useEffect(() => {
+    return () => {
+      for (const url of attachmentUrlsRef.current) {
+        URL.revokeObjectURL(url);
+      }
+    };
+  }, []);
+
+  const appendImageFiles = useCallback((files: File[]) => {
+    const accepted = files.filter(isAcceptedChatImageFile);
+    if (accepted.length === 0) return;
+    const next = accepted.map((file) => ({
+      localId: nanoid(),
+      file,
+      previewUrl: URL.createObjectURL(file),
+    }));
+    setAttachments((prev) => [...prev, ...next]);
+  }, []);
+
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    appendImageFiles(Array.from(files));
+    e.target.value = "";
+  };
+
+  const resetFileDragDepth = () => {
+    fileDragDepthRef.current = 0;
+    setIsFileDragActive(false);
+  };
+
+  const handlePaste = (e: ClipboardEvent<HTMLTextAreaElement>) => {
+    if (isLoading) return;
+    const files = pickAcceptedChatImageFilesFromDataTransfer(e.clipboardData);
+    if (files.length === 0) return;
+    e.preventDefault();
+    appendImageFiles(files);
+  };
+
+  const handleDragEnter = (e: DragEvent) => {
+    if (isLoading) return;
+    if (!dataTransferHasFilePayload(e.dataTransfer)) return;
+    fileDragDepthRef.current += 1;
+    setIsFileDragActive(true);
+  };
+
+  const handleDragLeave = (e: DragEvent) => {
+    if (!dataTransferHasFilePayload(e.dataTransfer)) return;
+    fileDragDepthRef.current = Math.max(0, fileDragDepthRef.current - 1);
+    if (fileDragDepthRef.current === 0) setIsFileDragActive(false);
+  };
+
+  const handleDragOver = (e: DragEvent) => {
+    if (isLoading) return;
+    if (!dataTransferHasFilePayload(e.dataTransfer)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+  };
+
+  const handleDrop = (e: DragEvent) => {
+    resetFileDragDepth();
+    if (isLoading) return;
+    e.preventDefault();
+    const files = pickAcceptedChatImageFilesFromDataTransfer(e.dataTransfer);
+    if (files.length === 0) return;
+    appendImageFiles(files);
+  };
+
+  const handleRemoveAttachment = (localId: string) => {
+    setAttachments((prev) => {
+      const target = prev.find((a) => a.localId === localId);
+      if (target) URL.revokeObjectURL(target.previewUrl);
+      return prev.filter((a) => a.localId !== localId);
+    });
+  };
+
+  const submitPrompt = async (raw: string) => {
     const message = raw.trim();
-    if (!message || isLoading) return;
+    if ((!message && attachments.length === 0) || isLoading) return;
     setIsLoading(true);
-    try {
-      window.localStorage.setItem(STARTER_PROMPT_KEY, message);
-    } catch {
-      // localStorage may be unavailable; the destination still works.
-    }
+    await saveLandingHandoff(
+      message,
+      attachments.map((a) => a.file)
+    );
     router.push(isAuthed ? "/start" : "/sign-up?redirect=/start");
   };
 
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    submitPrompt(input);
+    void submitPrompt(input);
   };
 
   const handleSuggestion = (prompt: string) => {
     setInput(prompt);
     requestAnimationFrame(() => textareaRef.current?.focus());
   };
+
+  const canSubmit = !isLoading && (input.trim() || attachments.length > 0);
 
   const showPlaceholder = !input.trim() && !isFocused;
 
@@ -250,7 +362,31 @@ export default function HomePage() {
               onSubmit={handleSubmit}
               className="mt-10 w-full"
             >
-              <div className="relative overflow-hidden rounded-2xl border border-gray-400/80 bg-[#ffffffe9] px-5 py-4 shadow-[0_10px_40px_-12px_rgba(15,23,42,0.18)] transition-[box-shadow,border-color] focus-within:border-gray-900 sm:px-7 sm:py-5">
+              <div
+                className={`relative overflow-hidden rounded-2xl border bg-[#ffffffe9] px-5 py-4 shadow-[0_10px_40px_-12px_rgba(15,23,42,0.18)] transition-[box-shadow,border-color] focus-within:border-gray-900 sm:px-7 sm:py-5 ${
+                  isFileDragActive
+                    ? "border-gray-900 ring-2 ring-gray-900/15"
+                    : "border-gray-400/80"
+                }`}
+                onDragEnter={handleDragEnter}
+                onDragLeave={handleDragLeave}
+                onDragOver={handleDragOver}
+                onDrop={handleDrop}
+              >
+                {isFileDragActive && (
+                  <div
+                    className="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center gap-0.5 rounded-2xl border-2 border-dashed border-gray-900/35 bg-white/90 px-4 text-center"
+                    aria-hidden
+                  >
+                    <span className="text-sm font-medium text-gray-900">
+                      Drop images here
+                    </span>
+                    <span className="text-xs text-gray-500">
+                      PNG, JPG, or WebP — or paste from clipboard
+                    </span>
+                  </div>
+                )}
+
                 <div className="relative min-h-[4.5rem] text-left">
                   {showPlaceholder && (
                     <div
@@ -276,12 +412,13 @@ export default function HomePage() {
                     ref={textareaRef}
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
+                    onPaste={handlePaste}
                     onFocus={() => setIsFocused(true)}
                     onBlur={() => setIsFocused(false)}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && !e.shiftKey) {
                         e.preventDefault();
-                        if (!isLoading && input.trim()) {
+                        if (canSubmit) {
                           (
                             e.target as HTMLTextAreaElement
                           ).form?.requestSubmit();
@@ -298,8 +435,47 @@ export default function HomePage() {
                   />
                 </div>
 
-                <div className="mt-2 flex items-center justify-between">
-                  <span className="hidden text-xs text-gray-400 sm:inline">
+                <div
+                  className={`overflow-hidden transition-[max-height,opacity,margin] duration-300 ease-out ${
+                    attachments.length > 0
+                      ? "mt-3 max-h-28 opacity-100"
+                      : "mt-0 max-h-0 opacity-0"
+                  }`}
+                >
+                  <MessageAttachments className="ml-0 flex-nowrap gap-2 overflow-x-auto">
+                    {attachments.map((attachment) => (
+                      <MessageAttachment
+                        key={attachment.localId}
+                        className="size-16 shrink-0 rounded-xl"
+                        data={
+                          {
+                            type: "file",
+                            url: attachment.previewUrl,
+                            mediaType: attachment.file.type,
+                            filename: attachment.file.name,
+                          } as FileUIPart
+                        }
+                        onRemove={() =>
+                          handleRemoveAttachment(attachment.localId)
+                        }
+                      />
+                    ))}
+                  </MessageAttachments>
+                </div>
+
+                <div className="mt-2 flex items-center justify-between gap-3">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isLoading}
+                    aria-label="Attach images"
+                    title="Attach images"
+                    className="flex h-8 w-8 items-center justify-center rounded-full text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 disabled:opacity-50"
+                  >
+                    <PlusIcon className="h-4 w-4" />
+                  </button>
+
+                  <span className="hidden flex-1 text-xs text-gray-400 sm:inline">
                     Press{" "}
                     <kbd className="rounded border border-gray-200 bg-white px-1.5 py-0.5 font-mono text-[10px] text-gray-500 shadow-sm">
                       Enter
@@ -308,8 +484,8 @@ export default function HomePage() {
                   </span>
                   <Button
                     type="submit"
-                    disabled={isLoading || !input.trim()}
-                    className="ml-auto h-9 rounded-md bg-gray-900 px-5 text-sm text-white hover:bg-gray-800 disabled:bg-gray-200 disabled:text-gray-500"
+                    disabled={!canSubmit}
+                    className="h-9 rounded-md bg-gray-900 px-5 text-sm text-white hover:bg-gray-800 disabled:bg-gray-200 disabled:text-gray-500"
                     aria-label="Start building"
                   >
                     {isLoading ? (
@@ -319,6 +495,15 @@ export default function HomePage() {
                     )}
                   </Button>
                 </div>
+
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  accept=".jpg,.jpeg,.png,.webp"
+                  className="hidden"
+                  onChange={handleFileChange}
+                />
 
                 {!prefersReducedMotion && (
                   <BorderBeam

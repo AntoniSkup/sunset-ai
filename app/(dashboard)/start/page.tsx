@@ -43,6 +43,7 @@ import {
   isAcceptedChatImageFile,
   pickAcceptedChatImageFilesFromDataTransfer,
 } from "@/lib/files/chat-image-files";
+import { consumeLandingHandoff } from "@/lib/storage/landing-handoff";
 
 type Chat = {
   id: number;
@@ -104,6 +105,7 @@ export default function StartPage() {
   const attachmentUrlsRef = useRef<string[]>([]);
   const uploadToastTimerRef = useRef<number | null>(null);
   const autoSubmitPendingRef = useRef(false);
+  const handoffHydrationStartedRef = useRef(false);
   const router = useRouter();
   const setPendingMessage = usePendingMessageStore((s) => s.setPendingMessage);
 
@@ -176,20 +178,6 @@ export default function StartPage() {
     loadPage(undefined);
   }, [loadPage]);
 
-  useEffect(() => {
-    try {
-      const STARTER_PROMPT_KEY = "landing-starter-prompt";
-      const stored = window.localStorage.getItem(STARTER_PROMPT_KEY);
-      if (stored && stored.trim()) {
-        setInput(stored);
-        window.localStorage.removeItem(STARTER_PROMPT_KEY);
-        autoSubmitPendingRef.current = true;
-      }
-    } catch {
-      // localStorage may be unavailable; ignore.
-    }
-  }, []);
-
   // After the starter prompt has been hydrated into state, kick off the
   // exact same submit flow the user would have triggered manually. This
   // gives them an end-to-end "type → sign up → start building" handoff
@@ -199,7 +187,12 @@ export default function StartPage() {
     if (isLoading) return;
     if (!input.trim() && attachments.length === 0) return;
     autoSubmitPendingRef.current = false;
-    formRef.current?.requestSubmit();
+    // Wait one frame so React has a chance to flush the focus/UI before we
+    // trigger the form submit; otherwise the request may race the chats
+    // fetch above and feel jumpy on slower devices.
+    requestAnimationFrame(() => {
+      formRef.current?.requestSubmit();
+    });
   }, [input, isLoading, attachments.length]);
 
   useEffect(() => {
@@ -242,6 +235,26 @@ export default function StartPage() {
     }));
     setAttachments((prev) => [...prev, ...next]);
   }, []);
+
+  // Pull any handoff (prompt + image files) the public landing page may have
+  // stashed for us, hydrate it into local state, and arm the auto-submit
+  // effect above. Guarded by a ref (instead of a cancellation flag) so that
+  // React 18 Strict Mode's double effect mount in dev doesn't consume the
+  // storage on pass 1, cancel pass 1, and then find nothing on pass 2.
+  useEffect(() => {
+    if (handoffHydrationStartedRef.current) return;
+    handoffHydrationStartedRef.current = true;
+    (async () => {
+      const handoff = await consumeLandingHandoff();
+      if (!handoff) return;
+      const hasPrompt = handoff.prompt.length > 0;
+      const hasFiles = handoff.files.length > 0;
+      if (!hasPrompt && !hasFiles) return;
+      if (hasPrompt) setInput(handoff.prompt);
+      if (hasFiles) appendImageFiles(handoff.files);
+      autoSubmitPendingRef.current = true;
+    })();
+  }, [appendImageFiles]);
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
