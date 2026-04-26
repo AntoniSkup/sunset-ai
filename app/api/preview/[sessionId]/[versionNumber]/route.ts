@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   getLatestLandingSiteRevision,
+  getLatestRevisionNumberWithFile,
   getLatestVersion,
   getUser,
 } from "@/lib/db/queries";
@@ -10,6 +11,32 @@ import {
   getPreviewHtml,
   getPreviewBrowserBundle,
 } from "@/lib/preview/compose-react";
+
+const ENTRY_PATH = "landing/index.tsx";
+
+async function tryComposeAtRevision(params: {
+  chatId: string;
+  revisionNumber: number;
+}): Promise<{ html: string; basePath: string } | null> {
+  const { chatId, revisionNumber } = params;
+  const basePath = `/api/preview/${chatId}/${revisionNumber}`;
+
+  const bundle = await getPreviewBrowserBundle({ chatId, revisionNumber });
+  if (bundle) {
+    return {
+      html: getPreviewHtml({ chatId, revisionNumber, basePath }),
+      basePath,
+    };
+  }
+
+  const composed =
+    (await getComposedReactHtml({ chatId, revisionNumber })) ??
+    (await getComposedHtml({ chatId, revisionNumber }));
+  if (composed) {
+    return { html: composed, basePath };
+  }
+  return null;
+}
 
 export async function GET(
   request: NextRequest,
@@ -49,34 +76,37 @@ export async function GET(
         );
       }
 
-      const requestedRevision = versionNum > 0 ? versionNum : latestRevision.revisionNumber;
+      const requestedRevision =
+        versionNum > 0 ? versionNum : latestRevision.revisionNumber;
 
-      const basePath = `/api/preview/${chatId}/${requestedRevision}`;
-      const bundle = await getPreviewBrowserBundle({
+      // Each tool call produces its own revision containing only the file it
+      // wrote, so an early revision can exist before `landing/index.tsx` is
+      // created (e.g. a section file was generated first). Try the requested
+      // revision first; if it can't compose, fall back to the latest revision
+      // that actually contains the entry file so the user sees something
+      // renderable instead of a 404.
+      let result = await tryComposeAtRevision({
         chatId,
         revisionNumber: requestedRevision,
       });
-      let composed: string | null =
-        bundle
-          ? getPreviewHtml({
-              chatId,
-              revisionNumber: requestedRevision,
-              basePath,
-            })
-          : null;
-      if (!composed) {
-        composed =
-          (await getComposedReactHtml({
+
+      if (!result) {
+        const fallbackRevision = await getLatestRevisionNumberWithFile({
+          chatId,
+          path: ENTRY_PATH,
+        });
+        if (fallbackRevision != null && fallbackRevision !== requestedRevision) {
+          console.warn(
+            `[preview] Entry missing at chat=${chatId} revision=${requestedRevision}; retrying at latest renderable revision=${fallbackRevision}`
+          );
+          result = await tryComposeAtRevision({
             chatId,
-            revisionNumber: requestedRevision,
-          })) ??
-          (await getComposedHtml({
-            chatId,
-            revisionNumber: requestedRevision,
-          }));
+            revisionNumber: fallbackRevision,
+          });
+        }
       }
 
-      if (!composed) {
+      if (!result) {
         console.warn(
           `[preview] Missing composed revision output for chat=${chatId} revision=${requestedRevision}; falling back to legacy version table if available`
         );
@@ -99,7 +129,7 @@ export async function GET(
         );
       }
 
-      return new NextResponse(composed, {
+      return new NextResponse(result.html, {
         headers: {
           "Content-Type": "text/html; charset=utf-8",
           "Cache-Control": "no-cache, no-store, must-revalidate",

@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   getLatestLandingSiteRevision,
+  getLatestRevisionNumberWithFile,
   getUser,
 } from "@/lib/db/queries";
 import { getPreviewBrowserBundle } from "@/lib/preview/compose-react";
+
+const ENTRY_PATH = "landing/index.tsx";
 
 export async function GET(
   _request: NextRequest,
@@ -41,11 +44,31 @@ export async function GET(
       );
     }
 
-    const requestedRevision = versionNum > 0 ? versionNum : latestRevision.revisionNumber;
-    const bundle = await getPreviewBrowserBundle({
+    const requestedRevision =
+      versionNum > 0 ? versionNum : latestRevision.revisionNumber;
+    let bundle = await getPreviewBrowserBundle({
       chatId,
       revisionNumber: requestedRevision,
     });
+
+    // Mirror the HTML route's fallback: if the requested revision predates the
+    // entry file, retry at the latest revision that contains it so a direct
+    // bundle request still produces something renderable.
+    if (!bundle) {
+      const fallbackRevision = await getLatestRevisionNumberWithFile({
+        chatId,
+        path: ENTRY_PATH,
+      });
+      if (fallbackRevision != null && fallbackRevision !== requestedRevision) {
+        console.warn(
+          `[preview/bundle] Entry missing at chat=${chatId} revision=${requestedRevision}; retrying at latest renderable revision=${fallbackRevision}`
+        );
+        bundle = await getPreviewBrowserBundle({
+          chatId,
+          revisionNumber: fallbackRevision,
+        });
+      }
+    }
 
     if (!bundle) {
       return NextResponse.json(

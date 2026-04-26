@@ -296,6 +296,42 @@ export async function getLatestLandingSiteRevision(chatId: string) {
   return result.length > 0 ? result[0] : null;
 }
 
+/**
+ * Returns the highest `revisionNumber` for a chat that contains the given file
+ * path (i.e. a revision in which a `landing_site_file_versions` row exists for
+ * that file). Returns `null` if the file has never been written for the chat.
+ *
+ * Used by the preview routes to recover when the requested revision predates
+ * the creation of `landing/index.tsx` (e.g. a section was created before the
+ * entry layout) so we can render the latest renderable state instead of 404'ing.
+ */
+export async function getLatestRevisionNumberWithFile(params: {
+  chatId: string;
+  path: string;
+}): Promise<number | null> {
+  const result = await db
+    .select({ revisionNumber: landingSiteRevisions.revisionNumber })
+    .from(landingSiteFiles)
+    .innerJoin(
+      landingSiteFileVersions,
+      eq(landingSiteFileVersions.fileId, landingSiteFiles.id),
+    )
+    .innerJoin(
+      landingSiteRevisions,
+      eq(landingSiteRevisions.id, landingSiteFileVersions.revisionId),
+    )
+    .where(
+      and(
+        eq(landingSiteFiles.chatId, params.chatId),
+        eq(landingSiteFiles.path, params.path),
+      ),
+    )
+    .orderBy(desc(landingSiteRevisions.revisionNumber))
+    .limit(1);
+
+  return result.length > 0 ? result[0].revisionNumber : null;
+}
+
 export async function upsertLandingSiteFile(data: {
   chatId: string;
   path: string;
