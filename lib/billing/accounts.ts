@@ -23,22 +23,36 @@ export async function getAccountForUser(userId: number): Promise<Account | null>
 }
 
 /**
+ * Idempotently insert a credit wallet for an account. Safe to call from
+ * inside or outside a transaction; relies on the `accountId` unique
+ * constraint to dedupe under concurrency.
+ */
+async function ensureWalletForAccount(
+  exec: typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0],
+  accountId: number
+): Promise<void> {
+  await exec
+    .insert(creditWallets)
+    .values({ accountId, balanceCached: 0 })
+    .onConflictDoNothing({ target: creditWallets.accountId });
+}
+
+/**
  * Get or create account and credit wallet for the user.
  * On first account creation, creates credit_wallet in the same transaction.
- * Ensures wallet exists even for accounts created before billing was added.
+ * Ensures wallet exists even for accounts created before billing was added,
+ * and even when this call lost the race against a concurrent writer that
+ * created the account row.
  */
 export async function getOrCreateAccountForUser(
   userId: number
 ): Promise<Account> {
   const existing = await getAccountForUser(userId);
   if (existing) {
-    const wallet = await getWalletByAccountId(existing.id);
-    if (!wallet) {
-      await db
-        .insert(creditWallets)
-        .values({ accountId: existing.id, balanceCached: 0 })
-        .onConflictDoNothing({ target: creditWallets.accountId });
-    }
+    // Defensive: legacy accounts (created before billing existed) and
+    // partial signups can leave the account row without a wallet. Always
+    // ensure one is present before returning.
+    await ensureWalletForAccount(db, existing.id);
     return existing;
   }
 
@@ -67,22 +81,24 @@ export async function getOrCreateAccountForUser(
       .returning();
 
     if (inserted[0]) {
-      await tx.insert(creditWallets).values({
-        accountId: inserted[0].id,
-        balanceCached: 0,
-      });
+      await ensureWalletForAccount(tx, inserted[0].id);
       return inserted[0];
     }
 
-    const [existing] = await tx
+    // Fallthrough: another writer inserted the account row before us.
+    // We MUST still guarantee the wallet exists for this account, otherwise
+    // downstream callers (daily-credit grants, debits, etc.) will throw
+    // "Credit wallet not found for account" and break the signup flow.
+    const [existingInTx] = await tx
       .select()
       .from(accounts)
       .where(eq(accounts.ownerUserId, userId))
       .limit(1);
-    if (!existing) {
+    if (!existingInTx) {
       throw new Error("Failed to get or create account");
     }
-    return existing;
+    await ensureWalletForAccount(tx, existingInTx.id);
+    return existingInTx;
   });
 }
 

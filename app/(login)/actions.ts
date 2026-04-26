@@ -247,7 +247,18 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
       setSession(createdUser),
     ]);
     const account = await getOrCreateAccountForUser(createdUser.id);
-    await ensureDailyCreditsForAccount(account.id);
+    // Best-effort daily-credit grant. We never want a billing-side hiccup
+    // (missing plan row, wallet race, etc.) to reject the user's sign-up:
+    // the account + wallet are already in place, and the daily-credits
+    // cron will backfill any missed grant on its next run.
+    try {
+      await ensureDailyCreditsForAccount(account.id);
+    } catch (creditError) {
+      console.error(
+        "Daily credit grant failed during signup (non-fatal):",
+        creditError
+      );
+    }
   } catch (error) {
     console.error("Error creating team member or setting session:", error);
     return {
