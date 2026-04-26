@@ -5,7 +5,18 @@ import useSWR from "swr";
 import { ChevronRightIcon } from "@heroicons/react/24/outline";
 import type { BillingApiResponse } from "@/app/api/billing/route";
 
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
+// Throw on non-2xx so SWR keeps `data` undefined on auth failures (e.g. 401
+// when the session cookie is present but `getUser()` can't resolve a user).
+// Without this, the fetcher resolves to `{ error: "..." }`, which is truthy
+// and would make a bare `!billing` guard pass through to a crashing
+// destructure of `billing.credits`.
+const fetcher = async (url: string): Promise<BillingApiResponse> => {
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`Failed to load billing: ${res.status}`);
+  }
+  return (await res.json()) as BillingApiResponse;
+};
 
 type CreditsSectionProps = {
   /** Where the section links to when clicked. Defaults to /dashboard. */
@@ -26,10 +37,13 @@ export function CreditsSection({
   className = "block px-4 py-3 hover:bg-gray-50 rounded-md transition-colors -mx-1",
 }: CreditsSectionProps) {
   const { data: billing } = useSWR<BillingApiResponse>("/api/billing", fetcher);
-  if (!billing) return null;
+  // Guard against both the loading state (`billing` undefined) and any
+  // unexpected payload shape (e.g. an error body that slipped past the
+  // fetcher) so an unauthenticated/transient failure can't crash the whole
+  // tree by trying to destructure `daily` off of `undefined`.
+  if (!billing?.credits) return null;
 
-  const { credits } = billing;
-  const { daily, monthly, topup } = credits;
+  const { daily, monthly, topup } = billing.credits;
 
   // "Subscription" bucket = monthly cycle credits + persistent top-up credits.
   // Both are priority-1 grants that consume after the daily bonus, so for the
