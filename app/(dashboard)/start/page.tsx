@@ -17,13 +17,12 @@ import { usePendingMessageStore } from "@/lib/stores/usePendingMessageStore";
 import TextareaAutosize from "react-textarea-autosize";
 import {
   ArrowPathIcon,
-  Cog6ToothIcon,
-  CreditCardIcon,
-  HomeIcon,
+  ArrowRightIcon,
   PlusIcon,
+  SparklesIcon,
 } from "@heroicons/react/24/outline";
 import { Button } from "@/components/ui/button";
-import { motion } from "motion/react";
+import { motion, useReducedMotion, type Variants } from "motion/react";
 import sunsetLogoTree from "@/components/icons/sunset_logo_tree.png";
 
 import { BorderBeam } from "@/components/ui/border-beam";
@@ -82,6 +81,50 @@ function getRelativeTime(dateStr: string) {
 
 const PROJECTS_PAGE_SIZE = 12;
 
+const SUGGESTIONS: { label: string; prompt: string }[] = [
+  {
+    label: "Coffee shop",
+    prompt:
+      "Make a website for my coffee shop with a hero, menu highlights, opening hours, and a map.",
+  },
+  {
+    label: "Freelance portfolio",
+    prompt:
+      "Make a sleek portfolio site for my freelance design work with a project gallery and a contact form.",
+  },
+  {
+    label: "SaaS landing",
+    prompt:
+      "Make a modern SaaS landing page with hero, feature grid, pricing tiers, and an FAQ.",
+  },
+  {
+    label: "Restaurant",
+    prompt:
+      "Make a website for my restaurant with the menu, opening hours, photo gallery, and reservations.",
+  },
+  {
+    label: "Photography",
+    prompt:
+      "Make a minimal portfolio for my photography with a gallery and an inquiry form.",
+  },
+];
+
+const heroContainer: Variants = {
+  hidden: {},
+  show: {
+    transition: { staggerChildren: 0.07, delayChildren: 0.05 },
+  },
+};
+
+const heroItem: Variants = {
+  hidden: { opacity: 0, y: 14 },
+  show: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.5, ease: [0.22, 1, 0.36, 1] },
+  },
+};
+
 export default function StartPage() {
   const [input, setInput] = useState("");
   const [isFocused, setIsFocused] = useState(false);
@@ -93,9 +136,8 @@ export default function StartPage() {
   );
   const [loadingMore, setLoadingMore] = useState(false);
   const [attachments, setAttachments] = useState<StartAttachment[]>([]);
-  const [uploadToast, setUploadToast] = useState<UploadProgressToastState | null>(
-    null
-  );
+  const [uploadToast, setUploadToast] =
+    useState<UploadProgressToastState | null>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
@@ -108,6 +150,7 @@ export default function StartPage() {
   const handoffHydrationStartedRef = useRef(false);
   const router = useRouter();
   const setPendingMessage = usePendingMessageStore((s) => s.setPendingMessage);
+  const prefersReducedMotion = useReducedMotion();
 
   const scheduleUploadToastHide = useCallback((delayMs: number) => {
     if (uploadToastTimerRef.current != null) {
@@ -305,6 +348,11 @@ export default function StartPage() {
     appendImageFiles(files);
   };
 
+  const handleSuggestion = (prompt: string) => {
+    setInput(prompt);
+    requestAnimationFrame(() => textareaRef.current?.focus());
+  };
+
   const handleRemoveAttachment = (localId: string) => {
     setAttachments((prev) => {
       const target = prev.find((a) => a.localId === localId);
@@ -393,21 +441,25 @@ export default function StartPage() {
           | PromiseRejectedResult
           | undefined;
         if (failed) {
-          throw (
-            failed.reason instanceof Error
-              ? failed.reason
-              : new Error("Failed to upload image.")
-          );
+          throw failed.reason instanceof Error
+            ? failed.reason
+            : new Error("Failed to upload image.");
         }
         uploadedAttachments = settled
-          .filter((item): item is PromiseFulfilledResult<any> => item.status === "fulfilled")
+          .filter(
+            (item): item is PromiseFulfilledResult<any> =>
+              item.status === "fulfilled"
+          )
           .map((item) => item.value);
 
         setUploadToast({
           status: "success",
           total: attachments.length,
           completed: attachments.length,
-          message: attachments.length === 1 ? "Upload complete." : "All files uploaded.",
+          message:
+            attachments.length === 1
+              ? "Upload complete."
+              : "All files uploaded.",
         });
         scheduleUploadToastHide(1200);
       }
@@ -513,286 +565,427 @@ export default function StartPage() {
     }
   };
 
+  const canSubmit =
+    !isLoading && (input.trim().length > 0 || attachments.length > 0);
+
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white px-4 py-6 sm:px-8 md:px-12">
-      <SunsetLogoMenu />
+    <div className="relative min-h-full bg-white">
+      <BackgroundDecor />
 
-      <section className="flex min-h-[70vh] items-center justify-center flex-row">
-        <div className="mx-auto flex w-full max-w-3xl flex-col items-start text-start">
-          <div className="flex flex-row items-center justify-start">
-            <motion.img
-              initial={{ opacity: 0, y: 24 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, ease: "easeOut" }}
-              src={sunsetLogoTree.src}
-              alt="Sunset"
-              className="w-10 h-10 mr-2"
-            />
-            <motion.h1
-              initial={{ opacity: 0, y: 24 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, ease: "easeOut" }}
-              className="text-3xl font-bold tracking-tight text-gray-900 sm:text-3xl"
+      <header className="sticky top-0 z-30 border-b border-gray-200/60 bg-white/65 backdrop-blur-md backdrop-saturate-150 supports-[backdrop-filter]:bg-white/55">
+        <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
+          <SunsetLogoMenu />
+          <nav className="flex items-center gap-1 sm:gap-2">
+            <Link
+              href="/pricing"
+              className="hidden h-9 items-center rounded-full px-4 text-sm font-medium text-gray-600 transition-colors hover:text-gray-900 sm:inline-flex"
             >
-              What are we creating today?
-            </motion.h1>
-          </div>
+              Pricing
+            </Link>
+            <Link
+              href="/dashboard"
+              className="inline-flex h-9 items-center rounded-full px-4 text-sm font-medium text-gray-600 transition-colors hover:text-gray-900"
+            >
+              Settings
+            </Link>
+          </nav>
+        </div>
+      </header>
 
-          <form ref={formRef} onSubmit={handleSubmit} className="mt-8 w-full">
-            <div
-              className={`relative rounded-xl border bg-[#ffffffe9] border-gray-500 px-8 py-6 overflow-hidden shadow transition-[box-shadow,border-color] ${
-                isFileDragActive ? "border-gray-900 ring-2 ring-gray-900/15" : ""
-              }`}
-              onDragEnter={handleDragEnter}
-              onDragLeave={handleDragLeave}
-              onDragOver={handleDragOver}
-              onDrop={handleDrop}
+      <div className="relative z-10 mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
+        <section className="relative pt-12 pb-12 sm:pt-16 md:pt-20">
+          <motion.div
+            variants={heroContainer}
+            initial="hidden"
+            animate="show"
+            className="mx-auto flex w-full max-w-3xl flex-col items-center text-center [transform:translateZ(0)] [will-change:transform,opacity]"
+          >
+            <motion.div
+              variants={heroItem}
+              className="mb-6 inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white/70 px-3 py-1 text-xs font-medium text-gray-600 backdrop-blur"
             >
-              {isFileDragActive && (
-                <div
-                  className="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center gap-0.5 rounded-xl border-2 border-dashed border-gray-900/35 bg-[#ffffff]/90 px-4 text-center"
-                  aria-hidden
-                >
-                  <span className="text-sm font-medium text-gray-900">
-                    Drop images here
-                  </span>
-                  <span className="text-xs text-gray-500">
-                    PNG, JPG, or WebP — or paste from clipboard
-                  </span>
-                </div>
-              )}
-              <div className="relative min-h-[4.5rem]">
-                {!input.trim() && !isFocused && (
+              <SparklesIcon className="h-3.5 w-3.5 text-[#ff6313]" />
+              What are we building next?
+            </motion.div>
+
+            <div className="flex flex-col items-center gap-3">
+              <motion.img
+                variants={heroItem}
+                src={sunsetLogoTree.src}
+                alt="Sunset"
+                className="h-12 w-12 select-none drop-shadow-sm"
+                draggable={false}
+              />
+              <motion.h1
+                variants={heroItem}
+                className="text-balance text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl md:text-5xl [transform:translateZ(0)]"
+              >
+                What are we creating{" "}
+                <span className="bg-gradient-to-r from-[#ff6313] via-[#ff8a3d] to-[#ffb066] bg-clip-text text-transparent">
+                  today?
+                </span>
+              </motion.h1>
+              <motion.p
+                variants={heroItem}
+                className="mt-2 max-w-xl text-sm text-gray-500 sm:text-base"
+              >
+                Describe your idea — Sunset designs, builds, and ships it in
+                seconds.
+              </motion.p>
+            </div>
+
+            <motion.form
+              ref={formRef}
+              onSubmit={handleSubmit}
+              variants={heroItem}
+              className="mt-8 w-full"
+            >
+              <div
+                className={`relative overflow-hidden rounded-2xl border bg-[#ffffffe9] px-5 py-4 shadow-[0_10px_40px_-12px_rgba(15,23,42,0.18)] transition-[box-shadow,border-color] focus-within:border-gray-900 sm:px-7 sm:py-5 ${
+                  isFileDragActive
+                    ? "border-gray-900 ring-2 ring-gray-900/15"
+                    : "border-gray-400/80"
+                }`}
+                onDragEnter={handleDragEnter}
+                onDragLeave={handleDragLeave}
+                onDragOver={handleDragOver}
+                onDrop={handleDrop}
+              >
+                {isFileDragActive && (
                   <div
-                    className="pointer-events-none absolute inset-0 flex items-start pt-2 top-[-3px] text-base leading-normal"
+                    className="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center gap-0.5 rounded-2xl border-2 border-dashed border-gray-900/35 bg-white/90 px-4 text-center"
                     aria-hidden
                   >
-                    <span className="text-base text-gray-400 leading-normal">
-                      Make a website&nbsp;
-                      <TypingText
-                        text={[
-                          "for my business.",
-                          "for my freelance portfolio.",
-                          "for my coffee shop.",
-                        ]}
-                        pauseDuration={3000}
-                        typingSpeed={30}
-                      />
+                    <span className="text-sm font-medium text-gray-900">
+                      Drop images here
+                    </span>
+                    <span className="text-xs text-gray-500">
+                      PNG, JPG, or WebP — or paste from clipboard
                     </span>
                   </div>
                 )}
-                <TextareaAutosize
-                  ref={textareaRef}
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onPaste={handlePaste}
-                  onFocus={() => setIsFocused(true)}
-                  onBlur={() => setIsFocused(false)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      if (
-                        !isLoading &&
-                        (input.trim() || attachments.length > 0)
-                      ) {
-                        (e.target as HTMLTextAreaElement).form?.requestSubmit();
-                      }
-                    }
-                  }}
-                  placeholder={
-                    isFocused ? "Make a website for my business" : ""
-                  }
-                  disabled={isLoading}
-                  minRows={4}
-                  maxRows={10}
-                  className="relative w-full resize-none overflow-auto bg-transparent pt-2 text-base leading-normal text-gray-900 placeholder:text-gray-400 focus:outline-none disabled:opacity-50 h-full"
-                />
-              </div>
-              <div
-                className={`overflow-hidden transition-[max-height,opacity,margin] duration-300 ease-out ${
-                  attachments.length > 0
-                    ? "mt-3 max-h-28 opacity-100"
-                    : "mt-0 max-h-0 opacity-0"
-                }`}
-              >
-                <MessageAttachments className="ml-0 flex-nowrap gap-2 overflow-x-auto">
-                  {attachments.map((attachment) => (
-                    <MessageAttachment
-                      key={attachment.localId}
-                      className="size-16 rounded-xl shrink-0"
-                      data={
-                        {
-                          type: "file",
-                          url: attachment.previewUrl,
-                          mediaType: attachment.file.type,
-                          filename: attachment.file.name,
-                        } as FileUIPart
-                      }
-                      onRemove={() =>
-                        handleRemoveAttachment(attachment.localId)
-                      }
-                    />
-                  ))}
-                </MessageAttachments>
-              </div>
 
-              <div className="w-full flex justify-between ">
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full transition-colors hover:bg-gray-100 "
-                  disabled={isLoading}
-                  aria-label="Attach files"
-                  title="Attach files"
-                >
-                  <PlusIcon className="h-4 w-4 text-black" />
-                </button>
-                <Button
-                  type="submit"
-                  disabled={
-                    isLoading || (!input.trim() && attachments.length === 0)
-                  }
-                  size="icon"
-                  className="h-8 w-16 rounded-md
- bg-gray-900 text-white   hover:bg-gray-800 disabled:bg-gray-200 disabled:text-gray-500 cursor-"
-                  aria-label="Submit"
-                >
-                  {isLoading ? (
-                    <ArrowPathIcon className="h-4 w-4 animate-spin" />
-                  ) : (
-                    // <ArrowUpIcon className="h-4 w-4" />
-                    <span className="text-sm">SEND</span>
+                <div className="relative min-h-[4.5rem] text-left">
+                  {!input.trim() && !isFocused && (
+                    <div
+                      className="pointer-events-none absolute inset-0 flex items-start pt-2 text-base leading-normal"
+                      aria-hidden
+                    >
+                      <span className="text-base text-gray-400">
+                        Make a website&nbsp;
+                        <TypingText
+                          text={[
+                            "for my business.",
+                            "for my freelance portfolio.",
+                            "for my coffee shop.",
+                          ]}
+                          pauseDuration={3000}
+                          typingSpeed={30}
+                        />
+                      </span>
+                    </div>
                   )}
-                </Button>
-              </div>
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                accept=".jpg,.jpeg,.png,.webp"
-                className="hidden"
-                onChange={handleFileChange}
-              />
+                  <TextareaAutosize
+                    ref={textareaRef}
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onPaste={handlePaste}
+                    onFocus={() => setIsFocused(true)}
+                    onBlur={() => setIsFocused(false)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        if (canSubmit) {
+                          (
+                            e.target as HTMLTextAreaElement
+                          ).form?.requestSubmit();
+                        }
+                      }
+                    }}
+                    placeholder={
+                      isFocused ? "Make a website for my business" : ""
+                    }
+                    disabled={isLoading}
+                    minRows={3}
+                    maxRows={10}
+                    className="relative w-full resize-none overflow-auto bg-transparent pt-2 text-base leading-normal text-gray-900 placeholder:text-gray-400 focus:outline-none disabled:opacity-50"
+                  />
+                </div>
 
-              <BorderBeam
-                duration={18}
-                size={200}
-                className="from-transparent via-gray-900 to-transparent"
-              />
-              <BorderBeam
-                duration={18}
-                delay={9}
-                size={200}
-                className="from-transparent via-gray-900 to-transparent"
-              />
-            </div>
-          </form>
-        </div>
-      </section>
-
-      <UploadProgressToast toast={uploadToast} />
-
-      <section className="mx-auto w-full max-w-7xl pb-6">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-base font-semibold text-gray-900">
-            Your projects
-          </h2>
-          {/* <Link
-            href="/start"
-            className="text-sm font-medium text-[#ff6313] transition-colors hover:text-[#ff4a13]"
-          >
-            See more
-          </Link> */}
-        </div>
-
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {isProjectsLoading
-            ? Array.from({ length: 6 }).map((_, index) => (
                 <div
-                  key={`project-skeleton-${index}`}
-                  className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm"
-                  aria-hidden
+                  className={`overflow-hidden transition-[max-height,opacity,margin] duration-300 ease-out ${
+                    attachments.length > 0
+                      ? "mt-3 max-h-28 opacity-100"
+                      : "mt-0 max-h-0 opacity-0"
+                  }`}
                 >
-                  <div className="flex aspect-video w-full animate-pulse flex-col bg-white">
-                    <div className="h-8 border-b border-gray-200 bg-gray-50" />
-                    <div className="flex flex-1 flex-col gap-3 p-4">
-                      <div className="h-20 rounded-md bg-gray-100" />
-                      <div className="h-3 w-2/3 rounded-full bg-gray-100" />
-                      <div className="h-3 w-5/6 rounded-full bg-gray-100" />
+                  <MessageAttachments className="ml-0 flex-nowrap gap-2 overflow-x-auto">
+                    {attachments.map((attachment) => (
+                      <MessageAttachment
+                        key={attachment.localId}
+                        className="size-16 shrink-0 rounded-xl"
+                        data={
+                          {
+                            type: "file",
+                            url: attachment.previewUrl,
+                            mediaType: attachment.file.type,
+                            filename: attachment.file.name,
+                          } as FileUIPart
+                        }
+                        onRemove={() =>
+                          handleRemoveAttachment(attachment.localId)
+                        }
+                      />
+                    ))}
+                  </MessageAttachments>
+                </div>
+
+                <div className="mt-2 flex items-center justify-between gap-3">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isLoading}
+                    aria-label="Attach images"
+                    title="Attach images"
+                    className="flex h-8 w-8 items-center justify-center rounded-full text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 disabled:opacity-50"
+                  >
+                    <PlusIcon className="h-4 w-4" />
+                  </button>
+
+                  <span className="hidden flex-1 text-xs text-gray-400 sm:inline">
+                    Press{" "}
+                    <kbd className="rounded border border-gray-200 bg-white px-1.5 py-0.5 font-mono text-[10px] text-gray-500 shadow-sm">
+                      Enter
+                    </kbd>{" "}
+                    to send
+                  </span>
+
+                  <Button
+                    type="submit"
+                    disabled={!canSubmit}
+                    className="h-9 rounded-md bg-gray-900 px-5 text-sm font-medium text-white hover:bg-gray-800 disabled:bg-gray-200 disabled:text-gray-500"
+                    aria-label="Send"
+                  >
+                    {isLoading ? (
+                      <ArrowPathIcon className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <span>SEND</span>
+                    )}
+                  </Button>
+                </div>
+
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  accept=".jpg,.jpeg,.png,.webp"
+                  className="hidden"
+                  onChange={handleFileChange}
+                />
+
+                {!prefersReducedMotion && (
+                  <>
+                    <BorderBeam
+                      duration={22}
+                      size={240}
+                      className="from-transparent via-gray-900 to-transparent"
+                    />
+                    <BorderBeam
+                      duration={22}
+                      delay={11}
+                      size={240}
+                      className="from-transparent via-gray-900 to-transparent"
+                    />
+                  </>
+                )}
+              </div>
+
+              <motion.div
+                variants={heroItem}
+                className="mt-5 flex flex-wrap items-center justify-center gap-2"
+              >
+                {SUGGESTIONS.map((suggestion) => (
+                  <button
+                    key={suggestion.label}
+                    type="button"
+                    onClick={() => handleSuggestion(suggestion.prompt)}
+                    className="group inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white/80 px-3.5 py-1.5 text-xs font-medium text-gray-700 backdrop-blur transition-[color,border-color,transform] duration-150 hover:-translate-y-0.5 hover:border-gray-900 hover:text-gray-900 active:translate-y-0"
+                  >
+                    <SparklesIcon className="h-3 w-3 text-gray-400 transition-colors group-hover:text-[#ff6313]" />
+                    {suggestion.label}
+                  </button>
+                ))}
+              </motion.div>
+            </motion.form>
+          </motion.div>
+        </section>
+
+        <UploadProgressToast toast={uploadToast} />
+
+        <section className="pb-16">
+          <div className="mb-6 flex items-end justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-semibold tracking-tight text-gray-900 sm:text-2xl">
+                Your projects
+              </h2>
+              <p className="mt-1 text-sm text-gray-500">
+                Pick up where you left off.
+              </p>
+            </div>
+            {/* {!isProjectsLoading && chats.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  textareaRef.current?.focus();
+                  textareaRef.current?.scrollIntoView({
+                    behavior: "smooth",
+                    block: "center",
+                  });
+                }}
+                className="hidden items-center gap-1.5 rounded-full border border-gray-200 bg-white/80 px-4 py-1.5 text-xs font-medium text-gray-700 backdrop-blur transition-colors hover:border-gray-900 hover:text-gray-900 sm:inline-flex"
+              >
+                <PlusIcon className="h-3.5 w-3.5" />
+                New project
+              </button>
+            )} */}
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {isProjectsLoading
+              ? Array.from({ length: 8 }).map((_, index) => (
+                  <div
+                    key={`project-skeleton-${index}`}
+                    className="overflow-hidden rounded-2xl border border-gray-200 bg-white/80 shadow-sm backdrop-blur"
+                    aria-hidden
+                  >
+                    <div className="flex aspect-video w-full animate-pulse flex-col bg-white">
+                      <div className="h-8 border-b border-gray-200 bg-gray-50" />
+                      <div className="flex flex-1 flex-col gap-3 p-4">
+                        <div className="h-20 rounded-md bg-gray-100" />
+                        <div className="h-3 w-2/3 rounded-full bg-gray-100" />
+                        <div className="h-3 w-5/6 rounded-full bg-gray-100" />
+                        <div className="h-3 w-1/2 rounded-full bg-gray-100" />
+                      </div>
+                    </div>
+                    <div className="flex animate-pulse flex-col gap-2 p-4">
+                      <div className="h-4 w-3/4 rounded-full bg-gray-100" />
                       <div className="h-3 w-1/2 rounded-full bg-gray-100" />
                     </div>
                   </div>
-                  <div className="flex animate-pulse flex-col gap-2 p-4">
-                    <div className="h-4 w-3/4 rounded-full bg-gray-100" />
-                    <div className="h-3 w-1/2 rounded-full bg-gray-100" />
-                  </div>
-                </div>
-              ))
-            : chats.map((chat) => (
-                <Link
-                  key={chat.publicId}
-                  href={`/builder/${chat.publicId}`}
-                  className="group rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300"
-                >
-                  <article className="flex h-full flex-col overflow-hidden rounded-xl border border-gray-700 bg-white shadow-sm hover:border-gray-800 hover:shadow-md">
-                    <div className="aspect-video w-full overflow-hidden border-b bg-gray-100">
-                      {(chat.screenshotUrl ?? chat.screenshot_url) ? (
-                        <img
-                          src={chat.screenshotUrl ?? chat.screenshot_url ?? ""}
-                          alt={chat.title || "Landing page preview"}
-                          className="h-full w-full object-cover object-top"
-                        />
-                      ) : (
-                        <div className="flex h-full w-full animate-pulse flex-col bg-white">
-                          <div className="h-8 border-b border-gray-200 bg-gray-50" />
-                          <div className="flex flex-1 flex-col gap-3 p-4">
-                            <div className="h-20 rounded-md bg-gray-100" />
-                            <div className="h-3 w-2/3 rounded-full bg-gray-100" />
-                            <div className="h-3 w-5/6 rounded-full bg-gray-100" />
-                            <div className="h-3 w-1/2 rounded-full bg-gray-100" />
+                ))
+              : chats.map((chat) => (
+                  <Link
+                    key={chat.publicId}
+                    href={`/builder/${chat.publicId}`}
+                    className="group rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-900/40"
+                  >
+                    <article className="flex h-full flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white/80 shadow-sm backdrop-blur transition-[transform,box-shadow,border-color] duration-200 group-hover:-translate-y-1 group-hover:border-gray-900/80 group-hover:shadow-[0_12px_40px_-16px_rgba(15,23,42,0.18)]">
+                      <div className="aspect-video w-full overflow-hidden border-b border-gray-100 bg-gray-50">
+                        {(chat.screenshotUrl ?? chat.screenshot_url) ? (
+                          <img
+                            src={
+                              chat.screenshotUrl ?? chat.screenshot_url ?? ""
+                            }
+                            alt={chat.title || "Landing page preview"}
+                            className="h-full w-full object-cover object-top transition-transform duration-300 group-hover:scale-[1.02]"
+                          />
+                        ) : (
+                          <div className="flex h-full w-full animate-pulse flex-col bg-white">
+                            <div className="h-8 border-b border-gray-200 bg-gray-50" />
+                            <div className="flex flex-1 flex-col gap-3 p-4">
+                              <div className="h-20 rounded-md bg-gray-100" />
+                              <div className="h-3 w-2/3 rounded-full bg-gray-100" />
+                              <div className="h-3 w-5/6 rounded-full bg-gray-100" />
+                              <div className="h-3 w-1/2 rounded-full bg-gray-100" />
+                            </div>
                           </div>
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex flex-col gap-1 p-4">
-                      <p className="truncate font-medium text-gray-900">
-                        {chat.title || "Untitled"}
-                      </p>
-                      <p className="text-sm text-gray-500">
-                        Edited {getRelativeTime(chat.updatedAt)}
-                      </p>
-                    </div>
-                  </article>
-                </Link>
-              ))}
-        </div>
-
-        {(nextCursor != null || loadingMore) && (
-          <div
-            ref={loadMoreRef}
-            className="flex justify-center py-8"
-            aria-hidden
-          >
-            {loadingMore && (
-              <ArrowPathIcon className="h-8 w-8 animate-spin text-gray-400" />
-            )}
+                        )}
+                      </div>
+                      <div className="flex flex-col gap-1 p-4">
+                        <p className="truncate font-medium text-gray-900">
+                          {chat.title || "Untitled"}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          Edited {getRelativeTime(chat.updatedAt)}
+                        </p>
+                      </div>
+                    </article>
+                  </Link>
+                ))}
           </div>
-        )}
 
-        {!isProjectsLoading && chats.length === 0 && (
-          <div className="mx-auto flex max-w-md flex-col items-center justify-center py-16 text-center">
-            <div className="mb-4 flex h-24 w-24 items-center justify-center rounded-xl border border-gray-200 bg-gray-100">
-              <span className="text-3xl font-bold text-gray-400">?</span>
+          {(nextCursor != null || loadingMore) && (
+            <div
+              ref={loadMoreRef}
+              className="flex justify-center py-8"
+              aria-hidden
+            >
+              {loadingMore && (
+                <ArrowPathIcon className="h-6 w-6 animate-spin text-gray-400" />
+              )}
             </div>
-            <p className="text-base font-medium text-gray-500">
-              No projects yet
-            </p>
-            <p className="mt-1 text-sm text-gray-400">
-              Create something above to see it here
-            </p>
+          )}
+
+          {!isProjectsLoading && chats.length === 0 && (
+            <div className="mx-auto flex max-w-md flex-col items-center justify-center rounded-2xl border border-dashed border-gray-200 bg-white/60 px-6 py-16 text-center backdrop-blur">
+              <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-2xl border border-gray-200 bg-white shadow-sm">
+                <img
+                  src={sunsetLogoTree.src}
+                  alt=""
+                  aria-hidden
+                  className="h-10 w-10 opacity-70"
+                />
+              </div>
+              <p className="text-base font-medium text-gray-700">
+                No projects yet
+              </p>
+              <p className="mt-1 text-sm text-gray-500">
+                Describe a website above and we'll save it here.
+              </p>
+              <button
+                type="button"
+                onClick={() => textareaRef.current?.focus()}
+                className="mt-5 inline-flex items-center gap-1.5 rounded-full bg-gray-900 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-gray-800"
+              >
+                Start your first project
+                <ArrowRightIcon className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
+        </section>
+
+        <footer className="border-t border-gray-100 py-8 text-xs text-gray-400">
+          <div className="flex flex-col items-center justify-between gap-3 sm:flex-row">
+            <span>© {new Date().getFullYear()} Sunset.</span>
+            <div className="flex items-center gap-4">
+              <Link href="/pricing" className="hover:text-gray-700">
+                Pricing
+              </Link>
+              <Link href="/dashboard" className="hover:text-gray-700">
+                Settings
+              </Link>
+              <Link href="/privacy" className="hover:text-gray-700">
+                Privacy
+              </Link>
+              <Link href="/terms" className="hover:text-gray-700">
+                Terms
+              </Link>
+            </div>
           </div>
-        )}
-      </section>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
+function BackgroundDecor() {
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none absolute inset-0 -z-0 isolate overflow-hidden [contain:paint]"
+    >
+      <div className="absolute inset-0 [background:radial-gradient(50%_40%_at_50%_-10%,rgba(255,138,61,0.14),transparent_70%),radial-gradient(35%_25%_at_88%_8%,rgba(255,99,19,0.08),transparent_70%)]" />
+      <div className="absolute inset-0 [background-image:linear-gradient(to_bottom,transparent,white_85%)]" />
     </div>
   );
 }
