@@ -3,6 +3,7 @@ import type { ComponentType } from "react";
 import { createRequire } from "node:module";
 import * as esbuild from "esbuild";
 import * as fs from "fs";
+import * as os from "os";
 import * as path from "path";
 import {
   getLandingSiteFileContentAtOrBeforeRevision,
@@ -964,7 +965,10 @@ export async function getComposedReactHtml(params: {
   }
 
   let RootComponent: ComponentType | undefined;
-  const tmpDir = path.join(process.cwd(), ".next", "cache", "landing-preview");
+  // Vercel/Lambda runtimes mount /var/task read-only and only allow writes to
+  // os.tmpdir() (i.e. /tmp). Locally this still resolves to a writable temp
+  // directory, so we don't need a separate code path.
+  const tmpDir = path.join(os.tmpdir(), "landing-preview");
   fs.mkdirSync(tmpDir, { recursive: true });
   const tmpFile = path.join(
     tmpDir,
