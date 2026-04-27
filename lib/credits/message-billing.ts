@@ -61,23 +61,26 @@ export function createMessageBillingSession(
 
     if (desiredCost <= chargedCost) return;
 
-    const delta = desiredCost - chargedCost;
+    const prevCharged = chargedCost;
+    const delta = desiredCost - prevCharged;
     const usageEventId = await ensureEvent(actionType);
 
-    await debitCredits(
+    const { amount: debited } = await debitCredits(
       options.accountId,
       delta,
-      `${options.idempotencyKey}:up-to:${desiredCost}`,
+      `${options.idempotencyKey}:tier:${desiredCost}:after:${prevCharged}`,
       {
         usageEventId,
+        allowPartial: true,
         metadata: {
           messageBilling: true,
           targetActionType: actionType,
+          pricedCredits: desiredCost,
         },
       }
     );
 
-    chargedCost = desiredCost;
+    chargedCost = prevCharged + debited;
     chargedActionType = actionType;
 
     await db

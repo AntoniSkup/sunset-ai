@@ -11,7 +11,8 @@ import { getWalletByAccountId } from "@/lib/billing/accounts";
 
 export type DebitResult = {
   success: true;
-  ledgerEntryId: number;
+  /** Ledger row for this debit; null when `allowPartial` debited 0 credits (no row). */
+  ledgerEntryId: number | null;
   amount: number;
 };
 
@@ -47,7 +48,7 @@ export class InsufficientCreditsError extends Error {
  * Debit credits from the account's wallet.
  * Uses daily credits first, then monthly/rollover (FEFO within each group).
  * Idempotent: if idempotencyKey was already used for this account, returns existing result.
- * @throws InsufficientCreditsError if balance is too low
+ * @throws InsufficientCreditsError if balance is too low (unless `allowPartial`, which debits the wallet balance up to the requested amount).
  */
 export async function debitCredits(
   accountId: number,
@@ -56,6 +57,8 @@ export async function debitCredits(
   options?: {
     usageEventId?: number;
     metadata?: Record<string, unknown>;
+    /** Debit up to `min(amount, wallet balance)` instead of throwing when short. */
+    allowPartial?: boolean;
   }
 ): Promise<DebitResult> {
   if (amount <= 0) {
@@ -105,7 +108,18 @@ export async function debitCredits(
       lockedWallet.balanceCached,
       "creditWallets.balanceCached"
     );
-    if (balance < amount) {
+    const allowPartial = options?.allowPartial ?? false;
+    let actualDebit = amount;
+    if (allowPartial) {
+      actualDebit = Math.min(amount, balance);
+      if (actualDebit <= 0) {
+        return {
+          success: true as const,
+          ledgerEntryId: null,
+          amount: 0,
+        };
+      }
+    } else if (balance < amount) {
       throw new InsufficientCreditsError(
         accountId,
         amount,
@@ -128,7 +142,7 @@ export async function debitCredits(
       )
       .for("update");
 
-    let remaining = amount;
+    let remaining = actualDebit;
     const allocations: { grantId: number; creditsUsed: number }[] = [];
 
     for (const grant of grants) {
@@ -144,8 +158,8 @@ export async function debitCredits(
     if (remaining > 0) {
       throw new InsufficientCreditsError(
         accountId,
-        amount,
-        amount - remaining
+        actualDebit,
+        actualDebit - remaining
       );
     }
 
@@ -155,7 +169,7 @@ export async function debitCredits(
         walletId: wallet.id,
         accountId,
         entryType: "debit",
-        creditsDelta: -amount,
+        creditsDelta: -actualDebit,
         usageEventId: options?.usageEventId ?? null,
         idempotencyKey: idempotencyKey || null,
         metadata: options?.metadata ?? null,
@@ -200,7 +214,7 @@ export async function debitCredits(
       .set({
         balanceCached:
           asCreditNumber(lockedWallet.balanceCached, "creditWallets.balanceCached") -
-          amount,
+          actualDebit,
         updatedAt: new Date(),
       })
       .where(eq(creditWallets.id, wallet.id));
@@ -208,7 +222,7 @@ export async function debitCredits(
     return {
       success: true,
       ledgerEntryId: ledgerEntry.id,
-      amount,
+      amount: actualDebit,
     };
   });
 }

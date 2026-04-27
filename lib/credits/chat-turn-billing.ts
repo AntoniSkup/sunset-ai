@@ -102,19 +102,26 @@ export async function finalizeSuccessfulChatTurnBilling(options: {
     throw new Error("Failed to create chat turn usage event");
   }
 
-  await debitCredits(options.accountId, creditsCost, `${options.idempotencyKey}:debit`, {
-    usageEventId: event.id,
-    metadata: {
-      chatTurnBilling: true,
-      observedTiers: [...options.observedTiers],
-    },
-  });
+  const { amount: debited } = await debitCredits(
+    options.accountId,
+    creditsCost,
+    `${options.idempotencyKey}:debit`,
+    {
+      usageEventId: event.id,
+      allowPartial: true,
+      metadata: {
+        chatTurnBilling: true,
+        observedTiers: [...options.observedTiers],
+        pricedCredits: creditsCost,
+      },
+    }
+  );
 
   await db
     .update(aiUsageEvents)
     .set({
       status: "succeeded",
-      creditsCharged: creditsCost,
+      creditsCharged: debited,
       completedAt: new Date(),
     })
     .where(eq(aiUsageEvents.id, event.id));
