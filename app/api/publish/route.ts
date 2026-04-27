@@ -4,13 +4,14 @@ import {
   getChatByPublicId,
   getLatestLandingSiteRevision,
   createPublishedSite,
+  allocateUniquePublishPublicId,
   getPublishedSiteByChatId,
   updatePublishedSite,
 } from "@/lib/db/queries";
-import { buildDeployUrl } from "@/lib/preview/deploy-host";
+import { buildPublishedSiteUrl } from "@/lib/preview/deploy-host";
 
 function publishedUrlFor(publicId: string): string {
-  return buildDeployUrl(`/s/${encodeURIComponent(publicId)}`);
+  return buildPublishedSiteUrl(publicId);
 }
 
 export async function GET(request: NextRequest) {
@@ -118,7 +119,9 @@ export async function POST(request: NextRequest) {
         revisionNumber: updated.revisionNumber,
       });
     } else {
+      const publicId = await allocateUniquePublishPublicId(chat.title);
       const published = await createPublishedSite({
+        publicId,
         chatId,
         userId: user.id,
         revisionNumber: latestRevision.revisionNumber,

@@ -24,6 +24,7 @@ import {
   EyeIcon,
   PencilSquareIcon,
 } from "@heroicons/react/24/outline";
+import { buildPublishedSiteUrlOrNull } from "@/lib/preview/deploy-host";
 
 interface PublishModalProps {
   open: boolean;
@@ -120,12 +121,9 @@ export function PublishModal({
   };
 
   const getFullUrl = () => {
-    // The publish API now returns an absolute URL on the deploy origin
-    // (`https://sunset-deploy.com/s/<publicId>`); use it verbatim. Falling
-    // back to a relative path only when the API hasn't responded yet.
     if (publishedUrl) return publishedUrl;
-    if (!customUrl) return '';
-    return `/s/${customUrl}`;
+    if (!customUrl) return "";
+    return buildPublishedSiteUrlOrNull(customUrl) ?? `/s/${customUrl}`;
   };
 
   return (

@@ -53,11 +53,57 @@ export function isDeployHost(host: string | null | undefined): boolean {
   if (!host) return false;
   const deployHost = getDeployHost();
   if (!deployHost) return false;
-  return host.toLowerCase() === deployHost;
+  const h = host.toLowerCase();
+  if (h === deployHost) return true;
+  return getPublishedSiteLabelFromHost(host) !== null;
 }
 
 /** Builds a URL on the deploy origin from a path (must start with `/`). */
 export function buildDeployUrl(path: string): string {
   const origin = getDeployOrigin();
   return `${origin}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
+function buildPublishedSiteUrlWithOrigin(origin: string, publicId: string): string {
+  const u = new URL(origin);
+  u.hostname = `${publicId}.${u.hostname}`;
+  u.pathname = "/";
+  u.search = "";
+  u.hash = "";
+  return u.toString();
+}
+
+/**
+ * Public live URL for a published site: `https://<slug>.<deploy host>/`
+ * (e.g. `https://acme-landing.sunset-deploy.com/`).
+ * Safe to use in client components when `NEXT_PUBLIC_DEPLOY_ORIGIN` is set.
+ */
+export function buildPublishedSiteUrlOrNull(publicId: string): string | null {
+  const origin = getDeployOriginOrNull();
+  if (!origin) return null;
+  return buildPublishedSiteUrlWithOrigin(origin, publicId);
+}
+
+export function buildPublishedSiteUrl(publicId: string): string {
+  return buildPublishedSiteUrlWithOrigin(getDeployOrigin(), publicId);
+}
+
+/**
+ * If `host` is a one-level subdomain of the deploy origin (e.g. `acme` for
+ * `acme.sunset-deploy.com` or `acme.deploy.localhost:3000`), returns that label;
+ * otherwise `null` (including for the deploy apex host).
+ */
+export function getPublishedSiteLabelFromHost(
+  host: string | null | undefined,
+): string | null {
+  if (!host) return null;
+  const deployHost = getDeployHost();
+  if (!deployHost) return null;
+  const h = host.toLowerCase();
+  if (h === deployHost) return null;
+  if (!h.endsWith(`.${deployHost}`)) return null;
+  const label = h.slice(0, -(deployHost.length + 1));
+  if (!label || label.includes(".") || label.includes(":")) return null;
+  if (label === "www") return null;
+  return label;
 }

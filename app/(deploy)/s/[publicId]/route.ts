@@ -2,16 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { getPublishedSiteByPublicId } from "@/lib/db/queries";
 import { getPreviewHtml } from "@/lib/preview/compose-react";
 import { buildDeploySecurityHeaders } from "@/lib/preview/deploy-csp";
+import { getPublishedSiteLabelFromHost } from "@/lib/preview/deploy-host";
 
 /**
- * Public HTML shell for a published site (e.g. `sunset-deploy.com/s/<publicId>`).
+ * Public HTML shell for a published site. Canonical URL: `<slug>.<deploy host>/`.
+ * The `/s/<publicId>` path remains supported on the deploy apex.
  *
  * No auth — the publicId is the credential. The shell loads its bundle from
- * `/s/<publicId>/bundle?v=<revision>`; the `v` query is a cache-buster /
- * mismatch guard so a refresh after re-publish never serves a stale bundle.
+ * `/bundle` on a subdomain, or `/s/<publicId>/bundle` on the deploy apex, with
+ * `?v=<revision>` as cache-buster / mismatch guard.
  */
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   {
     params,
   }: {
@@ -29,7 +31,12 @@ export async function GET(
       );
     }
 
-    const basePath = `/s/${encodeURIComponent(publicId)}`;
+    const headerHost =
+      request.headers.get("x-forwarded-host") ?? request.headers.get("host");
+    const siteLabel = getPublishedSiteLabelFromHost(headerHost);
+    const useSubdomainShell =
+      Boolean(siteLabel) && siteLabel === publicId;
+    const basePath = useSubdomainShell ? "" : `/s/${encodeURIComponent(publicId)}`;
     const html = getPreviewHtml({
       chatId: publishedSite.chatId,
       revisionNumber: publishedSite.revisionNumber,

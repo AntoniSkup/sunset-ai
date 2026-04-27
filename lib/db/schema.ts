@@ -653,7 +653,7 @@ export const publishedSites = pgTable(
   "published_sites",
   {
     id: serial("id").primaryKey(),
-    publicId: varchar("public_id", { length: 32 }).notNull(),
+    publicId: varchar("public_id", { length: 63 }).notNull(),
     chatId: varchar("chat_id", { length: 32 })
       .notNull()
       .references(() => chats.publicId),

@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { signToken, verifyToken } from "@/lib/auth/session";
-import { isDeployHost } from "@/lib/preview/deploy-host";
+import {
+  isDeployHost,
+  getPublishedSiteLabelFromHost,
+} from "@/lib/preview/deploy-host";
 
 const protectedRoutePrefixes = ["/dashboard", "/start"];
 
@@ -26,6 +29,38 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const host =
     request.headers.get("x-forwarded-host") ?? request.headers.get("host");
+
+  // Published site at `<slug>.<deploy host>` — rewrite to `/s/<slug>` and
+  // allow `/s/<slug>/...` and `/_next/*` on that host.
+  const siteLabel = getPublishedSiteLabelFromHost(host);
+  if (siteLabel) {
+    if (pathname === "/" || pathname === "") {
+      const url = request.nextUrl.clone();
+      url.pathname = `/s/${encodeURIComponent(siteLabel)}`;
+      return NextResponse.rewrite(url);
+    }
+    if (pathname === "/bundle") {
+      const url = request.nextUrl.clone();
+      url.pathname = `/s/${encodeURIComponent(siteLabel)}/bundle`;
+      return NextResponse.rewrite(url);
+    }
+    const publishedSeg = /^\/s\/([^/]+)(?:\/|$)/.exec(pathname);
+    if (
+      publishedSeg &&
+      decodeURIComponent(publishedSeg[1] ?? "") === siteLabel
+    ) {
+      return NextResponse.next();
+    }
+    if (
+      pathname.startsWith("/_next/") ||
+      pathname === "/favicon.ico" ||
+      pathname === "/robots.txt"
+    ) {
+      return NextResponse.next();
+    }
+    return new NextResponse("Not Found", { status: 404 });
+  }
+
   const onDeploy = isDeployHost(host);
 
   // Deploy origin: serve only the preview/published shells. Everything else

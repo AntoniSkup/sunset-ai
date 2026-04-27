@@ -47,6 +47,10 @@ import { verifyToken } from "@/lib/auth/session";
 import { generateText } from "ai";
 import { getAIModel } from "@/lib/ai/get-ai-model";
 import { buildChatNamePrompt } from "@/prompts/chat-name-prompt";
+import {
+  MAX_PUBLISH_PUBLIC_ID_LENGTH,
+  slugifyChatTitleForPublish,
+} from "@/lib/publish/publish-slug";
 
 function buildFallbackChatName(userQuery: string): string {
   const cleaned = userQuery
@@ -1339,25 +1343,6 @@ export async function getChatTurnRunQueueSummary(chatId: number) {
   };
 }
 
-export async function createPublishedSite(data: {
-  chatId: string;
-  userId: number;
-  revisionNumber: number;
-}) {
-  const publicId = nanoid();
-  const result = await db
-    .insert(publishedSites)
-    .values({
-      publicId,
-      chatId: data.chatId,
-      userId: data.userId,
-      revisionNumber: data.revisionNumber,
-    })
-    .returning();
-
-  return result[0];
-}
-
 export async function getPublishedSiteByPublicId(publicId: string) {
   const result = await db
     .select()
@@ -1366,6 +1351,51 @@ export async function getPublishedSiteByPublicId(publicId: string) {
     .limit(1);
 
   return result.length > 0 ? result[0] : null;
+}
+
+/**
+ * Picks a globally unique `public_id` (subdomain label) for a new published site.
+ */
+export async function allocateUniquePublishPublicId(
+  title: string | null | undefined,
+): Promise<string> {
+  const base = slugifyChatTitleForPublish(title);
+  for (let n = 0; n < 30; n++) {
+    const suffix = n === 0 ? "" : `-${n}`;
+    const maxBase = MAX_PUBLISH_PUBLIC_ID_LENGTH - suffix.length;
+    const trimmed = base.slice(0, Math.max(1, maxBase));
+    const candidate = `${trimmed}${suffix}`.slice(0, MAX_PUBLISH_PUBLIC_ID_LENGTH);
+    const taken = await getPublishedSiteByPublicId(candidate);
+    if (!taken) return candidate;
+  }
+  for (let k = 0; k < 5; k++) {
+    const candidate = `${base.slice(0, 40)}-${nanoid(8)}`.slice(
+      0,
+      MAX_PUBLISH_PUBLIC_ID_LENGTH,
+    );
+    const taken = await getPublishedSiteByPublicId(candidate);
+    if (!taken) return candidate;
+  }
+  return nanoid(12).slice(0, MAX_PUBLISH_PUBLIC_ID_LENGTH);
+}
+
+export async function createPublishedSite(data: {
+  publicId: string;
+  chatId: string;
+  userId: number;
+  revisionNumber: number;
+}) {
+  const result = await db
+    .insert(publishedSites)
+    .values({
+      publicId: data.publicId,
+      chatId: data.chatId,
+      userId: data.userId,
+      revisionNumber: data.revisionNumber,
+    })
+    .returning();
+
+  return result[0];
 }
 
 export async function getPublishedSiteByChatId(chatId: string, userId: number) {
