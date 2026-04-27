@@ -394,11 +394,17 @@ export function PreviewPanel({
             * (`sunset-deploy.com`) — a different host than the main app — so
             * the AI-generated React bundle runs in a separate browser origin
             * with no access to the main app's cookies, storage, or APIs.
-            * `allow-same-origin` is intentionally omitted: dropping it makes
-            * the iframe an opaque origin so it cannot even touch its own
-            * deploy-origin cookies/storage. We only need scripts (to render
-            * the React app), forms (so AI-generated landing forms can submit
-            * to e.g. mailto:), and popups (CTAs that open external links).
+            *
+            * `allow-same-origin` is required: without it the document has an
+            * *opaque* origin (`location.origin === "null"`). The shell still
+            * loads from deploy.localhost, but `<script type="module">` and
+            * `fetch()` to that host are treated as cross-origin, so Chrome
+            * blocks the bundle with `(blocked:origin)` / "Failed to fetch"
+            * while opening the same URL in a new tab works.
+            *
+            * Tradeoff: the preview can read deploy-origin cookies/storage.
+            * Mitigate with strict deploy CSP, `frame-ancestors` (only the
+            * main app may embed), and avoid storing secrets on the deploy host.
             */}
           <iframe
             ref={iframeRef}
@@ -406,7 +412,7 @@ export function PreviewPanel({
             id="preview-iframe"
             className="h-full w-full  rounded-lg"
             title="Website Preview"
-            sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
+            sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-same-origin"
             onLoad={() => setIsIframeLoading(false)}
             onError={() => setIsIframeLoading(false)}
           />

@@ -53,11 +53,13 @@ IMPORTANT: Tool model (multi-file, one tool call per file)
 - Keep narration compact while building (1 short sentence before a tool call). Avoid long progress recaps between file-generation steps.
 - Avoid repetitive self-commentary while tools are running. Spend tokens on planning and tool arguments, not repeated status prose.
 
-File generation order (when creating a website from scratch):
-1) Create a **Layout / Entry** first: the root React component (landing/index.tsx) as a WIREFRAME ONLY. It must import Navbar from './sections/Navbar', Footer from './sections/Footer', and page(s) from './pages/...', then render only those components (e.g. <Navbar /><main>{page}</main><Footer />). Do not put navbar, footer, or any section markup inside index.tsx. For multi-page sites use hash-based routing and render the matching page inside main.
-2) Create a **Theme token module** next: landing/theme.tsx. This file is the single source for reusable design tokens (especially typography) and global Google Font loading.
-3) Create **Page file(s)** next: one per page (e.g. landing/pages/Home.tsx, landing/pages/About.tsx). Each page imports and renders its sections (e.g. Hero, Features).
-4) Create each **Section file** that the layout and pages need: landing/sections/Navbar.tsx, landing/sections/Footer.tsx, landing/sections/Hero.tsx, etc. The entry (index.tsx) and pages import these; they must not contain nav/footer/section markup inline.
+File generation order (when creating a website from scratch) — STRICT, in this exact order:
+1) **Layout / Entry FIRST (mandatory):** Create the root React component (landing/index.tsx) via the create_site tool BEFORE any create_section call. It must be a WIREFRAME ONLY: import Navbar from './sections/Navbar', Footer from './sections/Footer', and page(s) from './pages/...', then render only those components (e.g. <Navbar /><main>{page}</main><Footer />). Do not put navbar, footer, or any section markup inside index.tsx. For multi-page sites use hash-based routing and render the matching page inside main.
+2) **Theme token module SECOND (mandatory):** Create landing/theme.tsx via create_section BEFORE any page or section that imports from '../theme' or './theme'. This is a hard ordering rule: theme.tsx must exist in the chat's file set before Hero, Features, Home, About, etc. are generated, otherwise those files will reference token names that don't exist. This file is the single source for reusable design tokens (typography, semantic color tokens) and global Google Font loading. Include all theme exports a downstream section is likely to need (fontDisplay, fontBody, fontHeading, fontMono, fontAccent, colorBgBase, colorBgSurface, colorTextPrimary, colorTextMuted, colorBorder, colorAccent, plus fontSans and fontSerif aliases for section compatibility, plus ensureThemeFonts).
+3) **Page file(s) THIRD:** one per page (e.g. landing/pages/Home.tsx, landing/pages/About.tsx). Each page imports and renders its sections (e.g. Hero, Features). Pages may freely import from '../theme' because step 2 has already created it.
+4) **Section files LAST:** landing/sections/Navbar.tsx, landing/sections/Footer.tsx, landing/sections/Hero.tsx, etc. Sections may freely import from '../theme'. The entry (index.tsx) and pages import these; sections must not contain nav/footer/section markup inline.
+
+Hard dependency rule: never generate a file that imports a theme token, page, or section before the file it depends on has been generated in this chat. Theme before pages/sections; pages before the entry would import them (the entry is created first as a wireframe, but only references pages by name — the page files themselves are created after theme).
 
 Composition convention (how layout and pages reference sections and pages):
 - The entry file (landing/index.tsx) is a WIREFRAME: use React Router—import { HashRouter, Routes, Route } from 'react-router-dom', wrap the app in <HashRouter>, and use <Routes> with <Route path=\"/\" element={<Home />} /> etc. inside <main>. Import Navbar and Footer and render <Navbar /><main><Routes>...</Routes></main><Footer />. Also import ensureThemeFonts from './theme' and call it once near top-level. No inline navbar/footer markup.
@@ -105,10 +107,10 @@ Notes:
 
 2) Immediately after the outline, call the create_site tool once to initialize the entry React component (landing/index.tsx).
 
-3) Continue building by calling create_section repeatedly (still isModification: false), once per file, in this order:
-- **Theme tokens**: Create landing/theme.tsx early. Include reusable typography tokens, explicit fontSans and fontSerif exports for section imports, and an idempotent helper for global Google Font loading via document.head links.
-- **Page file(s)**: Create landing/pages/Home.tsx first; then any other pages (e.g. landing/pages/About.tsx, landing/pages/Contact.tsx) if the site is multi-page.
-- **Each section** used by the entry or pages: Navbar and Footer (used by index.tsx), then Hero, Features, and any other sections used by the pages.
+3) Continue building by calling create_section repeatedly (still isModification: false), once per file. Follow this order STRICTLY — do not generate downstream files before their dependencies exist:
+- **Theme tokens FIRST**: The very first create_section call after create_site MUST be landing/theme.tsx. Include reusable semantic typography tokens (fontDisplay, fontBody, fontHeading, fontMono, fontAccent), semantic color tokens (colorBgBase, colorBgSurface, colorTextPrimary, colorTextMuted, colorBorder, colorAccent), explicit fontSans and fontSerif aliases for section compatibility, and an idempotent ensureThemeFonts helper for global Google Font loading via document.head links. Do not move on to pages/sections until theme.tsx has been generated, because every downstream file imports from '../theme' and would otherwise reference exports that do not exist.
+- **Page file(s) NEXT**: Create landing/pages/Home.tsx first; then any other pages (e.g. landing/pages/About.tsx, landing/pages/Contact.tsx) if the site is multi-page. Pages must be generated AFTER theme.tsx.
+- **Each section LAST**: Navbar and Footer (used by index.tsx), then Hero, Features, and any other sections used by the pages. Sections must be generated AFTER theme.tsx so their theme imports resolve to real exports.
 - Before generating major sections, think proactively about image needs. For most landing pages, prefer resolving images for the hero and several supporting sections so the site feels visually rich across the page.
 - Call resolve_image_slots early whenever the page would benefit from prominent imagery, repeated section imagery, galleries, product photography, portraits, or image-driven backgrounds.
 

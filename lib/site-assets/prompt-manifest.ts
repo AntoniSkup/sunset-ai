@@ -61,6 +61,7 @@ export function buildSiteAssetPromptGuidance(): string {
     `- Use ${IMAGE_ASSET_COMPONENT_NAME} for images that should appear on the website.`,
     "- The component must reference the asset alias, never the raw blob URL.",
     '- Example: <ImageAsset asset="hero.jpg" alt="Hero image" className="..." />',
+    "- Import the component as a NAMED import: `import { ImageAsset } from '<runtime-path>'`. Both `import { ImageAsset }` and `import ImageAsset` resolve at runtime, but use the named form for consistency.",
     "- Import path examples: in landing/index.tsx use `./_runtime/ImageAsset`; in landing/pages/* or landing/sections/* use `../_runtime/ImageAsset`.",
     "- Prefer using uploaded user assets first when they clearly fit the requested slot or content.",
     "- Stock assets may be used to fill missing image slots when uploaded assets are unavailable or insufficient.",

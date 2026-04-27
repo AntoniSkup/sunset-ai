@@ -104,7 +104,7 @@
   },
   "devDependencies": {
     "@trigger.dev/build": "4.4.4",
-    "baseline-browser-mapping": "^2.10.21",
+    "baseline-browser-mapping": "^2.10.23",
     "concurrently": "^9.2.1",
     "prettier": "^3.7.4",
     "trigger.dev": "4.4.4"

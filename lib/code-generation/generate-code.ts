@@ -29,6 +29,7 @@ import {
   buildExistingSectionsContext,
   buildInspirationContextSection,
   buildLayoutContextSection,
+  buildThemeContextSection,
   buildSiteAssetContextSection,
   buildModificationContext,
   buildUserRequestSection,
@@ -192,6 +193,7 @@ export type CodeGenerationPromptParams = {
   isModification?: boolean;
   existingSectionStyles?: ExistingSectionStyleSnapshot[];
   layoutContext?: string;
+  themeContext?: string;
   siteAssetContext?: string;
   inspirationContext?: string;
 };
@@ -221,6 +223,7 @@ export function buildCodeGenerationDynamicPrompt(params: CodeGenerationPromptPar
     ? buildExistingSectionsContext(params.existingSectionStyles)
     : "";
   const layoutContext = params.layoutContext?.trim() ?? "";
+  const themeContext = params.themeContext?.trim() ?? "";
   const siteAssetContext = buildSiteAssetContextSection(params.siteAssetContext);
   const inspirationContext = params.inspirationContext?.trim() ?? "";
 
@@ -236,6 +239,7 @@ export function buildCodeGenerationDynamicPrompt(params: CodeGenerationPromptPar
     modificationContext +
     existingSectionsContext +
     layoutContext +
+    themeContext +
     siteAssetContext +
     inspirationContext +
     userRequestSection +
@@ -428,6 +432,24 @@ async function generateAndSaveSingleFile(params: {
         layoutContextForPrompt = buildLayoutContextSection(indexFile.content);
       }
     }
+
+    // For any non-theme destination, paste the current theme.tsx source into
+    // the prompt so the LLM has an authoritative export list to import from.
+    // Without this, sections (Navbar/Footer/Hero/etc.) routinely import
+    // hallucinated names like `colorBgNavbar` that theme.tsx never exported,
+    // which makes esbuild fail with `No matching export ...` and breaks the
+    // preview. The completeness validator catches this after the fact, but
+    // injecting the source upfront stops it from happening in the first place.
+    let themeContextForPrompt = "";
+    if (normalizedDestination.toLowerCase() !== "landing/theme.tsx") {
+      const themeFile = await getLatestLandingSiteFileContent(
+        params.chatId,
+        "landing/theme.tsx"
+      );
+      if (themeFile?.content?.trim()) {
+        themeContextForPrompt = buildThemeContextSection(themeFile.content);
+      }
+    }
     if (DEBUG_SITE_IMAGES) {
       console.log("[site-images] codegen assets", {
         chatId: params.chatId,
@@ -480,6 +502,7 @@ async function generateAndSaveSingleFile(params: {
         existingSectionStyles:
           existingSectionStyles.length > 0 ? existingSectionStyles : undefined,
         layoutContext: layoutContextForPrompt || undefined,
+        themeContext: themeContextForPrompt || undefined,
         siteAssetContext,
         inspirationContext: inspirationContextForPrompt || undefined,
       };
