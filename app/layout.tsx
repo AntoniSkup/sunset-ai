@@ -6,6 +6,7 @@ import { getUser, getTeamForUser } from "@/lib/db/queries";
 
 import { SWRConfig } from "swr";
 import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import { Toaster } from "sonner";
 
 const ibmPlexSans = IBM_Plex_Sans({
@@ -73,6 +74,7 @@ export default function RootLayout({
           </>
         ) : null}
         <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );
