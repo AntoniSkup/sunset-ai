@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { checkoutAction, checkoutTopupAction } from "@/lib/payments/actions";
 import { CheckCircleIcon } from "@heroicons/react/24/solid";
@@ -9,6 +10,7 @@ import {
   getSubscriptionByAccountId,
 } from "@/lib/billing/accounts";
 import { getUser } from "@/lib/db/queries";
+import { siteConfig } from "@/lib/seo/site";
 import { SubmitButton } from "./submit-button";
 import { PricingNavMenu } from "./pricing-nav-menu";
 import {
@@ -22,6 +24,26 @@ import {
 import { Button } from "@/components/ui/button";
 
 export const revalidate = 3600;
+
+const pricingDescription = `Simple, credit-based pricing for ${siteConfig.name}, the ${siteConfig.shortDescription}. Subscribe monthly or buy one-time top-ups whenever you need extra credits.`;
+
+export const metadata: Metadata = {
+  title: "Pricing",
+  description: pricingDescription,
+  alternates: { canonical: "/pricing" },
+  openGraph: {
+    type: "website",
+    url: "/pricing",
+    siteName: siteConfig.name,
+    title: `Pricing — ${siteConfig.name}`,
+    description: pricingDescription,
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: `Pricing — ${siteConfig.name}`,
+    description: pricingDescription,
+  },
+};
 
 export default async function PricingPage() {
   const user = await getUser();

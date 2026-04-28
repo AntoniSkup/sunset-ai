@@ -9,9 +9,11 @@ import {
 } from "../_components";
 
 export const metadata: Metadata = {
-  title: "Terms of Use — Sunset",
+  title: "Terms of Use",
   description:
     "Terms of Use governing your access to and use of the Sunset Builder platform.",
+  alternates: { canonical: "/terms" },
+  robots: { index: true, follow: true },
 };
 
 export default function TermsPage() {

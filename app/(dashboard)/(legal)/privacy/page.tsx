@@ -9,9 +9,11 @@ import {
 } from "../_components";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy — Sunset",
+  title: "Privacy Policy",
   description:
     "How Sunset Builder collects, uses, and protects your personal data under the EU GDPR.",
+  alternates: { canonical: "/privacy" },
+  robots: { index: true, follow: true },
 };
 
 export default function PrivacyPage() {
