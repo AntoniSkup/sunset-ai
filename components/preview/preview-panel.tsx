@@ -461,7 +461,15 @@ export function PreviewPanel({
             onLoad={() => setIsIframeLoading(false)}
             onError={() => setIsIframeLoading(false)}
           />
-          {(isLoading || isCheckingLiveRun || !currentVersionId) && (
+          {/*
+           * The full-screen overlay is intentionally only rendered while
+           * there is no preview yet (`!currentVersionId`). Once a website
+           * has been generated, follow-up modifications keep the existing
+           * iframe visible — the user sees the current version while the
+           * builder works, and the iframe reloads with the new bundle when
+           * the run completes (UPDATE_PREVIEW handler above).
+           */}
+          {!currentVersionId && (
             <div className="absolute inset-0 bg-white rounded-lg z-20">
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-6 px-4">
                 <div className="text-center flex-col flex">
