@@ -3,8 +3,7 @@ import {
   getLatestLandingSiteRevision,
 } from "@/lib/db/queries";
 import { createRenderSnapshotToken } from "@/lib/render-snapshot-token";
-import { getDeployOriginOrNull } from "@/lib/preview/deploy-host";
-import { isLoopbackHttpOrigin } from "@/lib/url/resolve-http-origin";
+import { getScreenshotCaptureOrigin } from "@/lib/screenshots/public-app-origin";
 import { captureUrlWithScreenshotOne } from "@/lib/screenshots/screenshot-one-url";
 import { generateText } from "ai";
 import { getAIModel } from "@/lib/ai/get-ai-model";
@@ -929,14 +928,14 @@ async function maybeRunScreenshotCheck(params: {
   }
   const revisionNumber = latestRev.revisionNumber;
 
-  const deployOrigin = getDeployOriginOrNull();
-  if (!deployOrigin || isLoopbackHttpOrigin(deployOrigin)) {
+  const captureOrigin = getScreenshotCaptureOrigin();
+  if (!captureOrigin) {
     return [
       {
         severity: "warning",
         issueCode: "SCREENSHOT_DEPLOY_ORIGIN_MISSING",
         message:
-          "Skipped screenshot-assisted validation because NEXT_PUBLIC_DEPLOY_ORIGIN is not set to a public URL ScreenshotOne can reach.",
+          "Skipped screenshot-assisted validation: no reachable origin for ScreenshotOne (set NEXT_PUBLIC_DEPLOY_ORIGIN to a public host or SCREENSHOT_BROWSER_BASE_URL to a tunnel URL).",
       },
     ];
   }
@@ -957,7 +956,7 @@ async function maybeRunScreenshotCheck(params: {
   }
 
   try {
-    const renderUrl = `${deployOrigin}/p/${encodeURIComponent(token)}`;
+    const renderUrl = `${captureOrigin}/p/${encodeURIComponent(token)}`;
     const imageBytes = await captureUrlWithScreenshotOne({
       url: renderUrl,
       viewportWidth: 1440,

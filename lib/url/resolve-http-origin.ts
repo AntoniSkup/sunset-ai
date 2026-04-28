@@ -46,11 +46,20 @@ export function firstHttpOriginFromCandidates(
 
 /**
  * True when this origin points at loopback. Remote screenshot services cannot reach it.
+ *
+ * Includes any `*.localhost` subdomain (e.g. `deploy.localhost`): per RFC 6761
+ * those resolve to the loopback interface on the local machine, so a remote
+ * service like ScreenshotOne either cannot resolve them at all or resolves
+ * them to its own 127.0.0.1 — never the developer's box.
  */
 export function isLoopbackHttpOrigin(origin: string): boolean {
   try {
     const h = new URL(origin).hostname.toLowerCase();
-    return h === "localhost" || h === "127.0.0.1" || h === "[::1]" || h === "::1";
+    if (h === "localhost" || h === "127.0.0.1" || h === "[::1]" || h === "::1") {
+      return true;
+    }
+    if (h.endsWith(".localhost")) return true;
+    return false;
   } catch {
     return true;
   }

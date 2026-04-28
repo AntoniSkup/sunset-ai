@@ -30,3 +30,33 @@ export function getPublicAppOrigin(): string | null {
   }
   return null;
 }
+
+/**
+ * Origin ScreenshotOne uses to fetch the `/p/<token>` preview shell.
+ *
+ * Prefers `NEXT_PUBLIC_DEPLOY_ORIGIN` (the real deploy host in prod). When
+ * that points at loopback (e.g. `deploy.localhost:3000` in dev),
+ * falls back to the tunnel URL configured for screenshots
+ * (`SCREENSHOT_BROWSER_BASE_URL`, typically an ngrok forwarding origin).
+ *
+ * Returns `null` when neither is reachable from a remote service — callers
+ * should skip URL capture in that case.
+ */
+export function getScreenshotCaptureOrigin(): string | null {
+  const deploy = parseHttpOriginCandidate(
+    process.env.NEXT_PUBLIC_DEPLOY_ORIGIN
+  );
+  if (deploy && !isLoopbackHttpOrigin(deploy)) return deploy;
+  return getPublicAppOrigin();
+}
+
+/** Lowercase host portion of {@link getScreenshotCaptureOrigin}, or null. */
+export function getScreenshotCaptureHost(): string | null {
+  const origin = getScreenshotCaptureOrigin();
+  if (!origin) return null;
+  try {
+    return new URL(origin).host.toLowerCase();
+  } catch {
+    return null;
+  }
+}
