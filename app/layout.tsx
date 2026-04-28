@@ -2,6 +2,7 @@ import "./globals.css";
 import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Sans } from "next/font/google";
 import Script from "next/script";
+import { getLocale } from "next-intl/server";
 import { getUser, getTeamForUser } from "@/lib/db/queries";
 
 import { SWRConfig } from "swr";
@@ -90,28 +91,36 @@ const organizationJsonLd = {
   description: siteConfig.description,
 };
 
-const websiteJsonLd = {
-  "@context": "https://schema.org",
-  "@type": "WebSite",
-  name: siteConfig.name,
-  url: siteConfig.url,
-  description: siteConfig.description,
-  inLanguage: "en",
-  publisher: {
-    "@type": "Organization",
-    name: siteConfig.legalName,
+function buildWebsiteJsonLd(locale: string) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    name: siteConfig.name,
     url: siteConfig.url,
-  },
-};
+    description: siteConfig.description,
+    inLanguage: locale,
+    publisher: {
+      "@type": "Organization",
+      name: siteConfig.legalName,
+      url: siteConfig.url,
+    },
+  };
+}
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  // Falls back to `routing.defaultLocale` ("en") for non-localized surfaces
+  // (deploy-host route handlers, global not-found) where no locale segment
+  // exists. See `i18n/request.ts`.
+  const locale = await getLocale();
+  const websiteJsonLd = buildWebsiteJsonLd(locale);
+
   return (
     <html
-      lang="en"
+      lang={locale}
       className={`${ibmPlexSans.variable} bg-white dark:bg-gray-950 text-black dark:text-white`}
     >
       <body className={`${ibmPlexSans.className} min-h-[100dvh] bg-[#f8fafc]`}>

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowUpIcon } from "@heroicons/react/24/outline";
 import type { FileUIPart } from "ai";
 import { FormEvent, useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import TextareaAutosize from "react-textarea-autosize";
 import { cn } from "@/lib/utils";
 import { PlusIcon, Square } from "lucide-react";
@@ -72,6 +73,7 @@ export function ChatInput({
   captureGlobalTyping = false,
   onInsertText,
 }: ChatInputProps) {
+  const t = useTranslations("builder.input");
   const formRef = useRef<HTMLFormElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -187,11 +189,9 @@ export function ChatInput({
             aria-hidden
           >
             <span className="text-sm font-medium text-gray-900">
-              Drop images here
+              {t("dropTitle")}
             </span>
-            <span className="text-xs text-gray-500">
-              PNG, JPG, or WebP — or paste from clipboard
-            </span>
+            <span className="text-xs text-gray-500">{t("dropHint")}</span>
           </div>
         )}
         <div
@@ -227,7 +227,7 @@ export function ChatInput({
             onChange={handleInputChange}
             onPaste={handlePaste}
             onKeyDown={handleKeyDown}
-            placeholder="What would you like to change?"
+            placeholder={t("placeholder")}
             minRows={3}
             maxRows={10}
             className={cn(
@@ -244,8 +244,8 @@ export function ChatInput({
             className="absolute bottom-3 left-3 h-8 w-8 cursor-pointer rounded-full"
             onClick={() => fileInputRef.current?.click()}
             disabled={isUploadingAttachments}
-            aria-label="Attach image"
-            title="Attach image"
+            aria-label={t("attachImage")}
+            title={t("attachImage")}
           >
             <PlusIcon className="h-4 w-4" />
           </Button>
@@ -255,8 +255,8 @@ export function ChatInput({
               onClick={onStop}
               size="icon"
               className="absolute bottom-3 right-3 h-8 w-8 rounded-full bg-[#222424] text-white hover:bg-[#222424]/90"
-              aria-label="Stop generation"
-              title="Stop generation"
+              aria-label={t("stopGeneration")}
+              title={t("stopGeneration")}
             >
               <Square
                 className="h-3 w-3 fill-current"
@@ -276,8 +276,8 @@ export function ChatInput({
                   ? "bg-muted text-muted-foreground hover:bg-muted"
                   : ""
               )}
-              aria-label="Send message"
-              title="Send message"
+              aria-label={t("sendMessage")}
+              title={t("sendMessage")}
             >
               <ArrowUpIcon className="h-6 w-6" strokeWidth={2} />
             </Button>

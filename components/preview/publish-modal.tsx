@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
+import { useTranslations } from "next-intl";
 import {
   Dialog,
   DialogContent,
@@ -39,6 +40,7 @@ export function PublishModal({
   chatId,
   onPublishSuccess,
 }: PublishModalProps) {
+  const t = useTranslations("builder.publish");
   const [activeTab, setActiveTab] = useState('web');
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishedUrl, setPublishedUrl] = useState<string>('');
@@ -76,7 +78,7 @@ export function PublishModal({
 
   const handlePublish = async () => {
     if (!chatId) {
-      setError("Chat ID is required");
+      setError(t("chatIdRequired"));
       return;
     }
 
@@ -95,7 +97,7 @@ export function PublishModal({
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to publish site');
+        throw new Error(data.error || t("publishFailed"));
       }
 
       setPublishedUrl(data.publishedUrl);
@@ -114,7 +116,7 @@ export function PublishModal({
         onOpenChange(false);
       }, 1000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to publish site');
+      setError(err instanceof Error ? err.message : t("publishFailed"));
     } finally {
       setIsPublishing(false);
     }
@@ -130,22 +132,22 @@ export function PublishModal({
     <Dialog open={open} onOpenChange={onOpenChange} >
       <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
-          <DialogTitle className="text-2xl font-bold">Publish Your App</DialogTitle>
+          <DialogTitle className="text-2xl font-bold">{t("title")}</DialogTitle>
         </DialogHeader>
 
         <DialogDescription>
-          Once published, the app will be visible to users based on its visibility settings.
+          {t("description")}
         </DialogDescription>
 
         <div className="space-y-2">
-          <Label htmlFor="url">URL</Label>
+          <Label htmlFor="url">{t("urlLabel")}</Label>
           <div className="flex items-center gap-2">
             <Input
               id="url"
               value={getFullUrl()}
               readOnly={!isEditingUrl}
               className="flex-1 font-mono text-sm"
-              placeholder="URL will be generated after publishing"
+              placeholder={t("urlPlaceholder")}
             />
             <Button
               type="button"
@@ -155,7 +157,7 @@ export function PublishModal({
               disabled={!publishedUrl}
             >
               <PencilSquareIcon className="h-4 w-4 mr-1" />
-              Edit URL
+              {t("editUrl")}
             </Button>
           </div>
           {isEditingUrl && (
@@ -163,7 +165,7 @@ export function PublishModal({
               <Input
                 value={customUrl}
                 onChange={(e) => setCustomUrl(e.target.value)}
-                placeholder="custom-url-id"
+                placeholder={t("customUrlPlaceholder")}
                 className="font-mono text-sm"
               />
               <Button
@@ -172,10 +174,9 @@ export function PublishModal({
                 size="sm"
                 onClick={() => {
                   setIsEditingUrl(false);
-                  // TODO: Implement URL update API
                 }}
               >
-                Save
+                {t("save")}
               </Button>
             </div>
           )}
@@ -184,16 +185,16 @@ export function PublishModal({
         <div className="space-y-2">
           <div className="flex items-center gap-2">
             <EyeIcon className="h-4 w-4 text-muted-foreground" />
-            <Label htmlFor="visibility">App Visibility</Label>
+            <Label htmlFor="visibility">{t("visibilityLabel")}</Label>
           </div>
           <Select value={visibility} onValueChange={setVisibility}>
             <SelectTrigger id="visibility">
-              <SelectValue placeholder="Select visibility" />
+              <SelectValue placeholder={t("visibilityPlaceholder")} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="public">Public (no login)</SelectItem>
-              <SelectItem value="private">Private (login required)</SelectItem>
-              <SelectItem value="unlisted">Unlisted (link only)</SelectItem>
+              <SelectItem value="public">{t("visibilityPublic")}</SelectItem>
+              <SelectItem value="private">{t("visibilityPrivate")}</SelectItem>
+              <SelectItem value="unlisted">{t("visibilityUnlisted")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -213,10 +214,10 @@ export function PublishModal({
             {isPublishing ? (
               <>
                 <ArrowPathIcon className="h-4 w-4 mr-2 animate-spin" />
-                Publishing...
+                {t("publishing")}
               </>
             ) : (
-              'Publish App'
+              t("publishApp")
             )}
           </Button>
         </div>

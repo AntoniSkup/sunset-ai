@@ -55,6 +55,10 @@ import {
 import { publishStreamEvents } from "@/lib/chat/stream-bus";
 import { applyStreamEventsToChatTurnRunLiveState } from "@/lib/chat/live-state";
 import type { StreamEventEnvelope } from "@/lib/chat/stream-bus/types";
+import {
+  localeLanguageLabel,
+  resolveAiOutputLocale,
+} from "@/lib/i18n/detect-language";
 
 const BUILDER_TOOLS = new Set([
   "create_site",
@@ -395,6 +399,40 @@ export async function createChatTurnStream({
   }
 
   const lastIncomingMessage = messages[messages.length - 1] as any;
+
+  // Pin the chat's response language on the very first user message and
+  // reuse it for every subsequent turn. Detection prefers what the user
+  // actually wrote; falls back to their account preference; then to default.
+  let chatResponseLanguage: string | null = chat.responseLanguage ?? null;
+  if (!chatResponseLanguage) {
+    const incomingUserText =
+      lastIncomingMessage?.role === "user" &&
+      Array.isArray(lastIncomingMessage.parts)
+        ? extractTextFromMessageParts(
+            sanitizePersistedMessageParts(lastIncomingMessage.parts)
+          )
+        : "";
+    const resolved = resolveAiOutputLocale({
+      chatResponseLanguage: null,
+      detectFromText: incomingUserText,
+      userLocale: user.locale ?? null,
+    });
+    chatResponseLanguage = resolved;
+    try {
+      await updateChatByPublicId(chatPublicId, user.id, {
+        responseLanguage: resolved,
+      });
+    } catch (error) {
+      console.warn("Failed to persist chat response language:", {
+        chatId: chatPublicId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+  const responseLanguageLabel = localeLanguageLabel(
+    chatResponseLanguage as Parameters<typeof localeLanguageLabel>[0]
+  );
+
   if (
     persistIncomingUserMessage &&
     lastIncomingMessage?.role === "user" &&
@@ -416,6 +454,7 @@ export async function createChatTurnStream({
             const title = await generateChatName(userText.trim(), {
               userId: user.id,
               chatId: chatPublicId,
+              responseLanguage: responseLanguageLabel,
             });
             await updateChatByPublicId(chatPublicId, user.id, { title });
           } catch (error) {
@@ -452,7 +491,10 @@ export async function createChatTurnStream({
   );
   const siteAssetContext = buildSiteAssetPromptContext(promptableSiteAssets);
   const { staticSystemPrompt, dynamicSystemSuffix } =
-    await buildChatSystemPromptParts({ siteAssetContext });
+    await buildChatSystemPromptParts({
+      siteAssetContext,
+      responseLanguage: responseLanguageLabel,
+    });
   const useChatPromptCache = isAnthropicChatPromptCachingEnabled();
   const systemPrompt: string | SystemModelMessage | SystemModelMessage[] =
     useChatPromptCache
@@ -470,7 +512,10 @@ export async function createChatTurnStream({
             ? [{ role: "system" as const, content: dynamicSystemSuffix }]
             : []),
         ]
-      : buildChatSystemPrompt({ siteAssetContext });
+      : buildChatSystemPrompt({
+          siteAssetContext,
+          responseLanguage: responseLanguageLabel,
+        });
 
   const [
     createSiteToolCall,
@@ -480,9 +525,11 @@ export async function createChatTurnStream({
   ] = [
     createSiteTool(chatPublicId, user.id, {
       deferredChatTurnBilling: true,
+      copyLanguage: responseLanguageLabel,
     }),
     createSectionTool(chatPublicId, user.id, {
       deferredChatTurnBilling: true,
+      copyLanguage: responseLanguageLabel,
     }),
     createValidateCompletenessTool(chatPublicId, user.id),
     createResolveImageSlotsTool(chatPublicId, user.id),
@@ -833,6 +880,7 @@ export async function createChatTurnStream({
           const title = await generateChatName(lastUserText.trim(), {
             userId: user.id,
             chatId: chatPublicId,
+            responseLanguage: responseLanguageLabel,
           });
           await updateChatByPublicId(chatPublicId, user.id, { title });
         } catch (error) {

@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { CheckCircle2, AlertTriangle, CircleDashed } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -30,6 +31,7 @@ export function ValidationReportCard({
   isPending?: boolean;
   className?: string;
 }) {
+  const t = useTranslations("builder.validation");
   const status = report.status ?? (isPending ? "fail" : "pass");
   const isPass = !isPending && status === "pass";
   const inferredReportType =
@@ -38,7 +40,7 @@ export function ValidationReportCard({
       ? "ui_consistency"
       : "completeness");
   const isUi = inferredReportType === "ui_consistency";
-  const title = isUi ? "UI consistency check" : "Completeness check";
+  const title = isUi ? t("uiConsistencyTitle") : t("completenessTitle");
   const criticalCount = report.criticalFindings?.length ?? 0;
   const warningCount = report.warningFindings?.length ?? 0;
   const topFindings = [
@@ -46,13 +48,17 @@ export function ValidationReportCard({
     ...(report.warningFindings ?? []).slice(0, 1),
   ];
 
+  const statusLabel = isPending
+    ? t("statusRunning")
+    : status === "pass"
+      ? t("statusPass")
+      : t("statusFail");
+
   return (
     <div
       className={cn(
         "rounded-lg border px-3 py-2 text-sm bg-background/70",
-        isPass
-          ? "border-emerald-300/60"
-          : "border-amber-300/60",
+        isPass ? "border-emerald-300/60" : "border-amber-300/60",
         className
       )}
     >
@@ -67,7 +73,7 @@ export function ValidationReportCard({
         <span className="font-medium">{title}</span>
         {isUi && typeof report.score === "number" && (
           <span className="text-xs text-muted-foreground ml-auto">
-            score {report.score}/100
+            {t("scoreLabel", { score: report.score })}
           </span>
         )}
       </div>
@@ -82,15 +88,15 @@ export function ValidationReportCard({
                 : "border-amber-300 text-amber-700"
           )}
         >
-          {isPending ? "running" : status}
+          {statusLabel}
         </span>
         {!isPending && (
           <>
             <span className="rounded-full px-2 py-0.5 border border-red-200 text-red-700">
-              critical {criticalCount}
+              {t("criticalCount", { count: criticalCount })}
             </span>
             <span className="rounded-full px-2 py-0.5 border border-amber-200 text-amber-700">
-              warnings {warningCount}
+              {t("warningCount", { count: warningCount })}
             </span>
           </>
         )}
@@ -98,7 +104,7 @@ export function ValidationReportCard({
 
       <p className="mt-1 text-xs text-muted-foreground">
         {report.summary ??
-          (isPending ? "Running validation..." : "Validation result available.")}
+          (isPending ? t("runningSummary") : t("defaultSummary"))}
       </p>
 
       {!isPending && topFindings.length > 0 && (
@@ -106,7 +112,7 @@ export function ValidationReportCard({
           {topFindings.map((f, idx) => (
             <li key={`${f.issueCode || "finding"}-${idx}`}>
               {f.path ? `${f.path}: ` : ""}
-              {f.message ?? "Issue detected"}
+              {f.message ?? t("defaultIssue")}
             </li>
           ))}
         </ul>

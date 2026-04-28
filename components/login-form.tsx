@@ -2,7 +2,9 @@
 
 import { useActionState } from "react";
 import { useSearchParams } from "next/navigation";
-import Link from "next/link";
+import { useTranslations } from "next-intl";
+import { useDynamicTranslate } from "@/i18n/dynamic-translate";
+import { Link } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -14,9 +16,23 @@ import {
   FieldSeparator,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { signIn } from "@/app/(login)/actions";
+import { signIn } from "@/app/[locale]/(login)/actions";
 import type { ActionState } from "@/lib/auth/middleware";
 import { ArrowPathIcon } from "@heroicons/react/24/outline";
+
+/**
+ * Map a Google OAuth callback `?error=...` query param onto a translation
+ * key. Keeps the URL contract stable (the callback emits short error codes,
+ * not English copy) while routing display through the i18n dictionary.
+ */
+function oauthErrorKey(code: string | null): string | null {
+  if (!code) return null;
+  if (code === "email_exists") return "errors.emailExistsOauth";
+  if (code === "config") return "errors.oauthNotConfigured";
+  if (code === "denied") return "errors.oauthCancelled";
+  if (code === "token" || code === "userinfo") return "errors.oauthFailed";
+  return null;
+}
 
 export function LoginForm({
   className,
@@ -29,21 +45,15 @@ export function LoginForm({
   const oauthError = searchParams.get("error");
   const oauthMessage = searchParams.get("message");
 
-  const errorFromGoogle =
-    oauthError === "email_exists"
-      ? oauthMessage ||
-        "An account with this email already exists. Please sign in with your password."
-      : oauthError === "config"
-        ? "Google sign-in is not configured. Please sign in with your password."
-        : oauthError === "denied"
-          ? "Google sign-in was cancelled."
-          : oauthError === "token" || oauthError === "userinfo"
-            ? "Google sign-in failed. Please try again or sign in with your password."
-            : null;
+  const t = useDynamicTranslate();
+  const tAuth = useTranslations("auth");
+  const tCommon = useTranslations("common");
+
+  const oauthKey = oauthErrorKey(oauthError);
 
   const [state, formAction, isPending] = useActionState<ActionState, FormData>(
     signIn,
-    { error: "" }
+    {}
   );
 
   const signUpHref = `/sign-up${redirect ? `?redirect=${redirect}` : ""}${priceId ? `&priceId=${priceId}` : ""}${inviteId ? `&inviteId=${inviteId}` : ""}`;
@@ -53,6 +63,14 @@ export function LoginForm({
   if (priceId) googleParams.set("priceId", priceId);
   if (inviteId) googleParams.set("inviteId", inviteId);
   const googleAuthHref = `/api/auth/google${googleParams.toString() ? `?${googleParams.toString()}` : ""}`;
+
+  // Server-action error wins over OAuth callback error; OAuth callback's
+  // `?message=` is only used if it's present AND we don't have a better key.
+  const errorMessage =
+    t(state?.errorKey, state?.messageParams) ??
+    t(oauthKey) ??
+    oauthMessage ??
+    null;
 
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>
@@ -71,18 +89,20 @@ export function LoginForm({
                   draggable={false}
                 />
                 <h1 className="text-2xl font-semibold tracking-tight text-gray-900">
-                  Welcome back
+                  {tAuth("signInTitle")}
                 </h1>
                 <p className="text-balance text-sm text-gray-500">
-                  Sign in to your{" "}
-                  <span className="bg-gradient-to-r from-[#ff6313] via-[#ff8a3d] to-[#ffb066] bg-clip-text font-medium text-transparent">
-                    Sunset
-                  </span>{" "}
-                  account
+                  {tAuth.rich("signInSubtitle", {
+                    brand: (chunks) => (
+                      <span className="bg-gradient-to-r from-[#ff6313] via-[#ff8a3d] to-[#ffb066] bg-clip-text font-medium text-transparent">
+                        {chunks}
+                      </span>
+                    ),
+                  })}
                 </p>
               </div>
               <Field>
-                <FieldLabel htmlFor="email">Email</FieldLabel>
+                <FieldLabel htmlFor="email">{tCommon("email")}</FieldLabel>
                 <Input
                   id="email"
                   name="email"
@@ -95,23 +115,23 @@ export function LoginForm({
                 />
               </Field>
               <Field>
-                <FieldLabel htmlFor="password">Password</FieldLabel>
+                <FieldLabel htmlFor="password">
+                  {tCommon("password")}
+                </FieldLabel>
                 <Input
                   id="password"
                   name="password"
                   type="password"
                   autoComplete="current-password"
-                  placeholder="Enter your password"
+                  placeholder={tAuth("passwordPlaceholder")}
                   required
                   minLength={8}
                   maxLength={100}
                   defaultValue={state?.password}
                 />
               </Field>
-              {(state?.error || errorFromGoogle) && (
-                <p className="text-sm text-destructive">
-                  {state?.error || errorFromGoogle}
-                </p>
+              {errorMessage && (
+                <p className="text-sm text-destructive">{errorMessage}</p>
               )}
               <Field>
                 <Button
@@ -122,15 +142,15 @@ export function LoginForm({
                   {isPending ? (
                     <>
                       <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
-                      Signing in...
+                      {tAuth("signingIn")}
                     </>
                   ) : (
-                    "Sign in"
+                    tCommon("signIn")
                   )}
                 </Button>
               </Field>
               <FieldSeparator className="*:data-[slot=field-separator-content]:bg-card">
-                Or continue with
+                {tAuth("orContinueWith")}
               </FieldSeparator>
               <Field>
                 <Button
@@ -150,17 +170,17 @@ export function LoginForm({
                         fill="currentColor"
                       />
                     </svg>
-                    Continue with Google
+                    {tAuth("continueWithGoogle")}
                   </a>
                 </Button>
               </Field>
               <FieldDescription className="text-center">
-                Don&apos;t have an account?{" "}
+                {tAuth("noAccount")}{" "}
                 <Link
                   href={signUpHref}
                   className="font-medium text-gray-900 underline underline-offset-4 hover:text-[#ff6313]"
                 >
-                  Sign up
+                  {tCommon("signUp")}
                 </Link>
               </FieldDescription>
             </FieldGroup>
@@ -176,19 +196,19 @@ export function LoginForm({
         </CardContent>
       </Card>
       <FieldDescription className="px-6 text-center">
-        By signing in, you agree to our{" "}
+        {tAuth("termsAcceptSignIn")}{" "}
         <Link
           href="/terms"
           className="underline underline-offset-4 hover:text-[#ff6313]"
         >
-          Terms of Use
+          {tAuth("termsOfUse")}
         </Link>{" "}
-        and{" "}
+        {tAuth("and")}{" "}
         <Link
           href="/privacy"
           className="underline underline-offset-4 hover:text-[#ff6313]"
         >
-          Privacy Policy
+          {tAuth("privacyPolicy")}
         </Link>
         .
       </FieldDescription>

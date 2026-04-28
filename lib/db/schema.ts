@@ -22,6 +22,12 @@ export const users = pgTable("users", {
   email: varchar("email", { length: 255 }).notNull().unique(),
   passwordHash: text("password_hash").notNull(),
   role: varchar("role", { length: 20 }).notNull().default("member"),
+  // Captured at sign-up from the NEXT_LOCALE cookie (set by next-intl
+  // middleware from URL prefix or Accept-Language). Source of truth for
+  // server-side locale-dependent work — emails, AI prompt language, etc.
+  // Kept short and validated against `routing.locales` in app code; not a
+  // pg enum so adding a locale doesn't require a migration.
+  locale: varchar("locale", { length: 5 }).notNull().default("en"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
   deletedAt: timestamp("deleted_at"),
@@ -293,6 +299,7 @@ export const chats = pgTable(
       .references(() => users.id),
     title: varchar("title", { length: 255 }),
     screenshotUrl: text("screenshot_url"),
+    responseLanguage: varchar("response_language", { length: 5 }),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },

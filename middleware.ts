@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import createIntlMiddleware from "next-intl/middleware";
 import { signToken, verifyToken } from "@/lib/auth/session";
+import { routing } from "@/i18n/routing";
 import {
   isDeployHost,
   getPublishedSiteLabelFromHost,
@@ -8,6 +10,65 @@ import {
 import { getScreenshotCaptureHost } from "@/lib/screenshots/public-app-origin";
 
 const protectedRoutePrefixes = ["/dashboard", "/start"];
+
+const intlMiddleware = createIntlMiddleware(routing);
+
+/**
+ * Paths the i18n middleware must NOT touch:
+ *   - Next.js framework outputs (sitemap, robots, og-image, favicon variants)
+ *     — these are crawler/asset URLs that must not be prefix-redirected.
+ *   - Anything that *looks* like a static asset (has a file extension).
+ *
+ * `/api/*` is already excluded by the matcher below, so it doesn't need a
+ * check here.
+ */
+function shouldBypassIntl(pathname: string): boolean {
+  if (
+    pathname === "/sitemap.xml" ||
+    pathname === "/robots.txt" ||
+    pathname === "/opengraph-image" ||
+    pathname.startsWith("/opengraph-image/") ||
+    pathname === "/icon" ||
+    pathname === "/apple-icon"
+  ) {
+    return true;
+  }
+  return /\.(ico|png|jpe?g|svg|webp|gif|css|js|map|txt|xml|json|woff2?)$/i.test(
+    pathname
+  );
+}
+
+/**
+ * Strip a non-default locale prefix from a pathname so we can compare
+ * against bare route prefixes ("/dashboard", "/start") regardless of which
+ * locale the user is browsing in.
+ *
+ * Returns `{ locale: "en", path: "/dashboard" }` for the bare default-locale
+ * case, and `{ locale: "pl", path: "/dashboard" }` for `/pl/dashboard`.
+ */
+function stripLocalePrefix(pathname: string): {
+  locale: (typeof routing.locales)[number];
+  path: string;
+} {
+  for (const locale of routing.locales) {
+    if (locale === routing.defaultLocale) continue;
+    if (pathname === `/${locale}`) {
+      return { locale, path: "/" };
+    }
+    if (pathname.startsWith(`/${locale}/`)) {
+      return { locale, path: pathname.slice(locale.length + 1) };
+    }
+  }
+  return { locale: routing.defaultLocale, path: pathname };
+}
+
+function localizedPath(
+  locale: (typeof routing.locales)[number],
+  bare: string
+): string {
+  if (locale === routing.defaultLocale) return bare;
+  return `/${locale}${bare === "/" ? "" : bare}`;
+}
 
 const DEPLOY_HOST_ALLOWED_PREFIXES = ["/p/", "/s/"];
 const DEPLOY_HOST_ALLOWED_EXACT = new Set(["/favicon.ico", "/robots.txt"]);
@@ -128,16 +189,37 @@ export async function middleware(request: NextRequest) {
     return new NextResponse("Not Found", { status: 404 });
   }
 
+  // i18n routing for the main app. Skip framework-asset-shaped paths
+  // (sitemap/robots/og-image/etc.) so they're not prefix-redirected to
+  // `/pl/sitemap.xml` for Polish-cookie users — that would silently break
+  // crawler discovery.
+  const intlResponse = shouldBypassIntl(pathname)
+    ? NextResponse.next()
+    : intlMiddleware(request);
+
+  // If next-intl wants to redirect (e.g. add `/pl` prefix because the user's
+  // NEXT_LOCALE cookie is `pl`), let it. Session refresh will run on the
+  // follow-up request.
+  if (intlResponse.status >= 300 && intlResponse.status < 400) {
+    return intlResponse;
+  }
+
   const sessionCookie = request.cookies.get("session");
+  const { locale: pathLocale, path: barePath } = stripLocalePrefix(pathname);
   const isProtectedRoute = protectedRoutePrefixes.some((prefix) =>
-    pathname.startsWith(prefix)
+    barePath.startsWith(prefix)
   );
 
   if (isProtectedRoute && !sessionCookie) {
-    return NextResponse.redirect(new URL("/sign-in", request.url));
+    return NextResponse.redirect(
+      new URL(localizedPath(pathLocale, "/sign-in"), request.url)
+    );
   }
 
-  let res = NextResponse.next();
+  // Layer session-refresh cookies on top of next-intl's response so the
+  // NEXT_LOCALE cookie (set by the i18n middleware when the URL's locale
+  // differs from the cookie) is preserved.
+  const res = intlResponse;
 
   if (sessionCookie && request.method === "GET") {
     try {
@@ -161,7 +243,9 @@ export async function middleware(request: NextRequest) {
       console.error("Error updating session:", error);
       res.cookies.delete("session");
       if (isProtectedRoute) {
-        return NextResponse.redirect(new URL("/sign-in", request.url));
+        return NextResponse.redirect(
+          new URL(localizedPath(pathLocale, "/sign-in"), request.url)
+        );
       }
     }
   }

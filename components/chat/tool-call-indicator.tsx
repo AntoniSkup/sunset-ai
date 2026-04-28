@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { useTranslations } from "next-intl";
 import {
   ArrowPathIcon,
   PhotoIcon,
@@ -19,6 +20,8 @@ interface ToolCallIndicatorProps {
   className?: string;
 }
 
+type ToolCallTranslator = ReturnType<typeof useTranslations<"builder.toolCall">>;
+
 function humanizeName(value: string): string {
   const withoutExt = value.replace(/\.[a-z0-9]+$/i, "");
   const spaced = withoutExt
@@ -30,29 +33,33 @@ function humanizeName(value: string): string {
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 
-function getFriendlyTarget(toolName: string, fileName: string): string {
+function getFriendlyTarget(
+  toolName: string,
+  fileName: string,
+  t: ToolCallTranslator
+): string {
   const raw = (fileName || "").trim();
   const normalized = raw.toLowerCase();
 
-  if (toolName === "resolve_image_slots") return "page visuals";
-  if (toolName === "validate_completeness") return "site completeness";
-  if (toolName === "validate_ui_consistency") return "UI consistency";
+  if (toolName === "resolve_image_slots") return t("targetPageVisuals");
+  if (toolName === "validate_completeness") return t("targetSiteCompleteness");
+  if (toolName === "validate_ui_consistency") return t("targetUiConsistency");
 
   if (
     normalized.endsWith("landing/index.tsx") ||
     normalized.endsWith("landing/index.html")
   ) {
-    return "page structure";
+    return t("targetPageStructure");
   }
 
   const sectionMatch = raw.match(/landing\/sections\/([^/]+)$/i);
   if (sectionMatch?.[1]) {
-    return `${humanizeName(sectionMatch[1])} section`;
+    return t("targetSectionSuffix", { name: humanizeName(sectionMatch[1]) });
   }
 
   const pageMatch = raw.match(/landing\/pages\/([^/]+)$/i);
   if (pageMatch?.[1]) {
-    return `${humanizeName(pageMatch[1])} page`;
+    return t("targetPageSuffix", { name: humanizeName(pageMatch[1]) });
   }
 
   if (raw) {
@@ -62,31 +69,38 @@ function getFriendlyTarget(toolName: string, fileName: string): string {
         name
       )
     ) {
-      return `${name} section`;
+      return t("targetSectionSuffix", { name });
     }
     return name.toLowerCase();
   }
 
-  if (toolName === "create_section") return "section";
-  if (toolName === "create_site") return "page structure";
-  return "page update";
+  if (toolName === "create_section") return t("targetSection");
+  if (toolName === "create_site") return t("targetPageStructure");
+  return t("targetPageUpdate");
 }
 
 function getActionLabel(
   toolName: string,
   target: string,
-  isComplete: boolean
+  isComplete: boolean,
+  t: ToolCallTranslator
 ): string {
   if (toolName === "resolve_image_slots") {
-    return `${isComplete ? "Prepared" : "Preparing"} ${target}`;
+    return isComplete
+      ? t("actionPrepared", { target })
+      : t("actionPreparing", { target });
   }
   if (
     toolName === "validate_completeness" ||
     toolName === "validate_ui_consistency"
   ) {
-    return `${isComplete ? "Checked" : "Checking"} ${target}`;
+    return isComplete
+      ? t("actionChecked", { target })
+      : t("actionChecking", { target });
   }
-  return `${isComplete ? "Built" : "Building"} ${target}`;
+  return isComplete
+    ? t("actionBuilt", { target })
+    : t("actionBuilding", { target });
 }
 
 function getContentIcon(toolName: string, target: string): React.ReactNode {
@@ -94,16 +108,16 @@ function getContentIcon(toolName: string, target: string): React.ReactNode {
 
   if (
     toolName === "resolve_image_slots" ||
-    normalizedTarget === "page visuals"
+    /page visuals|grafiki strony/.test(normalizedTarget)
   ) {
     return <PhotoIcon className="h-4 w-4 text-muted-foreground" />;
   }
 
-  if (normalizedTarget === "page structure") {
+  if (/page structure|struktura strony/.test(normalizedTarget)) {
     return <FormInput className="h-4 w-4 text-muted-foreground" />;
   }
 
-  if (normalizedTarget === "home page") {
+  if (/home page|strona główna/.test(normalizedTarget)) {
     return <Squares2X2Icon className="h-4 w-4 text-muted-foreground" />;
   }
 
@@ -123,11 +137,9 @@ export function ToolCallIndicator({
   isComplete,
   className,
 }: ToolCallIndicatorProps) {
-  const isValidationTool =
-    toolName === "validate_completeness" ||
-    toolName === "validate_ui_consistency";
-  const target = getFriendlyTarget(toolName, fileName);
-  const actionText = getActionLabel(toolName, target, isComplete);
+  const t = useTranslations("builder.toolCall");
+  const target = getFriendlyTarget(toolName, fileName, t);
+  const actionText = getActionLabel(toolName, target, isComplete, t);
 
   return (
     <div
@@ -144,7 +156,7 @@ export function ToolCallIndicator({
       <span className="text-sm text-foreground">{actionText}</span>
       {getContentIcon(toolName, target)}
       <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
-        {isComplete ? "Done" : "In progress"}
+        {isComplete ? t("statusDone") : t("statusInProgress")}
       </span>
     </div>
   );

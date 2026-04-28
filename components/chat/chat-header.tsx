@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
-import Link from "next/link";
+import { useTranslations } from "next-intl";
+import { Link } from "@/i18n/navigation";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,6 +27,7 @@ interface ChatHeaderProps {
 }
 
 export function ChatHeader({ chatId, chatName, onRename }: ChatHeaderProps) {
+  const t = useTranslations("builder.header");
   const [isRenaming, setIsRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -45,7 +47,7 @@ export function ChatHeader({ chatId, chatName, onRename }: ChatHeaderProps) {
         setIsRenaming(false);
         return;
       }
-      if (trimmed === (chatName || "Untitled Chat")) {
+      if (trimmed === (chatName || t("untitledChat"))) {
         setIsRenaming(false);
         return;
       }
@@ -64,13 +66,13 @@ export function ChatHeader({ chatId, chatName, onRename }: ChatHeaderProps) {
         setIsSaving(false);
       }
     },
-    [chatId, chatName, onRename]
+    [chatId, chatName, onRename, t]
   );
 
   const handleRenameSelect = useCallback(() => {
-    setRenameValue(chatName || "Untitled Chat");
+    setRenameValue(chatName || t("untitledChat"));
     setIsRenaming(true);
-  }, [chatName]);
+  }, [chatName, t]);
 
   const handleInputKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -96,10 +98,10 @@ export function ChatHeader({ chatId, chatName, onRename }: ChatHeaderProps) {
             <DropdownMenuTrigger asChild>
               <img
                 src={sunsetLogo.src}
-                alt="Sunset logo "
+                alt={t("logoAlt")}
                 className="w-7 h-7 shrink-0 hover:opacity-70 click:opacity-100 transition-all duration-200 cursor-pointer ease-in-out"
-                aria-label="Open menu"
-                title="Sunset logo"
+                aria-label={t("openMenu")}
+                title={t("logoTitle")}
               />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-64">
@@ -109,7 +111,7 @@ export function ChatHeader({ chatId, chatName, onRename }: ChatHeaderProps) {
                   className="flex items-center cursor-pointer"
                 >
                   <ChevronLeftIcon className="h-3 w-3 font-bold text-black" />
-                  Go to Dashboard
+                  {t("goToDashboard")}
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
@@ -128,7 +130,7 @@ export function ChatHeader({ chatId, chatName, onRename }: ChatHeaderProps) {
                     className="h-3 w-3 font-bold text-black"
                     strokeWidth={1.5}
                   />
-                  Payment
+                  {t("payment")}
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
@@ -140,7 +142,7 @@ export function ChatHeader({ chatId, chatName, onRename }: ChatHeaderProps) {
                     className="h-3 w-3 font-bold text-black"
                     strokeWidth={1.5}
                   />
-                  Settings
+                  {t("settings")}
                 </Link>
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -167,17 +169,17 @@ export function ChatHeader({ chatId, chatName, onRename }: ChatHeaderProps) {
                     className="w-full flex flex-col gap-0.5 leading-none text-left min-w-0  justify-start items-start cursor-pointer"
                   >
                     <span className="text-sm font-medium text-gray-900 truncate leading-none">
-                      {chatName || "Untitled Chat"}
+                      {chatName || t("untitledChat")}
                     </span>
                     <span className="text-xs text-gray-500 leading-none">
-                      Personal workspace
+                      {t("personalWorkspace")}
                     </span>
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" className="w-48">
                   <DropdownMenuItem onSelect={handleRenameSelect}>
                     <PencilSquareIcon className="mr-2 h-4 w-4" />
-                    Rename chat
+                    {t("renameChat")}
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>

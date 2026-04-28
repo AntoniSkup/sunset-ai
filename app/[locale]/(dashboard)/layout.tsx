@@ -1,0 +1,110 @@
+"use client";
+
+import Link from "next/link";
+import { useState, Suspense } from "react";
+import { Button } from "@/components/ui/button";
+import {
+  HomeIcon,
+  ArrowRightOnRectangleIcon,
+} from "@heroicons/react/24/outline";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { signOut } from "@/app/[locale]/(login)/actions";
+import { useRouter } from "next/navigation";
+import { User } from "@/lib/db/schema";
+import useSWR, { mutate } from "swr";
+
+const fetcher = (url: string) => fetch(url).then((res) => res.json());
+
+function UserMenu() {
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const { data: user } = useSWR<User>("/api/user", fetcher);
+  const router = useRouter();
+
+  async function handleSignOut() {
+    await signOut();
+    mutate("/api/user");
+    router.push("/");
+  }
+
+  if (!user) {
+    return (
+      <>
+        <Link
+          href="/pricing"
+          className="text-sm font-medium text-gray-700 hover:text-gray-900"
+        >
+          Pricing
+        </Link>
+        <Button asChild className="rounded-full">
+          <Link href="/sign-up">Sign Up</Link>
+        </Button>
+      </>
+    );
+  }
+
+  return (
+    <DropdownMenu open={isMenuOpen} onOpenChange={setIsMenuOpen}>
+      <DropdownMenuTrigger>
+        <Avatar className="cursor-pointer size-9">
+          <AvatarImage alt={user.name || ""} />
+          <AvatarFallback>
+            {user.email
+              .split(" ")
+              .map((n) => n[0])
+              .join("")}
+          </AvatarFallback>
+        </Avatar>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent>
+        <DropdownMenuItem className="cursor-pointer">
+          <Link href="/dashboard" className="flex w-full items-center">
+            <HomeIcon className="mr-2 h-4 w-4" />
+            <span>Dashboard</span>
+          </Link>
+        </DropdownMenuItem>
+        x
+        <form action={handleSignOut} className="w-full">
+          <DropdownMenuItem className="w-full flex-1 cursor-pointer">
+            <ArrowRightOnRectangleIcon className="mr-2 h-4 w-4" />
+            <span>Sign out</span>
+          </DropdownMenuItem>
+        </form>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function Header() {
+  return (
+    <header className="border-b border-gray-200">
+      <div className="px-4 sm:px-6 lg:px-8 py-2 flex justify-between items-center">
+        <div className="flex items-center space-x-4">
+          <Suspense fallback={<div className="h-7" />}>
+            <UserMenu />
+          </Suspense>
+        </div>
+
+        <div className="flex items-center space-x-4 ">
+          <Button variant={"default"}>
+            <span className="text-white text-xs">Publish</span>
+          </Button>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+export default function Layout({ children }: { children: React.ReactNode }) {
+  return (
+    <section className="flex flex-col h-screen">
+      {/* <Header /> */}
+      <div className="flex-1 min-h-0">{children}</div>
+    </section>
+  );
+}

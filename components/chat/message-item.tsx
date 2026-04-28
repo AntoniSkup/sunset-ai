@@ -125,12 +125,10 @@ function getFileParts(message: UIMessage): FileUIPart[] {
   return message.parts.filter((part) => part.type === "file") as FileUIPart[];
 }
 
-function getDefaultFileNameForTool(toolName: string): string {
-  if (toolName === "create_site") return "page structure";
-  if (toolName === "create_section") return "section";
-  if (toolName === "validate_completeness") return "site completeness";
-  if (toolName === "validate_ui_consistency") return "UI consistency";
-  return "page update";
+// Return empty string when there's no real file name; the ToolCallIndicator
+// already maps `toolName` to a translated target label via i18n.
+function getDefaultFileNameForTool(_toolName: string): string {
+  return "";
 }
 
 function buildRenderTokens(message: UIMessage): RenderToken[] {
@@ -173,7 +171,6 @@ function buildRenderTokens(message: UIMessage): RenderToken[] {
               toolName === "validate_completeness"
                 ? "completeness"
                 : "ui_consistency",
-            summary: "Running validation...",
           },
           isPending: true,
         });
@@ -235,7 +232,6 @@ function buildRenderTokens(message: UIMessage): RenderToken[] {
               toolName === "validate_completeness"
                 ? "completeness"
                 : "ui_consistency",
-            summary: "Running validation...",
           },
           isPending: true,
         });

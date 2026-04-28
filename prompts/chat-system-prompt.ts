@@ -184,19 +184,50 @@ Remember: You have access to a tool that generates React (JSX/TSX) code with Tai
 
 `;
 
+/**
+ * Build the per-locale "Response language" directive appended to the chat
+ * system prompt. Tool *schemas* and tool field names stay in English so the
+ * model invokes them reliably; only natural-language replies and any
+ * user-visible copy generated for the landing site should follow this
+ * directive.
+ */
+function buildResponseLanguageBlock(language: string): string {
+  const trimmed = language.trim();
+  if (!trimmed || trimmed.toLowerCase() === "english") return "";
+  return `
+
+**Response language**
+- Reply to the user in ${trimmed}. This includes the plan/outline, all narration between tool calls, modification acknowledgements, validation summaries, and any text rendered to the user.
+- All copy you author for the generated landing site (headings, body text, button labels, navigation labels, alt text, form labels, footer copy, etc.) MUST also be in ${trimmed}, unless the user's message clearly requests another language for the site copy.
+- Tool names, tool argument keys, file paths, code identifiers, technical instructions inside tool arguments (such as design language phrases that name fonts/colors/components), and any code you generate stay in English. Do not translate React component names, Tailwind class names, theme token names, route paths, or other code symbols.
+`.trim();
+}
+
 /** Stable base + optional per-chat site-asset tail (same concatenation as {@link buildChatSystemPrompt}). */
-export function buildChatSystemPromptParts(params?: { siteAssetContext?: string }): {
+export function buildChatSystemPromptParts(params?: {
+  siteAssetContext?: string;
+  responseLanguage?: string;
+}): {
   staticSystemPrompt: string;
   dynamicSystemSuffix: string;
 } {
   const siteAssetContext = params?.siteAssetContext?.trim();
+  const langBlock = buildResponseLanguageBlock(params?.responseLanguage ?? "");
+  const suffixParts: string[] = [];
+  if (langBlock) suffixParts.push(langBlock);
+  if (siteAssetContext) suffixParts.push(siteAssetContext);
   return {
     staticSystemPrompt: BASE_CHAT_SYSTEM_PROMPT,
-    dynamicSystemSuffix: siteAssetContext ? `\n\n${siteAssetContext}` : "",
+    dynamicSystemSuffix: suffixParts.length
+      ? `\n\n${suffixParts.join("\n\n")}`
+      : "",
   };
 }
 
-export function buildChatSystemPrompt(params?: { siteAssetContext?: string }) {
+export function buildChatSystemPrompt(params?: {
+  siteAssetContext?: string;
+  responseLanguage?: string;
+}) {
   const { staticSystemPrompt, dynamicSystemSuffix } =
     buildChatSystemPromptParts(params);
   return staticSystemPrompt + dynamicSystemSuffix;

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 
 function langFromPath(path: string): string {
   const ext = path.replace(/^.*\./, "").toLowerCase();
@@ -27,6 +28,7 @@ interface CodeViewerProps {
 }
 
 export function CodeViewer({ code, path, className = "" }: CodeViewerProps) {
+  const t = useTranslations("builder.code");
   const [html, setHtml] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -52,7 +54,7 @@ export function CodeViewer({ code, path, className = "" }: CodeViewerProps) {
         if (!cancelled) setHtml(out);
       } catch (e) {
         if (!cancelled) {
-          setError(e instanceof Error ? e.message : "Highlight failed");
+          setError(e instanceof Error ? e.message : t("highlightFailed"));
           setHtml(null);
         }
       }
@@ -62,7 +64,7 @@ export function CodeViewer({ code, path, className = "" }: CodeViewerProps) {
     return () => {
       cancelled = true;
     };
-  }, [code, path]);
+  }, [code, path, t]);
 
   if (error) {
     return (
@@ -75,7 +77,7 @@ export function CodeViewer({ code, path, className = "" }: CodeViewerProps) {
       <div
         className={`flex items-center justify-center p-8 text-muted-foreground ${className}`}
       >
-        <span className="animate-pulse">Highlighting…</span>
+        <span className="animate-pulse">{t("highlighting")}</span>
       </div>
     );
   }

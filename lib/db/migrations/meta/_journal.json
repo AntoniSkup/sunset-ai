@@ -162,6 +162,20 @@
       "when": 1777000000000,
       "tag": "0022_published_sites_public_id_length",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1777394043652,
+      "tag": "0023_cuddly_mentallo",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1777408693987,
+      "tag": "0024_add_chats_response_language",
+      "breakpoints": true
     }
   ]
 }

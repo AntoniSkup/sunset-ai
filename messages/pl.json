@@ -1,0 +1,569 @@
+{
+  "common": {
+    "appName": "Sunset",
+    "signIn": "Zaloguj się",
+    "signUp": "Zarejestruj się",
+    "signOut": "Wyloguj się",
+    "submit": "Wyślij",
+    "cancel": "Anuluj",
+    "save": "Zapisz",
+    "saving": "Zapisywanie...",
+    "loading": "Ładowanie...",
+    "email": "Email",
+    "password": "Hasło",
+    "name": "Imię",
+    "language": "Język",
+    "english": "Angielski",
+    "polish": "Polski"
+  },
+  "auth": {
+    "signInTitle": "Witaj ponownie",
+    "signUpTitle": "Utwórz konto",
+    "signInSubtitle": "Zaloguj się do swojego konta <brand>Sunset</brand>",
+    "signingIn": "Logowanie...",
+    "creatingAccount": "Tworzenie konta...",
+    "noAccount": "Nie masz jeszcze konta?",
+    "haveAccount": "Masz już konto?",
+    "continueWithGoogle": "Kontynuuj z Google",
+    "orContinueWith": "Albo zaloguj się przez",
+    "passwordPlaceholder": "Wprowadź hasło",
+    "termsAcceptSignIn": "Logując się, akceptujesz nasze",
+    "termsAcceptSignUp": "Rejestrując się, akceptujesz nasze",
+    "termsOfUse": "Warunki korzystania",
+    "privacyPolicy": "Politykę prywatności",
+    "and": "oraz"
+  },
+  "billing": {},
+  "pricing": {
+    "metaTitle": "Cennik",
+    "metaDescription": "Prosty cennik kredytowy dla {brand}, {tagline}. Subskrybuj miesięcznie lub kupuj jednorazowe doładowania, gdy potrzebujesz więcej kredytów.",
+    "metaTitleSocial": "Cennik — {brand}",
+    "badge": "Cennik",
+    "heading": "Wybierz kredyty dopasowane do Twojej pracy",
+    "subheading": "Utrzymuj stałą miesięczną subskrypcję lub kupuj jednorazowe doładowania, gdy potrzebujesz więcej kredytów.",
+    "starterNotConfigured": "Plan startowy nie jest skonfigurowany.",
+    "interval": {
+      "day": "dzień",
+      "week": "tydzień",
+      "month": "miesiąc",
+      "year": "rok"
+    },
+    "starter": {
+      "yourPlan": "Twój plan",
+      "subscription": "Subskrypcja",
+      "active": "Aktywna",
+      "monthlyBilling": "Płatność miesięczna",
+      "description": "Stałe kredyty na bieżącą pracę i przewidywalne miesięczne zużycie.",
+      "perInterval": "/ {interval}",
+      "creditsEveryInterval": "{credits} kredytów co {interval}",
+      "featureIncluded": "{credits} kredytów w pakiecie co miesiąc",
+      "featureDailyBonus": "{credits} dodatkowych kredytów dziennie",
+      "featureDailyBonusWithCap": "{credits} dodatkowych kredytów dziennie (do {cap} miesięcznie)",
+      "featureRollover": "Przeniesienie do {cap} niewykorzystanych kredytów",
+      "featureTopupAnytime": "Doładuj w dowolnej chwili, gdy potrzebujesz więcej",
+      "currentPlanCta": "Twój aktualny plan",
+      "manageSubscription": "Zarządzaj subskrypcją",
+      "autoRenewNote": "Subskrypcja odnawia się automatycznie. Zarządzaj lub anuluj w dowolnej chwili w rozliczeniach."
+    },
+    "topup": {
+      "badge": "Płatność jednorazowa",
+      "flexibleUsage": "Elastyczne zużycie",
+      "title": "Doładowanie kredytów",
+      "description": "Kup dodatkowe kredyty jednorazowo i miej je do wykorzystania w przyszłości.",
+      "addedWithSinglePayment": "{credits} kredytów dodawanych jedną płatnością",
+      "featureAddedInstantly": "{credits} kredytów dodanych natychmiast",
+      "featureNoRecurring": "Płatność jednorazowa, bez cyklicznych opłat",
+      "featureNeverExpire": "Kredyty nigdy nie wygasają po zakupie",
+      "featureStandalone": "Działa samodzielnie lub razem z subskrypcją",
+      "buyLabel": "Kup {name}",
+      "idealNote": "Idealne, gdy potrzebujesz dodatkowych kredytów od czasu do czasu."
+    },
+    "submit": {
+      "loading": "Ładowanie...",
+      "getStarted": "Zacznij teraz"
+    }
+  },
+  "builder": {
+    "start": {
+      "navPricing": "Cennik",
+      "navSettings": "Ustawienia",
+      "badge": "Co dziś zbudujemy?",
+      "logoAlt": "Sunset",
+      "titleStart": "Co dziś",
+      "titleHighlight": "tworzymy?",
+      "subtitle": "Opisz swój pomysł — Sunset zaprojektuje, zbuduje i opublikuje go w kilka sekund.",
+      "dropTitle": "Upuść obrazy tutaj",
+      "dropHint": "PNG, JPG lub WebP — albo wklej ze schowka",
+      "placeholderPrefix": "Zrób stronę",
+      "placeholderTyping": [
+        "dla mojej firmy.",
+        "dla mojego portfolio freelancerskiego.",
+        "dla mojej kawiarni."
+      ],
+      "placeholderFocused": "Zrób stronę dla mojej firmy",
+      "attachImages": "Załącz obrazy",
+      "send": "Wyślij",
+      "sendShort": "WYŚLIJ",
+      "projectsTitle": "Twoje projekty",
+      "projectsSubtitle": "Kontynuuj swoją pracę",
+      "untitledProject": "Bez tytułu",
+      "previewAlt": "Podgląd landing page",
+      "editedAt": "Edytowano {time}",
+      "noProjectsTitle": "Brak projektów",
+      "noProjectsHelp": "Opisz stronę powyżej, a zapiszemy ją tutaj.",
+      "startFirstProject": "Zacznij swój pierwszy projekt",
+      "footerCopyright": "© {year} Sunset.",
+      "footerPricing": "Cennik",
+      "footerSettings": "Ustawienia",
+      "footerPrivacy": "Prywatność",
+      "footerTerms": "Warunki"
+    },
+    "time": {
+      "justNow": "przed chwilą",
+      "minutesAgo": "{count, plural, one {# minutę temu} few {# minuty temu} many {# minut temu} other {# minuty temu}}",
+      "hoursAgo": "{count, plural, one {# godzinę temu} few {# godziny temu} many {# godzin temu} other {# godziny temu}}",
+      "daysAgo": "{count, plural, one {# dzień temu} few {# dni temu} many {# dni temu} other {# dni temu}}",
+      "anHourAgo": "godzinę temu",
+      "aDayAgo": "dzień temu"
+    },
+    "suggestions": {
+      "coffee": {
+        "label": "Kawiarnia",
+        "prompt": "Zrób stronę dla mojej kawiarni z sekcją hero, wyróżnieniami menu, godzinami otwarcia i mapą."
+      },
+      "portfolio": {
+        "label": "Portfolio freelancera",
+        "prompt": "Zrób stylowe portfolio dla mojej pracy freelancerskiej z galerią projektów i formularzem kontaktowym."
+      },
+      "saas": {
+        "label": "Strona SaaS",
+        "prompt": "Zrób nowoczesną stronę landing page SaaS z sekcją hero, siatką funkcji, planami cenowymi i FAQ."
+      },
+      "restaurant": {
+        "label": "Restauracja",
+        "prompt": "Zrób stronę dla mojej restauracji z menu, godzinami otwarcia, galerią zdjęć i rezerwacjami."
+      },
+      "photography": {
+        "label": "Fotografia",
+        "prompt": "Zrób minimalistyczne portfolio dla mojej fotografii z galerią i formularzem zapytania."
+      }
+    },
+    "loading": "Ładowanie...",
+    "uploadToast": {
+      "uploadingTitle": "Przesyłanie {completed} z {total}",
+      "uploadComplete": "Przesyłanie zakończone.",
+      "allFilesUploaded": "Wszystkie pliki przesłane.",
+      "uploadFailed": "Nie udało się przesłać obrazu.",
+      "uploadingFiles": "Przesyłanie plików...",
+      "uploadFinished": "Przesyłanie zakończone",
+      "uploadFailedTitle": "Przesyłanie nie powiodło się",
+      "countOfTotal": "{completed}/{total} przesłano"
+    },
+    "chat": {
+      "loading": "Ładowanie czatu…",
+      "generationFailed": "Generowanie nie powiodło się",
+      "queueFailed": "Nie udało się dodać do kolejki",
+      "queueFailedWithStatus": "Nie udało się dodać do kolejki ({status})",
+      "loadMessagesFailed": "Nie udało się załadować wiadomości czatu",
+      "loadChatFailed": "Nie udało się załadować czatu",
+      "maxRequests": "Maksymalnie 3 zapytania na raz. Poczekaj, aż jedno się zakończy.",
+      "chatNotInitialized": "Poczekaj, aż czat się zainicjalizuje.",
+      "uploadFailed": "Nie udało się przesłać obrazu.",
+      "uploadComplete": "Przesyłanie zakończone.",
+      "allFilesUploaded": "Wszystkie pliki przesłane.",
+      "intentUpdateFailed": "Nie udało się zaktualizować przeznaczenia obrazu."
+    },
+    "progress": {
+      "navbar": "Nawigacja",
+      "footer": "Stopka",
+      "appLayout": "Układ aplikacji",
+      "section": "Sekcja",
+      "layout": "Układ",
+      "visuals": "Grafiki",
+      "completenessCheck": "Sprawdzanie kompletności",
+      "planningLandingPage": "Planowanie strony...",
+      "finalizingPreview": "Finalizowanie podglądu...",
+      "buildingLayout": "Budowanie układu",
+      "runningCompletenessCheck": "Sprawdzanie kompletności",
+      "buildingLabel": "Budowanie: {label}",
+      "generatingLabel": "Generowanie: {label}",
+      "buildingVisuals": "Budowanie grafik",
+      "generatingVisuals": "Generowanie grafik",
+      "buildingSection": "Budowanie sekcji: {label}",
+      "generatingSection": "Generowanie sekcji: {label}"
+    },
+    "preview": {
+      "tabPreview": "Podgląd",
+      "tabCode": "Kod",
+      "publish": "Opublikuj",
+      "openDashboard": "Panel",
+      "loadingPreview": "Ładowanie podglądu...",
+      "bringingIdeaToLife": "Wcielamy Twój pomysł w życie",
+      "generatingLandingPageEllipsis": "Generowanie strony...",
+      "generatingLandingPage": "Generowanie strony",
+      "buildingLayout": "Budowanie układu",
+      "logoLargeAlt": "Duże logo Sunset",
+      "iframeTitle": "Podgląd strony",
+      "tipGoalAudienceVibe": "Powiedz AI cel, grupę docelową i klimat.",
+      "tipSections": "Poproś o hero, funkcje, dowody społeczne, cennik, FAQ i wyraźne CTA.",
+      "tipSayWhatToChange": "Powiedz, co zmienić: „krótszy tekst hero\", „większy kontrast\"."
+    },
+    "code": {
+      "filesTitle": "Pliki",
+      "loading": "Ładowanie…",
+      "noFiles": "Brak plików w tej wersji",
+      "highlighting": "Kolorowanie…",
+      "highlightFailed": "Nie udało się pokolorować",
+      "loadFileListFailed": "Nie udało się załadować listy plików",
+      "loadFileFailed": "Nie udało się załadować pliku",
+      "loadFailed": "Nie udało się załadować"
+    },
+    "publish": {
+      "title": "Opublikuj swoją aplikację",
+      "description": "Po opublikowaniu aplikacja będzie widoczna dla użytkowników zgodnie z ustawieniami widoczności.",
+      "urlLabel": "URL",
+      "urlPlaceholder": "URL zostanie wygenerowany po publikacji",
+      "editUrl": "Edytuj URL",
+      "customUrlPlaceholder": "wlasny-url-id",
+      "save": "Zapisz",
+      "visibilityLabel": "Widoczność aplikacji",
+      "visibilityPlaceholder": "Wybierz widoczność",
+      "visibilityPublic": "Publiczna (bez logowania)",
+      "visibilityPrivate": "Prywatna (wymagane logowanie)",
+      "visibilityUnlisted": "Niewidoczna (tylko z linkiem)",
+      "publishing": "Publikowanie...",
+      "publishApp": "Opublikuj aplikację",
+      "chatIdRequired": "Wymagane jest ID czatu",
+      "publishFailed": "Nie udało się opublikować strony"
+    },
+    "publishedSuccess": {
+      "title": "Twoja strona została opublikowana!",
+      "description": "Twoja strona jest teraz dostępna pod następującym adresem URL:",
+      "copied": "Skopiowano!",
+      "copy": "Kopiuj",
+      "viewWebsite": "Zobacz stronę",
+      "close": "Zamknij"
+    },
+    "errorMessage": {
+      "retry": "Spróbuj ponownie",
+      "report": "Zgłoś",
+      "reportTitle": "Zgłoś ten błąd",
+      "reportDescription": "Opowiedz nam, co się stało. Sprawdzimy to natychmiast i rozwiążemy problem.",
+      "reportThanks": "Dziękujemy — otrzymaliśmy zgłoszenie i naprawimy to jak najszybciej.",
+      "reportPlaceholder": "Opowiedz nam, co próbowałeś zrobić i co poszło nie tak.",
+      "reportNoteRequired": "Opisz, co się stało.",
+      "reportSendError": "Nie udało się wysłać zgłoszenia. Spróbuj ponownie później.",
+      "reportNetworkError": "Błąd sieci. Spróbuj ponownie.",
+      "cancel": "Anuluj",
+      "send": "Wyślij",
+      "sending": "Wysyłanie…",
+      "mailtoSubject": "Sunset — zgłoszenie błędu czatu"
+    },
+    "input": {
+      "placeholder": "Co chciałbyś zmienić?",
+      "dropTitle": "Upuść obrazy tutaj",
+      "dropHint": "PNG, JPG lub WebP — albo wklej ze schowka",
+      "attachImage": "Załącz obraz",
+      "stopGeneration": "Zatrzymaj generowanie",
+      "sendMessage": "Wyślij wiadomość"
+    },
+    "header": {
+      "logoAlt": "Logo Sunset",
+      "openMenu": "Otwórz menu",
+      "logoTitle": "Logo Sunset",
+      "goToDashboard": "Przejdź do panelu",
+      "payment": "Płatności",
+      "settings": "Ustawienia",
+      "untitledChat": "Czat bez nazwy",
+      "personalWorkspace": "Przestrzeń osobista",
+      "renameChat": "Zmień nazwę czatu"
+    },
+    "welcome": {
+      "title": "Witaj w czacie kreatora",
+      "subtitle": "Opisz stronę, którą chcesz zbudować, a ja pomogę ją stworzyć.",
+      "tryExamples": "Wypróbuj przykłady:",
+      "example1": "Stwórz stronę landing page dla kawiarni",
+      "example2": "Zbuduj stronę portfolio",
+      "example3": "Zrób bloga z ciemnym motywem"
+    },
+    "creditsLimit": {
+      "title": "Osiągnięto dzienny limit",
+      "description": "Wykorzystałeś dzisiejsze darmowe kredyty. Zaktualizuj plan, aby kontynuować.",
+      "upgradeLabel": "Plan premium",
+      "perMonthVat": "miesięcznie z VAT",
+      "creditsPerMonth": "{credits} kredytów / miesiąc",
+      "youWillUnlock": "Odblokujesz:",
+      "features": {
+        "userRoles": "Role i uprawnienia użytkowników",
+        "customDomains": "Własne domeny",
+        "removeBadge": "Usunięcie znaku Sunset",
+        "downgradeAnytime": "Możliwość obniżenia planu",
+        "creditsRollover": "Przeniesienie kredytów"
+      },
+      "cancel": "Anuluj",
+      "upgradeCta": "Ulepsz plan"
+    },
+    "completeness": {
+      "title": "Walidacja kompletności",
+      "requiredBadge": "wymagane",
+      "detail": "Sprawdzanie plików, importów, ścieżek i wymaganych sekcji"
+    },
+    "toolCall": {
+      "actionPrepared": "Przygotowano: {target}",
+      "actionPreparing": "Przygotowywanie: {target}",
+      "actionChecked": "Sprawdzono: {target}",
+      "actionChecking": "Sprawdzanie: {target}",
+      "actionBuilt": "Zbudowano: {target}",
+      "actionBuilding": "Budowanie: {target}",
+      "targetPageVisuals": "grafiki strony",
+      "targetSiteCompleteness": "kompletność strony",
+      "targetUiConsistency": "spójność UI",
+      "targetPageStructure": "struktura strony",
+      "targetSectionSuffix": "sekcja {name}",
+      "targetPageSuffix": "strona {name}",
+      "targetSection": "sekcja",
+      "targetPageUpdate": "aktualizacja strony",
+      "statusDone": "Gotowe",
+      "statusInProgress": "W trakcie"
+    },
+    "validation": {
+      "completenessTitle": "Sprawdzanie kompletności",
+      "uiConsistencyTitle": "Sprawdzanie spójności UI",
+      "scoreLabel": "wynik {score}/100",
+      "statusRunning": "trwa",
+      "statusPass": "ok",
+      "statusFail": "błąd",
+      "criticalCount": "krytyczne {count}",
+      "warningCount": "ostrzeżenia {count}",
+      "runningSummary": "Trwa walidacja...",
+      "defaultSummary": "Wynik walidacji dostępny.",
+      "defaultIssue": "Wykryto problem"
+    }
+  },
+  "dashboard": {
+    "nav": {
+      "team": "Zespół",
+      "payments": "Płatności",
+      "general": "Ogólne",
+      "activity": "Aktywność",
+      "security": "Bezpieczeństwo",
+      "settings": "Ustawienia",
+      "toggleSidebar": "Przełącz menu",
+      "backToApp": "Powrót do aplikacji",
+      "logOut": "Wyloguj się",
+      "myAccount": "Moje konto",
+      "admin": "Administracja",
+      "home": "Strona główna",
+      "billing": "Rozliczenia"
+    },
+    "team": {
+      "title": "Ustawienia zespołu",
+      "subtitle": "Zarządzaj subskrypcją i zespołem.",
+      "membersTitle": "Członkowie zespołu",
+      "noMembers": "Brak członków zespołu.",
+      "remove": "Usuń",
+      "removing": "Usuwanie..."
+    },
+    "billing": {
+      "title": "Rozliczenia i kredyty",
+      "creditsCount": "Posiadasz <balance>{count}</balance> kredytów",
+      "topupCount": "W tym {count} z doładowań",
+      "creditsHelp": "Kredyty zasilają generację AI — tworzenie stron, dodawanie sekcji i wprowadzanie zmian.",
+      "planLabel": "Plan: {plan}",
+      "freePlan": "Darmowy",
+      "trialPeriod": "Okres próbny",
+      "billedMonthly": "Płatność miesięczna",
+      "noSubscription": "Brak aktywnej subskrypcji",
+      "manageSubscription": "Zarządzaj subskrypcją",
+      "subscribe": "Subskrybuj",
+      "viewPayments": "Płatności",
+      "pricingAndTopups": "Cennik i doładowania",
+      "paymentSuccess": "Płatność udana",
+      "paymentSuccessHelp": "Kredyty zostały dodane do Twojego konta."
+    },
+    "general": {
+      "title": "Ustawienia ogólne",
+      "subtitle": "Zaktualizuj informacje o koncie i dane osobowe.",
+      "accountInfoTitle": "Informacje o koncie",
+      "accountInfoSubtitle": "Te informacje są widoczne dla członków Twojego zespołu.",
+      "namePlaceholder": "Wprowadź imię",
+      "emailPlaceholder": "Wprowadź email",
+      "saveChanges": "Zapisz zmiany",
+      "languageTitle": "Język",
+      "languageSubtitle": "Używany w interfejsie i wiadomościach email."
+    },
+    "security": {
+      "title": "Ustawienia bezpieczeństwa",
+      "subtitle": "Zarządzaj hasłem i chroń swoje konto.",
+      "passwordTitle": "Hasło",
+      "passwordSubtitle": "Używaj silnego hasła, którego nie stosujesz nigdzie indziej.",
+      "currentPassword": "Aktualne hasło",
+      "newPassword": "Nowe hasło",
+      "confirmPassword": "Potwierdź nowe hasło",
+      "updating": "Aktualizowanie...",
+      "updatePassword": "Zaktualizuj hasło",
+      "deleteAccountTitle": "Usuń konto",
+      "deleteAccountSubtitle": "Usunięcie konta jest nieodwracalne. Postępuj ostrożnie.",
+      "deleteConfirmPassword": "Potwierdź hasło",
+      "deleting": "Usuwanie...",
+      "deleteAccount": "Usuń konto"
+    },
+    "payments": {
+      "title": "Płatności",
+      "subtitle": "Sprawdź kredyty, plan i historię rozliczeń."
+    },
+    "activity": {
+      "title": "Dziennik aktywności",
+      "subtitle": "Oś czasu ostatnich działań na Twoim koncie.",
+      "recentTitle": "Ostatnia aktywność",
+      "recentSubtitle": "Wyświetlanie najnowszych logowań, zmian ustawień i wydarzeń zespołu.",
+      "emptyTitle": "Brak aktywności",
+      "emptyHelp": "Gdy wykonasz akcje takie jak logowanie czy aktualizacja konta, pojawią się tutaj.",
+      "fromIp": " z IP {ip}",
+      "justNow": "przed chwilą",
+      "minutesAgo": "{count, plural, one {# minutę temu} few {# minuty temu} many {# minut temu} other {# minuty temu}}",
+      "hoursAgo": "{count, plural, one {# godzinę temu} few {# godziny temu} many {# godzin temu} other {# godziny temu}}",
+      "daysAgo": "{count, plural, one {# dzień temu} few {# dni temu} many {# dni temu} other {# dni temu}}",
+      "actions": {
+        "signUp": "Zarejestrowano się",
+        "signIn": "Zalogowano się",
+        "signOut": "Wylogowano się",
+        "updatePassword": "Zmieniono hasło",
+        "deleteAccount": "Usunięto konto",
+        "updateAccount": "Zaktualizowano konto",
+        "createTeam": "Utworzono nowy zespół",
+        "removeTeamMember": "Usunięto członka zespołu",
+        "inviteTeamMember": "Zaproszono członka zespołu",
+        "acceptInvitation": "Zaakceptowano zaproszenie",
+        "unknown": "Wystąpiła nieznana akcja"
+      }
+    }
+  },
+  "marketing": {
+    "nav": {
+      "pricing": "Cennik",
+      "openApp": "Otwórz aplikację",
+      "logIn": "Zaloguj się",
+      "getStarted": "Zacznij teraz"
+    },
+    "hero": {
+      "badge": "Zbuduj stronę landing page rozmawiając",
+      "logoAlt": "Sunset — kreator landing page AI",
+      "titleLine1": "Twoja strona internetowa",
+      "titleLine2": "w jednym kliknięciu",
+      "subtitle": "Opisz, czego chcesz. Sunset zaprojektuje, zbuduje i opublikuje skuteczną stronę landing page w kilka sekund — bez szablonów i przeciągania bloków."
+    },
+    "composer": {
+      "dropTitle": "Upuść obrazy tutaj",
+      "dropHint": "PNG, JPG lub WebP — albo wklej ze schowka",
+      "placeholderPrefix": "Zrób stronę landing page",
+      "placeholderTyping": [
+        "dla mojej kawiarni.",
+        "dla mojego portfolio freelancerskiego.",
+        "dla mojego startupu SaaS.",
+        "dla mojego studia fotograficznego."
+      ],
+      "placeholderFocused": "Zrób stronę landing page dla mojej firmy",
+      "attachImages": "Załącz obrazy",
+      "enterHint": "Naciśnij <key>Enter</key>, aby rozpocząć",
+      "startLabel": "Rozpocznij tworzenie",
+      "start": "START"
+    },
+    "suggestions": {
+      "coffee": {
+        "label": "Kawiarnia",
+        "prompt": "Zrób stronę dla mojej kawiarni z sekcją hero, wyróżnieniami menu, godzinami otwarcia i mapą."
+      },
+      "portfolio": {
+        "label": "Portfolio freelancera",
+        "prompt": "Zrób stylowe portfolio dla mojej pracy freelancerskiej z galerią projektów i formularzem kontaktowym."
+      },
+      "saas": {
+        "label": "Strona SaaS",
+        "prompt": "Zrób nowoczesną stronę landing page SaaS z sekcją hero, siatką funkcji, planami cenowymi i FAQ."
+      },
+      "restaurant": {
+        "label": "Lokalna restauracja",
+        "prompt": "Zrób stronę dla mojej restauracji z menu, godzinami otwarcia, galerią zdjęć i rezerwacjami."
+      },
+      "wedding": {
+        "label": "Fotograf ślubny",
+        "prompt": "Zrób romantyczne portfolio dla mojej fotografii ślubnej z galerią i formularzem zapytania."
+      }
+    },
+    "steps": {
+      "title": "Opublikuj stronę internetową w trzech krokach",
+      "subtitle": "Bez szablonów. Bez przeciągania bloków. Po prostu rozmowa.",
+      "describe": {
+        "title": "Opisz",
+        "desc": "Powiedz Sunset, czego chcesz — twoja firma, klimat, potrzebne sekcje."
+      },
+      "design": {
+        "title": "My projektujemy",
+        "desc": "Sunset tworzy piękną, dopasowaną do marki stronę w kilka sekund, gotową do dopracowania."
+      },
+      "ship": {
+        "title": "Ty publikujesz",
+        "desc": "Iteruj przez czat, dodaj swoje materiały i publikuj, kiedy jesteś gotowy."
+      }
+    },
+    "cta": {
+      "title": "Gotów stworzyć coś pięknego?",
+      "subtitle": "Zacznij od jednego zdania. Iteruj przez czat. Opublikuj, kiedy poczujesz, że jest dobrze.",
+      "tryChat": "Wypróbuj czat",
+      "openApp": "Otwórz aplikację",
+      "createAccount": "Utwórz konto"
+    },
+    "footer": {
+      "copyright": "© {year} Sunset.",
+      "pricing": "Cennik",
+      "privacy": "Prywatność",
+      "terms": "Warunki",
+      "login": "Zaloguj",
+      "signup": "Zarejestruj"
+    }
+  },
+  "errors": {
+    "invalidInput": "Nieprawidłowe dane. {detail}",
+    "invalidCredentials": "Nieprawidłowy email lub hasło. Spróbuj ponownie.",
+    "emailExists": "Konto z tym adresem email już istnieje. Zaloguj się.",
+    "emailExistsOauth": "Konto z tym adresem email już istnieje. Zaloguj się hasłem.",
+    "createUserFailed": "Nie udało się utworzyć użytkownika. Spróbuj ponownie.",
+    "createTeamFailed": "Nie udało się utworzyć zespołu. Spróbuj ponownie.",
+    "signUpFailed": "Nie udało się dokończyć rejestracji. Spróbuj ponownie.",
+    "invalidInvitation": "Nieprawidłowe lub wygasłe zaproszenie.",
+    "currentPasswordIncorrect": "Aktualne hasło jest nieprawidłowe.",
+    "newPasswordSameAsCurrent": "Nowe hasło musi różnić się od aktualnego.",
+    "passwordMismatch": "Nowe hasło i jego potwierdzenie nie są zgodne.",
+    "deleteAccountWrongPassword": "Nieprawidłowe hasło. Usunięcie konta nie powiodło się.",
+    "notInTeam": "Użytkownik nie należy do żadnego zespołu.",
+    "userAlreadyMember": "Użytkownik jest już członkiem tego zespołu.",
+    "invitationAlreadySent": "Zaproszenie zostało już wysłane na ten adres email.",
+    "oauthNotConfigured": "Logowanie przez Google nie jest skonfigurowane. Zaloguj się hasłem.",
+    "oauthCancelled": "Logowanie przez Google zostało anulowane.",
+    "oauthFailed": "Logowanie przez Google nie powiodło się. Spróbuj ponownie lub zaloguj się hasłem."
+  },
+  "success": {
+    "passwordUpdated": "Hasło zostało zaktualizowane.",
+    "accountUpdated": "Konto zostało zaktualizowane.",
+    "memberRemoved": "Członek zespołu został usunięty.",
+    "invitationSent": "Zaproszenie zostało wysłane."
+  },
+  "legal": {
+    "nav": {
+      "privacy": "Prywatność",
+      "terms": "Warunki",
+      "pricing": "Cennik",
+      "backToHome": "Powrót do strony głównej"
+    },
+    "header": {
+      "badge": "Dokumenty prawne",
+      "lastUpdatedLabel": "Ostatnia aktualizacja: {date}"
+    },
+    "draftBanner": {
+      "title": "Tłumaczenie robocze",
+      "description": "To polskie tłumaczenie nie zostało jeszcze sprawdzone przez prawnika i może zawierać błędy. Do czasu usunięcia tej informacji wiążąca jest wersja angielska.",
+      "viewEnglish": "Zobacz wersję angielską"
+    }
+  }
+}

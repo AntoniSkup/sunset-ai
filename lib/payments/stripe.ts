@@ -1,5 +1,11 @@
 import Stripe from "stripe";
-import { redirect } from "next/navigation";
+// `externalRedirect` is for redirecting to URLs outside our app (Stripe-
+// hosted checkout / customer-portal pages). For any internal route we use
+// the locale-aware redirect from `@/i18n/navigation`, which prepends the
+// active locale prefix when needed.
+import { redirect as externalRedirect } from "next/navigation";
+import { getLocale } from "next-intl/server";
+import { redirect } from "@/i18n/navigation";
 import type { Account, Team } from "@/lib/db/schema";
 import type { TopupPackage } from "@/lib/db/schema";
 import {
@@ -25,13 +31,29 @@ const STARTER_PRICE_ID = process.env.STRIPE_STARTER_PRICE_ID;
 const TOPUP_100_PRICE_ID = process.env.STRIPE_TOPUP_100_PRICE_ID;
 
 /**
+ * Map our app locale onto a value Stripe Checkout / Billing Portal accept
+ * for their `locale` option. Both `en` and `pl` are first-class in Stripe;
+ * anything we don't recognize falls back to `"auto"` so Stripe uses the
+ * customer's browser language.
+ *
+ * Reference: https://docs.stripe.com/payments/checkout/customization/language-detection
+ */
+function stripeLocaleFor(
+  locale: string
+): Stripe.Checkout.SessionCreateParams.Locale {
+  if (locale === "en") return "en";
+  if (locale === "pl") return "pl";
+  return "auto";
+}
+
+/**
  * Create Stripe Checkout session for Starter subscription (account-based).
  * Uses STRIPE_STARTER_PRICE_ID. Redirects to sign-up if not authenticated.
  */
 export async function createCheckoutSessionForStarter() {
   const user = await getUser();
   if (!user) {
-    redirect(`/sign-in?redirect=/pricing`);
+    redirect(`/sign-in?redirect=/pricing`, await getLocale());
   }
 
   if (!STARTER_PRICE_ID) {
@@ -41,6 +63,8 @@ export async function createCheckoutSessionForStarter() {
   const account = await getOrCreateAccountForUser(user.id);
   const existingSubscription = await getSubscriptionByAccountId(account.id);
   const customerId = existingSubscription?.providerCustomerId ?? undefined;
+
+  const checkoutLocale = stripeLocaleFor(await getLocale());
 
   const session = await stripe.checkout.sessions.create({
     payment_method_types: ["card"],
@@ -56,26 +80,31 @@ export async function createCheckoutSessionForStarter() {
     customer: customerId,
     client_reference_id: user.id.toString(),
     allow_promotion_codes: true,
+    locale: checkoutLocale,
   });
 
-  redirect(session.url!);
+  externalRedirect(session.url!);
 }
 
 /**
  * Create Stripe Customer Portal session for an account (manage subscription).
  */
 export async function createCustomerPortalSession(account: Account) {
+  const locale = await getLocale();
   const subscription = await getSubscriptionByAccountId(account.id);
   if (!subscription?.providerCustomerId) {
-    redirect("/pricing");
+    redirect("/pricing", locale);
   }
 
   const portalSession = await stripe.billingPortal.sessions.create({
     customer: subscription.providerCustomerId,
     return_url: `${process.env.BASE_URL}/dashboard`,
+    locale: stripeLocaleFor(
+      locale
+    ) as Stripe.BillingPortal.SessionCreateParams.Locale,
   });
 
-  redirect(portalSession.url);
+  externalRedirect(portalSession.url);
 }
 
 /**
@@ -88,7 +117,7 @@ export async function createCheckoutSessionForTopup(
 ) {
   const user = await getUser();
   if (!user) {
-    redirect(`/sign-in?redirect=/pricing`);
+    redirect(`/sign-in?redirect=/pricing`, await getLocale());
   }
 
   const priceId =
@@ -115,9 +144,10 @@ export async function createCheckoutSessionForTopup(
       accountId: account.id.toString(),
       topupPackageId: topupPackage.id.toString(),
     },
+    locale: stripeLocaleFor(await getLocale()),
   });
 
-  redirect(session.url!);
+  externalRedirect(session.url!);
 }
 
 /**
@@ -274,7 +304,7 @@ export async function createCheckoutSession({
   const user = await getUser();
 
   if (!team || !user) {
-    redirect(`/sign-up?redirect=checkout&priceId=${priceId}`);
+    redirect(`/sign-up?redirect=checkout&priceId=${priceId}`, await getLocale());
   }
 
   const session = await stripe.checkout.sessions.create({
@@ -291,14 +321,15 @@ export async function createCheckoutSession({
     customer: team.stripeCustomerId || undefined,
     client_reference_id: user.id.toString(),
     allow_promotion_codes: true,
+    locale: stripeLocaleFor(await getLocale()),
   });
 
-  redirect(session.url!);
+  externalRedirect(session.url!);
 }
 
 export async function createCustomerPortalSessionLegacy(team: Team) {
   if (!team.stripeCustomerId || !team.stripeProductId) {
-    redirect("/pricing");
+    redirect("/pricing", await getLocale());
   }
 
   let configuration: Stripe.BillingPortal.Configuration;

@@ -1,0 +1,569 @@
+{
+  "common": {
+    "appName": "Sunset",
+    "signIn": "Sign in",
+    "signUp": "Sign up",
+    "signOut": "Sign out",
+    "submit": "Submit",
+    "cancel": "Cancel",
+    "save": "Save",
+    "saving": "Saving...",
+    "loading": "Loading...",
+    "email": "Email",
+    "password": "Password",
+    "name": "Name",
+    "language": "Language",
+    "english": "English",
+    "polish": "Polish"
+  },
+  "auth": {
+    "signInTitle": "Welcome back",
+    "signUpTitle": "Create your account",
+    "signInSubtitle": "Sign in to your <brand>Sunset</brand> account",
+    "signingIn": "Signing in...",
+    "creatingAccount": "Creating account...",
+    "noAccount": "Don't have an account?",
+    "haveAccount": "Already have an account?",
+    "continueWithGoogle": "Continue with Google",
+    "orContinueWith": "Or continue with",
+    "passwordPlaceholder": "Enter your password",
+    "termsAcceptSignIn": "By signing in, you agree to our",
+    "termsAcceptSignUp": "By signing up, you agree to our",
+    "termsOfUse": "Terms of Use",
+    "privacyPolicy": "Privacy Policy",
+    "and": "and"
+  },
+  "billing": {},
+  "pricing": {
+    "metaTitle": "Pricing",
+    "metaDescription": "Simple, credit-based pricing for {brand}, the {tagline}. Subscribe monthly or buy one-time top-ups whenever you need extra credits.",
+    "metaTitleSocial": "Pricing — {brand}",
+    "badge": "Pricing",
+    "heading": "Choose the credits that fit your workflow",
+    "subheading": "Keep a recurring monthly balance or make a one-time purchase whenever you need extra credits.",
+    "starterNotConfigured": "Starter plan not configured.",
+    "interval": {
+      "day": "day",
+      "week": "week",
+      "month": "month",
+      "year": "year"
+    },
+    "starter": {
+      "yourPlan": "Your plan",
+      "subscription": "Subscription",
+      "active": "Active",
+      "monthlyBilling": "Monthly billing",
+      "description": "Recurring credits for ongoing work and predictable monthly usage.",
+      "perInterval": "/ {interval}",
+      "creditsEveryInterval": "{credits} credits every {interval}",
+      "featureIncluded": "{credits} credits included each month",
+      "featureDailyBonus": "{credits} daily bonus credits",
+      "featureDailyBonusWithCap": "{credits} daily bonus credits (up to {cap} each month)",
+      "featureRollover": "Roll over up to {cap} unused credits",
+      "featureTopupAnytime": "Top up anytime if you need more capacity",
+      "currentPlanCta": "Your current plan",
+      "manageSubscription": "Manage subscription",
+      "autoRenewNote": "Renews automatically. Manage or cancel anytime in billing."
+    },
+    "topup": {
+      "badge": "One-time payment",
+      "flexibleUsage": "Flexible usage",
+      "title": "Credit top-up",
+      "description": "Buy extra credits once and keep them available for future usage.",
+      "addedWithSinglePayment": "{credits} credits added with a single payment",
+      "featureAddedInstantly": "{credits} credits added instantly",
+      "featureNoRecurring": "One-time payment with no recurring billing",
+      "featureNeverExpire": "Credits never expire after purchase",
+      "featureStandalone": "Works on its own or alongside your subscription",
+      "buyLabel": "Buy {name}",
+      "idealNote": "Ideal when you only need extra credits from time to time."
+    },
+    "submit": {
+      "loading": "Loading...",
+      "getStarted": "Get Started"
+    }
+  },
+  "builder": {
+    "start": {
+      "navPricing": "Pricing",
+      "navSettings": "Settings",
+      "badge": "What are we building next?",
+      "logoAlt": "Sunset",
+      "titleStart": "What are we creating",
+      "titleHighlight": "today?",
+      "subtitle": "Describe your idea — Sunset designs, builds, and ships it in seconds.",
+      "dropTitle": "Drop images here",
+      "dropHint": "PNG, JPG, or WebP — or paste from clipboard",
+      "placeholderPrefix": "Make a website",
+      "placeholderTyping": [
+        "for my business.",
+        "for my freelance portfolio.",
+        "for my coffee shop."
+      ],
+      "placeholderFocused": "Make a website for my business",
+      "attachImages": "Attach images",
+      "send": "Send",
+      "sendShort": "SEND",
+      "projectsTitle": "Your projects",
+      "projectsSubtitle": "Pick up where you left off.",
+      "untitledProject": "Untitled",
+      "previewAlt": "Landing page preview",
+      "editedAt": "Edited {time}",
+      "noProjectsTitle": "No projects yet",
+      "noProjectsHelp": "Describe a website above and we'll save it here.",
+      "startFirstProject": "Start your first project",
+      "footerCopyright": "© {year} Sunset.",
+      "footerPricing": "Pricing",
+      "footerSettings": "Settings",
+      "footerPrivacy": "Privacy",
+      "footerTerms": "Terms"
+    },
+    "time": {
+      "justNow": "just now",
+      "minutesAgo": "{count, plural, one {# minute ago} other {# minutes ago}}",
+      "hoursAgo": "{count, plural, one {# hour ago} other {# hours ago}}",
+      "daysAgo": "{count, plural, one {# day ago} other {# days ago}}",
+      "anHourAgo": "an hour ago",
+      "aDayAgo": "a day ago"
+    },
+    "suggestions": {
+      "coffee": {
+        "label": "Coffee shop",
+        "prompt": "Make a website for my coffee shop with a hero, menu highlights, opening hours, and a map."
+      },
+      "portfolio": {
+        "label": "Freelance portfolio",
+        "prompt": "Make a sleek portfolio site for my freelance design work with a project gallery and a contact form."
+      },
+      "saas": {
+        "label": "SaaS landing",
+        "prompt": "Make a modern SaaS landing page with hero, feature grid, pricing tiers, and an FAQ."
+      },
+      "restaurant": {
+        "label": "Restaurant",
+        "prompt": "Make a website for my restaurant with the menu, opening hours, photo gallery, and reservations."
+      },
+      "photography": {
+        "label": "Photography",
+        "prompt": "Make a minimal portfolio for my photography with a gallery and an inquiry form."
+      }
+    },
+    "loading": "Loading...",
+    "uploadToast": {
+      "uploadingTitle": "Uploading {completed} of {total}",
+      "uploadComplete": "Upload complete.",
+      "allFilesUploaded": "All files uploaded.",
+      "uploadFailed": "Failed to upload image.",
+      "uploadingFiles": "Uploading files...",
+      "uploadFinished": "Upload finished",
+      "uploadFailedTitle": "Upload failed",
+      "countOfTotal": "{completed}/{total} uploaded"
+    },
+    "chat": {
+      "loading": "Loading chat…",
+      "generationFailed": "Generation failed",
+      "queueFailed": "Failed to queue generation",
+      "queueFailedWithStatus": "Failed to queue generation ({status})",
+      "loadMessagesFailed": "Failed to load chat messages",
+      "loadChatFailed": "Failed to load chat",
+      "maxRequests": "Max 3 requests at once. Please wait for one to finish.",
+      "chatNotInitialized": "Please wait for the chat to initialize.",
+      "uploadFailed": "Failed to upload image.",
+      "uploadComplete": "Upload complete.",
+      "allFilesUploaded": "All files uploaded.",
+      "intentUpdateFailed": "Failed to update image usage intent."
+    },
+    "progress": {
+      "navbar": "Navbar",
+      "footer": "Footer",
+      "appLayout": "App layout",
+      "section": "Section",
+      "layout": "Layout",
+      "visuals": "Visuals",
+      "completenessCheck": "Completeness check",
+      "planningLandingPage": "Planning landing page...",
+      "finalizingPreview": "Finalizing preview...",
+      "buildingLayout": "Building layout",
+      "runningCompletenessCheck": "Running completeness check",
+      "buildingLabel": "Building {label}",
+      "generatingLabel": "Generating {label}",
+      "buildingVisuals": "Building visuals",
+      "generatingVisuals": "Generating visuals",
+      "buildingSection": "Building {label} section",
+      "generatingSection": "Generating {label} section"
+    },
+    "preview": {
+      "tabPreview": "Preview",
+      "tabCode": "Code",
+      "publish": "Publish",
+      "openDashboard": "Dashboard",
+      "loadingPreview": "Loading preview...",
+      "bringingIdeaToLife": "Bringing your idea to life",
+      "generatingLandingPageEllipsis": "Generating landing page...",
+      "generatingLandingPage": "Generating landing page",
+      "buildingLayout": "Building layout",
+      "logoLargeAlt": "Sunset logo large",
+      "iframeTitle": "Website Preview",
+      "tipGoalAudienceVibe": "Tell the AI the goal, audience, and vibe.",
+      "tipSections": "Request a hero, features, social proof, pricing, FAQ, and a clear CTA.",
+      "tipSayWhatToChange": "Say what to change: \"shorter hero copy\", \"more contrast\"."
+    },
+    "code": {
+      "filesTitle": "Files",
+      "loading": "Loading…",
+      "noFiles": "No files in this revision",
+      "highlighting": "Highlighting…",
+      "highlightFailed": "Highlight failed",
+      "loadFileListFailed": "Failed to load file list",
+      "loadFileFailed": "Failed to load file",
+      "loadFailed": "Failed to load"
+    },
+    "publish": {
+      "title": "Publish Your App",
+      "description": "Once published, the app will be visible to users based on its visibility settings.",
+      "urlLabel": "URL",
+      "urlPlaceholder": "URL will be generated after publishing",
+      "editUrl": "Edit URL",
+      "customUrlPlaceholder": "custom-url-id",
+      "save": "Save",
+      "visibilityLabel": "App Visibility",
+      "visibilityPlaceholder": "Select visibility",
+      "visibilityPublic": "Public (no login)",
+      "visibilityPrivate": "Private (login required)",
+      "visibilityUnlisted": "Unlisted (link only)",
+      "publishing": "Publishing...",
+      "publishApp": "Publish App",
+      "chatIdRequired": "Chat ID is required",
+      "publishFailed": "Failed to publish site"
+    },
+    "publishedSuccess": {
+      "title": "Your website has been published!",
+      "description": "Your website is now live and accessible at the following URL:",
+      "copied": "Copied!",
+      "copy": "Copy",
+      "viewWebsite": "View Website",
+      "close": "Close"
+    },
+    "errorMessage": {
+      "retry": "Retry",
+      "report": "Report",
+      "reportTitle": "Report this error",
+      "reportDescription": "Tell us what happened. We'll look into it right away and resolve it immediately.",
+      "reportThanks": "Thanks — we've received this and will fix it as soon as possible.",
+      "reportPlaceholder": "Tell us what you were trying to do and what went wrong.",
+      "reportNoteRequired": "Please describe what happened.",
+      "reportSendError": "Could not send report. Try again later.",
+      "reportNetworkError": "Network error. Please try again.",
+      "cancel": "Cancel",
+      "send": "Send",
+      "sending": "Sending…",
+      "mailtoSubject": "Sunset — chat error report"
+    },
+    "input": {
+      "placeholder": "What would you like to change?",
+      "dropTitle": "Drop images here",
+      "dropHint": "PNG, JPG, or WebP — or paste from clipboard",
+      "attachImage": "Attach image",
+      "stopGeneration": "Stop generation",
+      "sendMessage": "Send message"
+    },
+    "header": {
+      "logoAlt": "Sunset logo",
+      "openMenu": "Open menu",
+      "logoTitle": "Sunset logo",
+      "goToDashboard": "Go to Dashboard",
+      "payment": "Payment",
+      "settings": "Settings",
+      "untitledChat": "Untitled Chat",
+      "personalWorkspace": "Personal workspace",
+      "renameChat": "Rename chat"
+    },
+    "welcome": {
+      "title": "Welcome to the Builder Chat",
+      "subtitle": "Describe the website you want to build and I'll help you create it.",
+      "tryExamples": "Try examples like:",
+      "example1": "Create a landing page for a coffee shop",
+      "example2": "Build a portfolio website",
+      "example3": "Make a blog with a dark theme"
+    },
+    "creditsLimit": {
+      "title": "Daily limit reached",
+      "description": "You've used today's free credits. Upgrade to keep building.",
+      "upgradeLabel": "Upgrade",
+      "perMonthVat": "per month incl. VAT",
+      "creditsPerMonth": "{credits} credits / month",
+      "youWillUnlock": "You will unlock:",
+      "features": {
+        "userRoles": "User roles & permissions",
+        "customDomains": "Custom domains",
+        "removeBadge": "Remove the Sunset badge",
+        "downgradeAnytime": "Downgrade anytime",
+        "creditsRollover": "Credits rollover"
+      },
+      "cancel": "Cancel",
+      "upgradeCta": "Upgrade"
+    },
+    "completeness": {
+      "title": "Running completeness validation",
+      "requiredBadge": "required",
+      "detail": "Checking files, imports, routes, and required sections"
+    },
+    "toolCall": {
+      "actionPrepared": "Prepared {target}",
+      "actionPreparing": "Preparing {target}",
+      "actionChecked": "Checked {target}",
+      "actionChecking": "Checking {target}",
+      "actionBuilt": "Built {target}",
+      "actionBuilding": "Building {target}",
+      "targetPageVisuals": "page visuals",
+      "targetSiteCompleteness": "site completeness",
+      "targetUiConsistency": "UI consistency",
+      "targetPageStructure": "page structure",
+      "targetSectionSuffix": "{name} section",
+      "targetPageSuffix": "{name} page",
+      "targetSection": "section",
+      "targetPageUpdate": "page update",
+      "statusDone": "Done",
+      "statusInProgress": "In progress"
+    },
+    "validation": {
+      "completenessTitle": "Completeness check",
+      "uiConsistencyTitle": "UI consistency check",
+      "scoreLabel": "score {score}/100",
+      "statusRunning": "running",
+      "statusPass": "pass",
+      "statusFail": "fail",
+      "criticalCount": "critical {count}",
+      "warningCount": "warnings {count}",
+      "runningSummary": "Running validation...",
+      "defaultSummary": "Validation result available.",
+      "defaultIssue": "Issue detected"
+    }
+  },
+  "dashboard": {
+    "nav": {
+      "team": "Team",
+      "payments": "Payments",
+      "general": "General",
+      "activity": "Activity",
+      "security": "Security",
+      "settings": "Settings",
+      "toggleSidebar": "Toggle sidebar",
+      "backToApp": "Back to app",
+      "logOut": "Log out",
+      "myAccount": "My Account",
+      "admin": "Admin",
+      "home": "Home",
+      "billing": "Billing"
+    },
+    "team": {
+      "title": "Team settings",
+      "subtitle": "Manage your billing and teammates.",
+      "membersTitle": "Team members",
+      "noMembers": "No team members yet.",
+      "remove": "Remove",
+      "removing": "Removing..."
+    },
+    "billing": {
+      "title": "Billing & credits",
+      "creditsCount": "You have <balance>{count}</balance> credits",
+      "topupCount": "Including {count} from top-ups",
+      "creditsHelp": "Credits power AI generation — creating sites, adding sections, and making changes.",
+      "planLabel": "Plan: {plan}",
+      "freePlan": "Free",
+      "trialPeriod": "Trial period",
+      "billedMonthly": "Billed monthly",
+      "noSubscription": "No active subscription",
+      "manageSubscription": "Manage subscription",
+      "subscribe": "Subscribe",
+      "viewPayments": "Payments",
+      "pricingAndTopups": "Pricing & top-ups",
+      "paymentSuccess": "Payment successful",
+      "paymentSuccessHelp": "Your credits have been added to your account."
+    },
+    "general": {
+      "title": "General settings",
+      "subtitle": "Update your account information and personal details.",
+      "accountInfoTitle": "Account information",
+      "accountInfoSubtitle": "This information is visible to your teammates.",
+      "namePlaceholder": "Enter your name",
+      "emailPlaceholder": "Enter your email",
+      "saveChanges": "Save changes",
+      "languageTitle": "Language",
+      "languageSubtitle": "Used for the interface and account emails."
+    },
+    "security": {
+      "title": "Security settings",
+      "subtitle": "Manage your password and protect your account.",
+      "passwordTitle": "Password",
+      "passwordSubtitle": "Use a strong password you don't use anywhere else.",
+      "currentPassword": "Current password",
+      "newPassword": "New password",
+      "confirmPassword": "Confirm new password",
+      "updating": "Updating...",
+      "updatePassword": "Update password",
+      "deleteAccountTitle": "Delete account",
+      "deleteAccountSubtitle": "Account deletion is non-reversible. Please proceed with caution.",
+      "deleteConfirmPassword": "Confirm password",
+      "deleting": "Deleting...",
+      "deleteAccount": "Delete account"
+    },
+    "payments": {
+      "title": "Payments",
+      "subtitle": "View your credits, plan, and billing history."
+    },
+    "activity": {
+      "title": "Activity log",
+      "subtitle": "A timeline of recent actions on your account.",
+      "recentTitle": "Recent activity",
+      "recentSubtitle": "Showing your latest sign-ins, settings changes, and team events.",
+      "emptyTitle": "No activity yet",
+      "emptyHelp": "When you perform actions like signing in or updating your account, they'll appear here.",
+      "fromIp": " from IP {ip}",
+      "justNow": "just now",
+      "minutesAgo": "{count, plural, one {# minute ago} other {# minutes ago}}",
+      "hoursAgo": "{count, plural, one {# hour ago} other {# hours ago}}",
+      "daysAgo": "{count, plural, one {# day ago} other {# days ago}}",
+      "actions": {
+        "signUp": "You signed up",
+        "signIn": "You signed in",
+        "signOut": "You signed out",
+        "updatePassword": "You changed your password",
+        "deleteAccount": "You deleted your account",
+        "updateAccount": "You updated your account",
+        "createTeam": "You created a new team",
+        "removeTeamMember": "You removed a team member",
+        "inviteTeamMember": "You invited a team member",
+        "acceptInvitation": "You accepted an invitation",
+        "unknown": "Unknown action occurred"
+      }
+    }
+  },
+  "marketing": {
+    "nav": {
+      "pricing": "Pricing",
+      "openApp": "Open app",
+      "logIn": "Log in",
+      "getStarted": "Get started"
+    },
+    "hero": {
+      "badge": "Build a landing page by chatting",
+      "logoAlt": "Sunset — AI landing page builder",
+      "titleLine1": "Your landing page,",
+      "titleLine2": "one message away.",
+      "subtitle": "Describe it. Sunset designs, builds, and ships a conversion-focused landing page in seconds — no templates, no drag-and-drop."
+    },
+    "composer": {
+      "dropTitle": "Drop images here",
+      "dropHint": "PNG, JPG, or WebP — or paste from clipboard",
+      "placeholderPrefix": "Make a landing page",
+      "placeholderTyping": [
+        "for my coffee shop.",
+        "for my freelance portfolio.",
+        "for my SaaS launch.",
+        "for my photography studio."
+      ],
+      "placeholderFocused": "Make a landing page for my business",
+      "attachImages": "Attach images",
+      "enterHint": "Press <key>Enter</key> to start",
+      "startLabel": "Start building",
+      "start": "START"
+    },
+    "suggestions": {
+      "coffee": {
+        "label": "Coffee shop",
+        "prompt": "Make a website for my coffee shop with a hero, menu highlights, opening hours, and a map."
+      },
+      "portfolio": {
+        "label": "Freelance portfolio",
+        "prompt": "Make a sleek portfolio site for my freelance design work with a project gallery and a contact form."
+      },
+      "saas": {
+        "label": "SaaS landing",
+        "prompt": "Make a modern SaaS landing page with hero, feature grid, pricing tiers, and an FAQ."
+      },
+      "restaurant": {
+        "label": "Local restaurant",
+        "prompt": "Make a website for my restaurant with the menu, opening hours, photo gallery, and reservations."
+      },
+      "wedding": {
+        "label": "Wedding photographer",
+        "prompt": "Make a romantic portfolio for my wedding photography with a gallery and inquiry form."
+      }
+    },
+    "steps": {
+      "title": "Ship a landing page in three steps",
+      "subtitle": "No templates. No drag-and-drop. Just a conversation.",
+      "describe": {
+        "title": "Describe it",
+        "desc": "Tell Sunset what you want — your business, the vibe, the sections you need."
+      },
+      "design": {
+        "title": "We design it",
+        "desc": "Sunset ships a beautiful, on-brand site in seconds, ready to refine."
+      },
+      "ship": {
+        "title": "You ship it",
+        "desc": "Iterate by chat, drop in your assets, and publish when you're ready."
+      }
+    },
+    "cta": {
+      "title": "Ready to build something beautiful?",
+      "subtitle": "Start with a sentence. Iterate by chat. Publish when it feels right.",
+      "tryChat": "Try the chat",
+      "openApp": "Open app",
+      "createAccount": "Create account"
+    },
+    "footer": {
+      "copyright": "© {year} Sunset.",
+      "pricing": "Pricing",
+      "privacy": "Privacy",
+      "terms": "Terms",
+      "login": "Log in",
+      "signup": "Sign up"
+    }
+  },
+  "errors": {
+    "invalidInput": "Invalid input. {detail}",
+    "invalidCredentials": "Invalid email or password. Please try again.",
+    "emailExists": "An account with this email already exists. Please sign in instead.",
+    "emailExistsOauth": "An account with this email already exists. Please sign in with your password.",
+    "createUserFailed": "Failed to create user. Please try again.",
+    "createTeamFailed": "Failed to create team. Please try again.",
+    "signUpFailed": "Failed to complete sign up. Please try again.",
+    "invalidInvitation": "Invalid or expired invitation.",
+    "currentPasswordIncorrect": "Current password is incorrect.",
+    "newPasswordSameAsCurrent": "New password must be different from the current password.",
+    "passwordMismatch": "New password and confirmation password do not match.",
+    "deleteAccountWrongPassword": "Incorrect password. Account deletion failed.",
+    "notInTeam": "User is not part of a team.",
+    "userAlreadyMember": "User is already a member of this team.",
+    "invitationAlreadySent": "An invitation has already been sent to this email.",
+    "oauthNotConfigured": "Google sign-in is not configured. Please sign in with your password.",
+    "oauthCancelled": "Google sign-in was cancelled.",
+    "oauthFailed": "Google sign-in failed. Please try again or sign in with your password."
+  },
+  "success": {
+    "passwordUpdated": "Password updated successfully.",
+    "accountUpdated": "Account updated successfully.",
+    "memberRemoved": "Team member removed.",
+    "invitationSent": "Invitation sent."
+  },
+  "legal": {
+    "nav": {
+      "privacy": "Privacy",
+      "terms": "Terms",
+      "pricing": "Pricing",
+      "backToHome": "Back to home"
+    },
+    "header": {
+      "badge": "Legal",
+      "lastUpdatedLabel": "Last updated: {date}"
+    },
+    "draftBanner": {
+      "title": "Draft translation",
+      "description": "This Polish translation has not yet been reviewed by a lawyer and may contain errors. The English version is the legally authoritative one until this notice is removed.",
+      "viewEnglish": "View English version"
+    }
+  }
+}

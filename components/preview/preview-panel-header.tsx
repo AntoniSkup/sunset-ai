@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import { RocketLaunchIcon, CodeBracketIcon, EyeIcon } from "@heroicons/react/24/outline";
 import { Button } from "../ui/button";
 import { PublishModal } from "./publish-modal";
@@ -18,6 +19,7 @@ export default function PreviewPanelHeader({
   activeTab,
   onTabChange,
 }: PreviewPanelHeaderProps) {
+  const t = useTranslations("builder.preview");
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
   const [publishedUrl, setPublishedUrl] = useState<string | null>(null);
@@ -63,7 +65,7 @@ export default function PreviewPanelHeader({
               }`}
             >
               <EyeIcon className="size-4" />
-              Preview
+              {t("tabPreview")}
             </button>
             <button
               type="button"
@@ -75,7 +77,7 @@ export default function PreviewPanelHeader({
               }`}
             >
               <CodeBracketIcon className="size-4" />
-              Code
+              {t("tabCode")}
             </button>
           </div>
           {publishedUrl ? (
@@ -84,7 +86,7 @@ export default function PreviewPanelHeader({
               onClick={() => setIsSuccessModalOpen(true)}
               className="text-sm bg-black text-white hover:bg-black/90"
             >
-              Dashboard
+              {t("openDashboard")}
             </Button>
           ) : (
             <Button
@@ -94,7 +96,7 @@ export default function PreviewPanelHeader({
               className="group text-white bg-[#222424] rounded-lg cursor-pointer"
             >
               <RocketLaunchIcon className="size-4 transition-transform duration-200 ease-in-out group-hover:-rotate-45" />
-              Publish
+              {t("publish")}
             </Button>
           )}
         </div>

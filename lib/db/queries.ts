@@ -47,6 +47,8 @@ import { verifyToken } from "@/lib/auth/session";
 import { generateText } from "ai";
 import { getAIModel } from "@/lib/ai/get-ai-model";
 import { buildChatNamePrompt } from "@/prompts/chat-name-prompt";
+import { localeLanguageLabel } from "@/lib/i18n/detect-language";
+import type { AppLocale } from "@/i18n/routing";
 import {
   MAX_PUBLISH_PUBLIC_ID_LENGTH,
   slugifyChatTitleForPublish,
@@ -67,13 +69,17 @@ function buildFallbackChatName(userQuery: string): string {
 
 export async function generateChatName(
   userQuery: string,
-  context?: { userId?: number; chatId?: string },
+  context?: {
+    userId?: number;
+    chatId?: string;
+    responseLanguage?: string;
+  },
 ): Promise<string> {
   try {
     const model = await getAIModel(true);
     const { text } = await generateText({
       model,
-      prompt: buildChatNamePrompt(userQuery),
+      prompt: buildChatNamePrompt(userQuery, context?.responseLanguage),
       experimental_telemetry: {
         isEnabled: true,
         functionId: "generate-chat-name",
@@ -608,12 +614,19 @@ export async function createChat(data: {
   userId: number;
   title?: string;
   userQuery?: string;
+  responseLanguage?: string | null;
 }) {
   const publicId = nanoid();
   let title = data.title;
 
   if (!title && data.userQuery) {
-    title = await generateChatName(data.userQuery, { userId: data.userId });
+    const language = data.responseLanguage
+      ? localeLanguageLabel(data.responseLanguage as AppLocale)
+      : undefined;
+    title = await generateChatName(data.userQuery, {
+      userId: data.userId,
+      responseLanguage: language,
+    });
   }
 
   const result = await db
@@ -622,6 +635,7 @@ export async function createChat(data: {
       publicId,
       userId: data.userId,
       title: title || null,
+      responseLanguage: data.responseLanguage ?? null,
     })
     .returning();
 
@@ -822,7 +836,11 @@ export async function getChatsByUserPaginated(
 export async function updateChatByPublicId(
   chatPublicId: string,
   userId: number,
-  data: { title?: string; screenshotUrl?: string | null },
+  data: {
+    title?: string;
+    screenshotUrl?: string | null;
+    responseLanguage?: string | null;
+  },
 ) {
   const result = await db
     .update(chats)

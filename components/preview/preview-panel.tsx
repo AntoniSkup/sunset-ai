@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import { AnimatePresence, motion } from "motion/react";
 import type {
   PreviewMessagePayload,
@@ -53,16 +54,11 @@ function BuilderTipsFromButton({
   active: boolean;
   className?: string;
 }) {
+  const t = useTranslations("builder.preview");
   const tips = [
-    {
-      body: "Tell the AI the goal, audience, and vibe.",
-    },
-    {
-      body: "Request a hero, features, social proof, pricing, FAQ, and a clear CTA.",
-    },
-    {
-      body: "Say what to change: “shorter hero copy”, “more contrast”.",
-    },
+    { body: t("tipGoalAudienceVibe") },
+    { body: t("tipSections") },
+    { body: t("tipSayWhatToChange") },
   ] as const;
 
   const [tipIndex, setTipIndex] = useState(0);
@@ -195,6 +191,7 @@ export function PreviewPanel({
   chatId,
   activeTab = "preview",
 }: PreviewPanelProps) {
+  const t = useTranslations("builder.preview");
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isIframeLoading, setIsIframeLoading] = useState(false);
@@ -289,7 +286,7 @@ export function PreviewPanel({
         const nextMessage =
           loadingPayload.progress?.currentStep ||
           loadingPayload.message ||
-          "Generating landing page...";
+          t("generatingLandingPageEllipsis");
         setIsLoading(true);
         setLoadingMessage(nextMessage);
         setLoadingStep(nextMessage);
@@ -328,7 +325,7 @@ export function PreviewPanel({
         handlePreviewUpdate as EventListener
       );
     };
-  }, [chatId]);
+  }, [chatId, t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -394,8 +391,8 @@ export function PreviewPanel({
           Boolean(data?.run) || data?.liveState?.status === "running";
         if (isRunning) {
           setIsLoading(true);
-          setLoadingMessage((prev) => prev || "Generating landing page");
-          setLoadingStep((prev) => prev || "Generating landing page");
+          setLoadingMessage((prev) => prev || t("generatingLandingPage"));
+          setLoadingStep((prev) => prev || t("generatingLandingPage"));
         }
       } catch {
         // Best-effort: if the live lookup fails we just fall back to the
@@ -410,7 +407,7 @@ export function PreviewPanel({
     return () => {
       cancelled = true;
     };
-  }, [chatId]);
+  }, [chatId, t]);
 
   return (
     <div
@@ -429,7 +426,7 @@ export function PreviewPanel({
               <div className="flex flex-col items-center gap-3">
                 <LoadingProgressDonut progress={1} />
                 <p className="text-sm text-muted-foreground">
-                  Loading preview...
+                  {t("loadingPreview")}
                 </p>
               </div>
             </div>
@@ -456,7 +453,7 @@ export function PreviewPanel({
             data-preview="true"
             id="preview-iframe"
             className="h-full w-full  rounded-lg"
-            title="Website Preview"
+            title={t("iframeTitle")}
             sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-same-origin"
             onLoad={() => setIsIframeLoading(false)}
             onError={() => setIsIframeLoading(false)}
@@ -479,11 +476,11 @@ export function PreviewPanel({
                         <LoadingProgressDonut progress={displayProgress} />
                       </div>
                       <span className="text-2xl font-medium mb-2">
-                        Bringing your idea to life
+                        {t("bringingIdeaToLife")}
                       </span>
                       <LoadingStepMessage
                         message={
-                          loadingStep || loadingMessage || "Building layout"
+                          loadingStep || loadingMessage || t("buildingLayout")
                         }
                       />
                     </>
@@ -495,12 +492,12 @@ export function PreviewPanel({
                     <>
                       <img
                         src={sunsetLogoLarge.src}
-                        alt="Sunset logo large"
+                        alt={t("logoLargeAlt")}
                         className="mx-auto mb-12"
                       />
 
                       <span className="text-2xl font-medium mb-2">
-                        Bringing your idea to life
+                        {t("bringingIdeaToLife")}
                       </span>
 
                       <BuilderTipsFromButton active />

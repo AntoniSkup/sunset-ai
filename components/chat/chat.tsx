@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import { useTranslations } from "next-intl";
 import type { UIMessage } from "ai";
 import useSWR from "swr";
 import { useRealtimeStream } from "@trigger.dev/react-hooks";
@@ -143,7 +144,7 @@ function TriggerRealtimeBridge({
 
 function normalizeErrorMessage(
   value: unknown,
-  fallback = "Generation failed"
+  fallback: string
 ): string {
   if (typeof value === "string") {
     const trimmed = value.trim();
@@ -197,6 +198,7 @@ export function Chat({ chatId: providedChatId }: ChatProps = {}) {
 }
 
 function ChatWithHistory({ chatId }: { chatId: string }) {
+  const t = useTranslations("builder.chat");
   const pendingForMountRef = useRef(false);
   const [initialMessages, setInitialMessages] = useState<UIMessage[] | null>(
     () => {
@@ -220,7 +222,7 @@ function ChatWithHistory({ chatId }: { chatId: string }) {
         );
         if (!res.ok) {
           const data = await res.json().catch(() => null);
-          throw new Error(data?.error || "Failed to load chat messages");
+          throw new Error(data?.error || t("loadMessagesFailed"));
         }
         const data = await res.json();
         if (!cancelled) {
@@ -230,7 +232,7 @@ function ChatWithHistory({ chatId }: { chatId: string }) {
         }
       } catch (e) {
         if (!cancelled) {
-          setLoadError(e instanceof Error ? e.message : "Failed to load chat");
+          setLoadError(e instanceof Error ? e.message : t("loadChatFailed"));
           setInitialMessages([]);
         }
       }
@@ -239,12 +241,12 @@ function ChatWithHistory({ chatId }: { chatId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [chatId]);
+  }, [chatId, t]);
 
   if (initialMessages === null) {
     return (
       <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
-        Loading chat…
+        {t("loading")}
       </div>
     );
   }
@@ -265,6 +267,8 @@ function ChatInner({
   chatId?: string;
   initialMessages?: UIMessage[];
 }) {
+  const tChat = useTranslations("builder.chat");
+  const tProgress = useTranslations("builder.progress");
   const [input, setInput] = useState("");
   const [chatId, setChatId] = useState<string | null>(providedChatId || null);
   const [isCreatingChat, setIsCreatingChat] = useState(false);
@@ -565,15 +569,13 @@ function ChatInner({
                 (m) => m.id !== userMessageId && m.id !== assistantMessageId
               )
             );
-            toast.warning(
-              "Max 3 requests at once. Please wait for one to finish."
-            );
+            toast.warning(tChat("maxRequests"));
             setStatus("ready");
             return;
           }
           const errMsg = normalizeErrorMessage(
             data?.error ?? data,
-            `Failed to queue generation (${response.status})`
+            tChat("queueFailedWithStatus", { status: response.status })
           );
           setErrorMessages((prev) => [
             ...prev,
@@ -641,7 +643,7 @@ function ChatInner({
           hidePreviewLoader();
           return;
         }
-        const errMsg = normalizeErrorMessage(err, "Failed to queue generation");
+        const errMsg = normalizeErrorMessage(err, tChat("queueFailed"));
         setErrorMessages((prev) => [
           ...prev,
           {
@@ -814,7 +816,7 @@ function ChatInner({
   const handleAttachmentUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     if (!chatId) {
-      setAttachmentError("Please wait for the chat to initialize.");
+      setAttachmentError(tChat("chatNotInitialized"));
       return;
     }
 
@@ -908,7 +910,7 @@ function ChatInner({
             const message =
               result.reason instanceof Error
                 ? result.reason.message
-                : "Failed to upload image.";
+                : tChat("uploadFailed");
             uploadErrors.push(message);
           }
         }
@@ -949,14 +951,14 @@ function ChatInner({
           completed: selectedFiles.length,
           message:
             selectedFiles.length === 1
-              ? "Upload complete."
-              : "All files uploaded.",
+              ? tChat("uploadComplete")
+              : tChat("allFilesUploaded"),
         });
         scheduleUploadToastHide(1800);
       }
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Failed to upload image.";
+        error instanceof Error ? error.message : tChat("uploadFailed");
       setAttachmentError(message);
       setUploadToast({
         status: "error",
@@ -1001,7 +1003,7 @@ function ChatInner({
           asset.id === assetId ? { ...asset, intent: current.intent } : asset
         )
       );
-      setAttachmentError(data?.error || "Failed to update image usage intent.");
+      setAttachmentError(data?.error || tChat("intentUpdateFailed"));
     }
   };
 
@@ -1237,17 +1239,18 @@ function ChatInner({
         const fileName = parts[parts.length - 1] || "";
         if (fileName) {
           if (fileName.toLowerCase().startsWith("index.")) {
-            return "App layout";
+            return tProgress("appLayout");
           }
           return humanizeFileName(fileName);
         }
       }
 
-      if (toolName === "validate_completeness") return "Completeness check";
-      if (toolName === "resolve_image_slots") return "Visuals";
-      if (toolName === "create_site") return "App layout";
-      if (toolName === "create_section") return "Section";
-      return "Layout";
+      if (toolName === "validate_completeness")
+        return tProgress("completenessCheck");
+      if (toolName === "resolve_image_slots") return tProgress("visuals");
+      if (toolName === "create_site") return tProgress("appLayout");
+      if (toolName === "create_section") return tProgress("section");
+      return tProgress("layout");
     };
 
     const inferStepKind = (
@@ -1308,24 +1311,30 @@ function ChatInner({
     };
 
     const formatStepStatusText = (stepKey: string | null): string => {
-      if (!stepKey) return "Building layout";
-      const label = (stepLabelsByKey.get(stepKey) || "layout").trim();
+      if (!stepKey) return tProgress("buildingLayout");
+      const label = (stepLabelsByKey.get(stepKey) || tProgress("layout")).trim();
       const kind = stepKindByKey.get(stepKey) ?? "other";
       const verb = pickVerbForStep(stepKey);
+      const isBuilding = verb === "Building";
 
       if (kind === "validation") {
-        return "Running completeness check";
+        return tProgress("runningCompletenessCheck");
       }
       if (kind === "assets") {
-        return `${verb} visuals`;
+        return isBuilding
+          ? tProgress("buildingVisuals")
+          : tProgress("generatingVisuals");
       }
       if (kind === "section" || isSectionLikeLabel(label)) {
-        const withSectionSuffix = /section$/i.test(label)
-          ? label
-          : `${label} section`;
-        return `${verb} ${withSectionSuffix}`;
+        // Strip a trailing "section" / "sekcja" so the i18n key supplies it.
+        const cleanLabel = label.replace(/\s*(section|sekcja)$/i, "").trim() || label;
+        return isBuilding
+          ? tProgress("buildingSection", { label: cleanLabel })
+          : tProgress("generatingSection", { label: cleanLabel });
       }
-      return `${verb} ${label}`;
+      return isBuilding
+        ? tProgress("buildingLabel", { label })
+        : tProgress("generatingLabel", { label });
     };
 
     const ensureVirtualStep = (
@@ -1366,14 +1375,14 @@ function ChatInner({
     const beginBuilderPreviewProgress = () => {
       if (hasBuilderActivity) return;
       hasBuilderActivity = true;
-      ensureVirtualStep(NAVBAR_VIRTUAL_KEY, "Navbar", "section");
-      ensureVirtualStep(FOOTER_VIRTUAL_KEY, "Footer", "section");
+      ensureVirtualStep(NAVBAR_VIRTUAL_KEY, tProgress("navbar"), "section");
+      ensureVirtualStep(FOOTER_VIRTUAL_KEY, tProgress("footer"), "section");
       startProgressTicker();
-      showPreviewLoader("Planning landing page...", {
+      showPreviewLoader(tProgress("planningLandingPage"), {
         progress: 0,
         completedSteps: 0,
         totalSteps: plannedStepKeys.length + 1,
-        currentStep: "Planning landing page...",
+        currentStep: tProgress("planningLandingPage"),
       });
     };
 
@@ -1460,7 +1469,7 @@ function ChatInner({
       const currentStepLabel =
         messageOverride ||
         formatStepStatusText(activeStepKey) ||
-        "Building layout";
+        tProgress("buildingLayout");
 
       showPreviewLoader(currentStepLabel, {
         progress,
@@ -1570,7 +1579,7 @@ function ChatInner({
       activeAssistantMessageIdRef.current = null;
       const err = normalizeErrorMessage(
         pendingFailureMessage,
-        "Generation failed"
+        tChat("generationFailed")
       );
       pendingFailureMessage = null;
       setErrorMessages((prev) => [
@@ -1850,11 +1859,11 @@ function ChatInner({
       if (eventType === "run_completed") {
         stopProgressTicker();
         if (hasBuilderActivity) {
-          showPreviewLoader("Finalizing preview...", {
+          showPreviewLoader(tProgress("finalizingPreview"), {
             progress: 1,
             completedSteps: Math.max(completedStepSet.size, 1),
             totalSteps: Math.max(completedStepSet.size, 1),
-            currentStep: "Completeness check",
+            currentStep: tProgress("completenessCheck"),
           });
           hidePreviewLoader();
         }
@@ -1874,7 +1883,7 @@ function ChatInner({
         hidePreviewLoader();
         pendingFailureMessage = normalizeErrorMessage(
           payload.error,
-          "Generation failed"
+          tChat("generationFailed")
         );
         terminalEventPending = "failed";
         finalizeTerminalEventIfReady();

@@ -1,6 +1,7 @@
 "use client";
 
 import React from 'react';
+import { useTranslations } from "next-intl";
 import {
   Dialog,
   DialogContent,
@@ -27,6 +28,7 @@ export function PublishedSuccessModal({
   onOpenChange,
   publishedUrl,
 }: PublishedSuccessModalProps) {
+  const t = useTranslations("builder.publishedSuccess");
   const [copied, setCopied] = useState(false);
 
   const getFullUrl = () => {
@@ -60,13 +62,13 @@ export function PublishedSuccessModal({
               <CheckIcon className="h-6 w-6 text-green-600" />
             </div>
             <DialogTitle className="text-2xl font-bold">
-              Your website has been published!
+              {t("title")}
             </DialogTitle>
           </div>
         </DialogHeader>
 
         <DialogDescription className="text-base">
-          Your website is now live and accessible at the following URL:
+          {t("description")}
         </DialogDescription>
 
         <div className="space-y-4 pt-4">
@@ -84,12 +86,12 @@ export function PublishedSuccessModal({
               {copied ? (
                 <>
                   <CheckIcon className="h-4 w-4 mr-1" />
-                  Copied!
+                  {t("copied")}
                 </>
               ) : (
                 <>
                   <ClipboardDocumentIcon className="h-4 w-4 mr-1" />
-                  Copy
+                  {t("copy")}
                 </>
               )}
             </Button>
@@ -102,13 +104,13 @@ export function PublishedSuccessModal({
               onClick={() => window.open(fullUrl, '_blank')}
             >
               <ArrowTopRightOnSquareIcon className="h-4 w-4 mr-2" />
-              View Website
+              {t("viewWebsite")}
             </Button>
             <Button
               variant="outline"
               onClick={() => onOpenChange(false)}
             >
-              Close
+              {t("close")}
             </Button>
           </div>
         </div>

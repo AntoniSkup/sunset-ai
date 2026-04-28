@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import { CodeViewer } from "./code-viewer";
 
 interface CodePanelProps {
@@ -16,6 +17,7 @@ export function CodePanel({
   revisionNumber,
   className = "",
 }: CodePanelProps) {
+  const t = useTranslations("builder.code");
   const [files, setFiles] = useState<FileItem[]>([]);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [content, setContent] = useState<string | null>(null);
@@ -36,7 +38,7 @@ export function CodePanel({
 
     fetch(url)
       .then((res) => {
-        if (!res.ok) throw new Error("Failed to load file list");
+        if (!res.ok) throw new Error(t("loadFileListFailed"));
         return res.json();
       })
       .then((data: { files?: FileItem[] }) => {
@@ -52,7 +54,7 @@ export function CodePanel({
       })
       .catch((e) => {
         if (!cancelled) {
-          setError(e instanceof Error ? e.message : "Failed to load");
+          setError(e instanceof Error ? e.message : t("loadFailed"));
           setLoadingTree(false);
         }
       });
@@ -60,7 +62,7 @@ export function CodePanel({
     return () => {
       cancelled = true;
     };
-  }, [chatId, revisionNumber]);
+  }, [chatId, revisionNumber, t]);
 
   useEffect(() => {
     if (!selectedPath) {
@@ -79,7 +81,7 @@ export function CodePanel({
 
     fetch(url)
       .then((res) => {
-        if (!res.ok) throw new Error("Failed to load file");
+        if (!res.ok) throw new Error(t("loadFileFailed"));
         return res.text();
       })
       .then((text) => {
@@ -90,7 +92,7 @@ export function CodePanel({
       })
       .catch((e) => {
         if (!cancelled) {
-          setError(e instanceof Error ? e.message : "Failed to load file");
+          setError(e instanceof Error ? e.message : t("loadFileFailed"));
           setLoadingFile(false);
         }
       });
@@ -98,7 +100,7 @@ export function CodePanel({
     return () => {
       cancelled = true;
     };
-  }, [chatId, selectedPath, revisionNumber]);
+  }, [chatId, selectedPath, revisionNumber, t]);
 
   if (error && !files.length) {
     return (
@@ -112,13 +114,13 @@ export function CodePanel({
     <div className={`flex h-full min-h-0 ${className}`}>
       <div className="w-56 shrink-0 border-r bg-muted/30 flex flex-col min-h-0">
         <div className="shrink-0 px-3 py-2 border-b text-xs font-medium text-muted-foreground uppercase tracking-wider">
-          Files
+          {t("filesTitle")}
         </div>
         <div className="flex-1 min-h-0 overflow-auto">
           <div className="py-1">
             {loadingTree ? (
               <div className="px-3 py-2 text-sm text-muted-foreground animate-pulse">
-                Loading…
+                {t("loading")}
               </div>
             ) : (
               files.map(({ path }) => (
@@ -149,7 +151,7 @@ export function CodePanel({
         <div className="flex-1 min-h-0 overflow-hidden">
           {loadingFile && !content ? (
             <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-              Loading…
+              {t("loading")}
             </div>
           ) : content !== null && selectedPath ? (
             <CodeViewer
@@ -159,7 +161,7 @@ export function CodePanel({
             />
           ) : !selectedPath && !loadingTree ? (
             <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-              No files in this revision
+              {t("noFiles")}
             </div>
           ) : null}
         </div>

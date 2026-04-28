@@ -197,7 +197,20 @@ export type CodeGenerationPromptParams = {
   themeContext?: string;
   siteAssetContext?: string;
   inspirationContext?: string;
+  /**
+   * Human-readable language label (e.g. "Polish") for the user-visible copy
+   * the codegen LLM authors. When omitted or set to "English", no extra
+   * directive is added. Code identifiers, theme token names, and other code
+   * symbols stay in English regardless.
+   */
+  copyLanguage?: string;
 };
+
+function buildCopyLanguageDirective(language: string | undefined): string {
+  const trimmed = language?.trim();
+  if (!trimmed || trimmed.toLowerCase() === "english") return "";
+  return `\n\n**Copy language**\nAuthor all user-visible copy in this file in ${trimmed}. This includes headings, body paragraphs, button labels, link labels, navigation labels, form field labels and placeholders, alt text, footer copy, and any other text the end user reads. Do NOT translate code identifiers, component names, prop names, theme token exports, route paths, Tailwind class names, or other code-level symbols — those stay in English. Imported names from theme.tsx and other modules also stay exactly as exported.\n`;
+}
 
 function cleanPreviousCodeVersion(previousCodeVersion: string | undefined): string | undefined {
   if (!previousCodeVersion) return undefined;
@@ -236,6 +249,8 @@ export function buildCodeGenerationDynamicPrompt(params: CodeGenerationPromptPar
     ? "\nTypeScript/TSX string literal safety:\n- Prefer double-quoted strings for text content.\n- If you use single-quoted strings, escape apostrophes (e.g. what\\'s).\n"
     : "";
 
+  const copyLanguageDirective = buildCopyLanguageDirective(params.copyLanguage);
+
   return (
     modificationContext +
     existingSectionsContext +
@@ -243,6 +258,7 @@ export function buildCodeGenerationDynamicPrompt(params: CodeGenerationPromptPar
     themeContext +
     siteAssetContext +
     inspirationContext +
+    copyLanguageDirective +
     userRequestSection +
     tsxSafetyInstruction
   );
@@ -336,6 +352,8 @@ async function generateAndSaveSingleFile(params: {
   isModification?: boolean;
   inspirationQuery?: string;
   modelTier?: "advanced" | "simple";
+  /** Human-readable label of the language for user-visible site copy. */
+  copyLanguage?: string;
   /** Legacy: charge incrementally (non-chat callers). */
   ensureChargedForAction?: EnsureChargedForAction;
   /** Chat turn: no per-file debit; parent charges once on stream success. */
@@ -506,6 +524,7 @@ async function generateAndSaveSingleFile(params: {
         themeContext: themeContextForPrompt || undefined,
         siteAssetContext,
         inspirationContext: inspirationContextForPrompt || undefined,
+        copyLanguage: params.copyLanguage,
       };
 
       const staticCodegenPrompt = createSectionPrompt();
@@ -821,7 +840,8 @@ const createSiteToolExecute = async (
   { userRequest }: z.infer<typeof createSiteSchema>,
   chatId: string,
   userId: number,
-  deferredChatTurnBilling?: boolean
+  deferredChatTurnBilling?: boolean,
+  copyLanguage?: string
 ): Promise<any> => {
   if (!chatId) {
     return { success: false, error: "Chat ID is required" };
@@ -836,6 +856,7 @@ const createSiteToolExecute = async (
       "\n\nCreate the entry React component for the site (landing/index.tsx) as a WIREFRAME ONLY.\n\nHard requirements:\n- Use React Router: import { HashRouter, Routes, Route } from 'react-router-dom'. Wrap the whole app in <HashRouter>.\n- Put page content inside <Routes>. Only create Route entries for pages that are actually part of the current site plan. If only Home exists, include only <Route path=\"/\" element={<Home />} />.\n- Import and render ONLY: Navbar from './sections/Navbar', Footer from './sections/Footer', and the page components that really exist under './pages/...'. Do not import About, Contact, or any other page unless that page is part of the current site plan.\n- Import { ensureThemeFonts } from './theme' and call ensureThemeFonts() once near the top-level so Google Fonts/theme font links are loaded globally and centrally.\n- Structure: <HashRouter><div><Navbar /><main><Routes>...</Routes></main><Footer /></div></HashRouter>.\n- Do NOT use window.location.hash or manual switch; use HashRouter and Routes only.\n- Do NOT output <!DOCTYPE html>, <html>, <head>, or <body>; the app wraps your component.\n- Use Tailwind utility classes (className).",
     isModification: false,
     deferredChatTurnBilling,
+    copyLanguage,
   });
 
   if (result.success) {
@@ -863,7 +884,8 @@ const createSectionToolExecute = async (
   }: z.infer<typeof createSectionSchema>,
   chatId: string,
   userId: number,
-  deferredChatTurnBilling?: boolean
+  deferredChatTurnBilling?: boolean,
+  copyLanguage?: string
 ): Promise<any> => {
   if (!chatId) {
     return { success: false, error: "Chat ID is required" };
@@ -908,6 +930,7 @@ const createSectionToolExecute = async (
     inspirationQuery: trimmedInspirationQuery ?? undefined,
     modelTier,
     deferredChatTurnBilling,
+    copyLanguage,
   });
 
   if (result.success) {
@@ -996,9 +1019,10 @@ const resolveImageSlotsToolExecute = async (
 export function createSiteTool(
   chatId: string,
   userId: number,
-  options?: { deferredChatTurnBilling?: boolean }
+  options?: { deferredChatTurnBilling?: boolean; copyLanguage?: string }
 ) {
   const deferredChatTurnBilling = Boolean(options?.deferredChatTurnBilling);
+  const copyLanguage = options?.copyLanguage;
   return tool({
     description:
       "Create the entry React component (landing/index.tsx) for a new site as a WIREFRAME ONLY. The file must import Navbar from './sections/Navbar', Footer from './sections/Footer', and page(s) from './pages/...', and render only those components (no inline navbar/footer markup). Call once at the start of building a new website.",
@@ -1008,7 +1032,8 @@ export function createSiteTool(
         input,
         chatId,
         userId,
-        deferredChatTurnBilling
+        deferredChatTurnBilling,
+        copyLanguage
       );
     },
   } as any);
@@ -1018,9 +1043,10 @@ export function createSiteTool(
 export function createSectionTool(
   chatId: string,
   userId: number,
-  options?: { deferredChatTurnBilling?: boolean }
+  options?: { deferredChatTurnBilling?: boolean; copyLanguage?: string }
 ) {
   const deferredChatTurnBilling = Boolean(options?.deferredChatTurnBilling);
+  const copyLanguage = options?.copyLanguage;
   return tool({
     description:
       "Create or modify exactly one React/TSX file (layout, theme, page, or section) for the landing site. One tool call writes exactly one file. Use .tsx paths (e.g. landing/theme.tsx, landing/sections/Hero.tsx, landing/pages/Home.tsx). For landing/pages/* and landing/sections/*, landing/index.tsx must already exist (create it first with create_site). Optionally pass inspirationQuery (short keywords or phrase) on initial creates to pull a curated design-inspiration outline into the codegen prompt; omit when the user brief is already very specific or when isModification is true. Optionally pass modelTier: 'advanced' | 'simple' to choose section generation model complexity.",
@@ -1030,7 +1056,8 @@ export function createSectionTool(
         input,
         chatId,
         userId,
-        deferredChatTurnBilling
+        deferredChatTurnBilling,
+        copyLanguage
       );
     },
   } as any);

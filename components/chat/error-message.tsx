@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import {
   ArrowPathIcon,
@@ -33,6 +34,7 @@ export function ErrorMessage({
   errorId,
   chatId,
 }: ErrorMessageProps) {
+  const t = useTranslations("builder.errorMessage");
   const [reportOpen, setReportOpen] = useState(false);
   const [reportText, setReportText] = useState("");
   const [sending, setSending] = useState(false);
@@ -61,7 +63,7 @@ export function ErrorMessage({
   async function submitReport() {
     const note = reportText.trim();
     if (!note) {
-      setSendError("Please describe what happened.");
+      setSendError(t("reportNoteRequired"));
       return;
     }
     setSending(true);
@@ -90,7 +92,7 @@ export function ErrorMessage({
       }
 
       if (res.status === 503 && data?.useMailto && PUBLIC_SUPPORT) {
-        const subject = encodeURIComponent("Sunset — chat error report");
+        const subject = encodeURIComponent(t("mailtoSubject"));
         const body = encodeURIComponent(buildMailtoBody(note));
         window.location.href = `mailto:${PUBLIC_SUPPORT}?subject=${subject}&body=${body}`;
         setReportOpen(false);
@@ -99,13 +101,11 @@ export function ErrorMessage({
       }
 
       setSendError(
-        typeof data?.error === "string"
-          ? data.error
-          : "Could not send report. Try again later."
+        typeof data?.error === "string" ? data.error : t("reportSendError")
       );
     } catch {
       if (PUBLIC_SUPPORT) {
-        const subject = encodeURIComponent("Sunset — chat error report");
+        const subject = encodeURIComponent(t("mailtoSubject"));
         const body = encodeURIComponent(buildMailtoBody(note));
         window.open(
           `mailto:${PUBLIC_SUPPORT}?subject=${subject}&body=${body}`,
@@ -115,7 +115,7 @@ export function ErrorMessage({
         setReportText("");
         return;
       }
-      setSendError("Network error. Please try again.");
+      setSendError(t("reportNetworkError"));
     } finally {
       setSending(false);
     }
@@ -136,7 +136,7 @@ export function ErrorMessage({
           disabled={!onRetry}
         >
           <ArrowPathIcon className="h-4 w-4 " />
-          Retry
+          {t("retry")}
         </Button>
         <Button
           type="button"
@@ -145,29 +145,25 @@ export function ErrorMessage({
           onClick={openReport}
           className="self-start rounded-lg bg-[#ed7333] text-white hover:bg-[#d9662d]"
         >
-          Report
+          {t("report")}
         </Button>
       </div>
 
       <Dialog open={reportOpen} onOpenChange={setReportOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Report this error</DialogTitle>
-            <DialogDescription>
-              Tell us what happened. We&apos;ll look into it right away and
-              resolve it immidiatelly.
-            </DialogDescription>
+            <DialogTitle>{t("reportTitle")}</DialogTitle>
+            <DialogDescription>{t("reportDescription")}</DialogDescription>
           </DialogHeader>
           {sent ? (
             <p className="text-sm text-green-600 font-medium py-4">
-              Thanks — we&apos;ve received this and will fix it as soon as
-              possible.
+              {t("reportThanks")}
             </p>
           ) : (
             <>
               <textarea
                 className="w-full min-h-[120px] rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                placeholder="Tell us what you were trying to do and what went wrong."
+                placeholder={t("reportPlaceholder")}
                 value={reportText}
                 onChange={(e) => setReportText(e.target.value)}
                 disabled={sending}
@@ -186,7 +182,7 @@ export function ErrorMessage({
                 onClick={() => setReportOpen(false)}
                 disabled={sending}
               >
-                Cancel
+                {t("cancel")}
               </Button>
               <Button
                 type="button"
@@ -194,7 +190,7 @@ export function ErrorMessage({
                 onClick={submitReport}
                 disabled={sending}
               >
-                {sending ? "Sending…" : "Send"}
+                {sending ? t("sending") : t("send")}
               </Button>
             </DialogFooter>
           )}
