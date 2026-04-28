@@ -206,6 +206,7 @@ export function PreviewPanel({
   const [revisionNumber, setRevisionNumber] = useState<number | null>(null);
   const realProgressRef = useRef(0);
   const lastMilestoneAtRef = useRef(Date.now());
+  const [isCheckingLiveRun, setIsCheckingLiveRun] = useState(true);
 
   useEffect(() => {
     if (!isLoading) {
@@ -367,6 +368,50 @@ export function PreviewPanel({
     };
   }, [chatId]);
 
+  useEffect(() => {
+    if (!chatId || typeof chatId !== "string") {
+      setIsCheckingLiveRun(false);
+      return;
+    }
+
+    let cancelled = false;
+    setIsCheckingLiveRun(true);
+
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/chats/${encodeURIComponent(chatId)}/turn-runs/live`,
+          { cache: "no-store" }
+        );
+        if (cancelled) return;
+        if (!res.ok) return;
+        const data = (await res.json()) as {
+          run?: { id?: string } | null;
+          liveState?: { status?: string } | null;
+        };
+        if (cancelled) return;
+        const isRunning =
+          Boolean(data?.run) || data?.liveState?.status === "running";
+        if (isRunning) {
+          setIsLoading(true);
+          setLoadingMessage((prev) => prev || "Generating landing page");
+          setLoadingStep((prev) => prev || "Generating landing page");
+        }
+      } catch {
+        // Best-effort: if the live lookup fails we just fall back to the
+        // existing event-driven flow.
+      } finally {
+        if (!cancelled) {
+          setIsCheckingLiveRun(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [chatId]);
+
   return (
     <div
       className={`relative h-full w-full ${className || ""} rounded-lg border shadow-xs overflow-hidden `}
@@ -390,22 +435,22 @@ export function PreviewPanel({
             </div>
           )}
           {/*
-            * The preview iframe is loaded from the deploy origin
-            * (`sunset-deploy.com`) — a different host than the main app — so
-            * the AI-generated React bundle runs in a separate browser origin
-            * with no access to the main app's cookies, storage, or APIs.
-            *
-            * `allow-same-origin` is required: without it the document has an
-            * *opaque* origin (`location.origin === "null"`). The shell still
-            * loads from deploy.localhost, but `<script type="module">` and
-            * `fetch()` to that host are treated as cross-origin, so Chrome
-            * blocks the bundle with `(blocked:origin)` / "Failed to fetch"
-            * while opening the same URL in a new tab works.
-            *
-            * Tradeoff: the preview can read deploy-origin cookies/storage.
-            * Mitigate with strict deploy CSP, `frame-ancestors` (only the
-            * main app may embed), and avoid storing secrets on the deploy host.
-            */}
+           * The preview iframe is loaded from the deploy origin
+           * (`sunset-deploy.com`) — a different host than the main app — so
+           * the AI-generated React bundle runs in a separate browser origin
+           * with no access to the main app's cookies, storage, or APIs.
+           *
+           * `allow-same-origin` is required: without it the document has an
+           * *opaque* origin (`location.origin === "null"`). The shell still
+           * loads from deploy.localhost, but `<script type="module">` and
+           * `fetch()` to that host are treated as cross-origin, so Chrome
+           * blocks the bundle with `(blocked:origin)` / "Failed to fetch"
+           * while opening the same URL in a new tab works.
+           *
+           * Tradeoff: the preview can read deploy-origin cookies/storage.
+           * Mitigate with strict deploy CSP, `frame-ancestors` (only the
+           * main app may embed), and avoid storing secrets on the deploy host.
+           */}
           <iframe
             ref={iframeRef}
             data-preview="true"
@@ -416,8 +461,8 @@ export function PreviewPanel({
             onLoad={() => setIsIframeLoading(false)}
             onError={() => setIsIframeLoading(false)}
           />
-          {!currentVersionId && (
-            <div className="absolute inset-0 bg-white rounded-lg ">
+          {(isLoading || isCheckingLiveRun || !currentVersionId) && (
+            <div className="absolute inset-0 bg-white rounded-lg z-20">
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-6 px-4">
                 <div className="text-center flex-col flex">
                   {isLoading ? (
@@ -434,6 +479,10 @@ export function PreviewPanel({
                         }
                       />
                     </>
+                  ) : isCheckingLiveRun ? (
+                    <div className="mx-auto">
+                      <LoadingProgressDonut progress={0} />
+                    </div>
                   ) : (
                     <>
                       <img

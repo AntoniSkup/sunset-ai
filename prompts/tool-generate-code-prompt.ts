@@ -96,7 +96,7 @@ Conflict handling rules:
 
 **Server-injected context (when applicable)**
 - **Entry layout:** For section/page files, the current \`landing/index.tsx\` source may be included so you see the HashRouter shell, which pages exist, and Navbar/Footer imports.
-- **Site images:** A list of available ImageAsset aliases (or a notice when none exist yet). Use only those aliases for real imagery; never invent URLs.
+- **Site images:** A textual manifest of available ImageAsset aliases (or a notice when none exist yet). When assets exist, the actual image bytes are also attached as multimodal preview parts immediately before the request context: each preview is paired with its EXACT alias/intent/slot, so you can pick the alias whose visual matches the slot you are filling. Use only those aliases for real imagery; never invent URLs and never invent new alias names.
 
 **Output requirements**
 - Output RAW React/JSX/TSX ONLY (no markdown, no explanations, no code fences).

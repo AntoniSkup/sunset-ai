@@ -1,5 +1,14 @@
+import type { ImagePart, TextPart } from "@ai-sdk/provider-utils";
 import { IMAGE_ASSET_COMPONENT_NAME } from "./conventions";
 import type { SiteAssetPromptDescriptor } from "./types";
+
+/**
+ * Hard cap on how many image previews we attach as multimodal content per
+ * codegen call. Each attached image costs tokens (and money) on the provider
+ * side, so we keep this conservative even when a chat has many uploaded or
+ * resolved stock assets. The textual manifest still lists every asset.
+ */
+const DEFAULT_MAX_VISUAL_IMAGES_PER_CODEGEN = 16;
 
 function serializeAssetLine(asset: SiteAssetPromptDescriptor): string {
   const extras = [
@@ -98,4 +107,80 @@ export function buildSiteAssetPromptContextForCodegen(
   }
 
   return buildSiteAssetPromptContext(assets);
+}
+
+/**
+ * Build multimodal message parts that let the codegen model actually SEE the
+ * images that are available for this chat, not just read their aliases.
+ *
+ * Each preview is preceded by a short text label that pins the alias/intent/
+ * slot to that visual, so when the LLM later decides to render imagery in a
+ * section it can pick the right `<ImageAsset asset="..." />` based on what the
+ * picture actually depicts (e.g. "the warm interior shot" vs. "the espresso
+ * detail") instead of guessing from the filename alone.
+ *
+ * Returns an empty array when no assets exist or none have a usable URL, so
+ * callers can spread it directly into a `content` array without conditional
+ * branching.
+ */
+export function buildSiteAssetVisualPromptParts(
+  assets: SiteAssetPromptDescriptor[],
+  options?: { maxImages?: number }
+): Array<TextPart | ImagePart> {
+  if (assets.length === 0) {
+    return [];
+  }
+
+  const max = Math.max(0, options?.maxImages ?? DEFAULT_MAX_VISUAL_IMAGES_PER_CODEGEN);
+  if (max === 0) {
+    return [];
+  }
+
+  const limited = assets.slice(0, max);
+  const parts: Array<TextPart | ImagePart> = [];
+  const omitted = assets.length - limited.length;
+
+  parts.push({
+    type: "text",
+    text: [
+      "**Visual previews of available site image assets**",
+      `The next ${limited.length} message part(s) attach the actual image bytes for the assets listed in the textual manifest. Each preview is paired with the EXACT alias to use in <${IMAGE_ASSET_COMPONENT_NAME} asset="..." />. Pick the alias whose preview visually matches the slot you are filling; do not invent new aliases or rename them.`,
+      omitted > 0
+        ? `Showing ${limited.length} of ${assets.length} ready assets (capped to keep the prompt small); the textual manifest above still lists all of them by alias.`
+        : null,
+    ]
+      .filter(Boolean)
+      .join("\n"),
+  });
+
+  for (const asset of limited) {
+    let imageUrl: URL;
+    try {
+      imageUrl = new URL(asset.url);
+    } catch {
+      continue;
+    }
+
+    const meta = [
+      `alias=${asset.alias}`,
+      `intent=${asset.intent}`,
+      asset.sourceType ? `sourceType=${asset.sourceType}` : null,
+      asset.slotKey ? `slot=${asset.slotKey}` : null,
+      asset.label ? `label="${asset.label}"` : null,
+      asset.altHint ? `altHint="${asset.altHint}"` : null,
+    ]
+      .filter(Boolean)
+      .join(" | ");
+
+    parts.push({ type: "text", text: `Preview for ${meta}` });
+    parts.push({ type: "image", image: imageUrl });
+  }
+
+  // If every URL was malformed we'd be left with only the intro label, which
+  // is misleading; drop it so the prompt stays clean.
+  if (parts.length === 1) {
+    return [];
+  }
+
+  return parts;
 }

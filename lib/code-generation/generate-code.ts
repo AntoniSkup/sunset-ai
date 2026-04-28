@@ -42,6 +42,7 @@ import {
 import { retrieveInspirationForQuery } from "@/lib/inspirations/retrieve-for-query";
 import {
   buildSiteAssetPromptContextForCodegen,
+  buildSiteAssetVisualPromptParts,
   toSiteAssetPromptDescriptors,
 } from "@/lib/site-assets/prompt-manifest";
 import {
@@ -519,6 +520,8 @@ async function generateAndSaveSingleFile(params: {
       const useLighterModel = selectedModelTier === "simple";
       const model = await getAIModel(useLighterModel);
 
+      const cachingEnabled = isAnthropicCodegenPromptCachingEnabled();
+
       const telemetry = {
         isEnabled: true,
         functionId: "code-generation",
@@ -526,37 +529,54 @@ async function generateAndSaveSingleFile(params: {
           chatId: params.chatId,
           userId: params.userId,
           destination: normalizedDestination,
-          codegenPromptCache: isAnthropicCodegenPromptCachingEnabled(),
+          codegenPromptCache: cachingEnabled,
         },
       } as const;
 
-      const genResult = isAnthropicCodegenPromptCachingEnabled()
-        ? await generateText({
-            model,
-            messages: [
-              {
-                role: "user",
-                content: [
-                  {
-                    type: "text",
-                    text: staticCodegenPrompt,
-                    providerOptions: {
-                      anthropic: {
-                        cacheControl: { type: "ephemeral" },
-                      },
-                    },
-                  },
-                  { type: "text", text: dynamicCodegenPrompt },
-                ],
+      // Multimodal previews of the available image assets. Sits between the
+      // (cacheable) static prompt and the per-request dynamic context so the
+      // cached prefix stays stable across calls and the model sees each image
+      // right before reading the textual manifest that names its alias.
+      const visualAssetParts =
+        buildSiteAssetVisualPromptParts(promptableSiteAssets);
+
+      if (DEBUG_SITE_IMAGES && visualAssetParts.length > 0) {
+        console.log("[site-images] codegen visual previews", {
+          chatId: params.chatId,
+          destination: normalizedDestination,
+          attachedImageCount: visualAssetParts.filter(
+            (part) => part.type === "image"
+          ).length,
+          totalAssetCount: promptableSiteAssets.length,
+        });
+      }
+
+      const staticTextPart = cachingEnabled
+        ? {
+            type: "text" as const,
+            text: staticCodegenPrompt,
+            providerOptions: {
+              anthropic: {
+                cacheControl: { type: "ephemeral" as const },
               },
+            },
+          }
+        : { type: "text" as const, text: staticCodegenPrompt };
+
+      const genResult = await generateText({
+        model,
+        messages: [
+          {
+            role: "user",
+            content: [
+              staticTextPart,
+              ...visualAssetParts,
+              { type: "text", text: dynamicCodegenPrompt },
             ],
-            experimental_telemetry: telemetry,
-          })
-        : await generateText({
-            model,
-            prompt: staticCodegenPrompt + dynamicCodegenPrompt,
-            experimental_telemetry: telemetry,
-          });
+          },
+        ],
+        experimental_telemetry: telemetry,
+      });
 
       const generatedCode = genResult.text;
 
