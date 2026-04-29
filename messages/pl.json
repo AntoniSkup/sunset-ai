@@ -315,6 +315,8 @@
       "actionChecking": "Sprawdzanie: {target}",
       "actionBuilt": "Zbudowano: {target}",
       "actionBuilding": "Budowanie: {target}",
+      "actionRead": "Przeczytano: {target}",
+      "actionReading": "Czytanie: {target}",
       "targetPageVisuals": "grafiki strony",
       "targetSiteCompleteness": "kompletność strony",
       "targetUiConsistency": "spójność UI",
@@ -323,6 +325,7 @@
       "targetPageSuffix": "strona {name}",
       "targetSection": "sekcja",
       "targetPageUpdate": "aktualizacja strony",
+      "targetReferenceWebsite": "stronę referencyjną",
       "statusDone": "Gotowe",
       "statusInProgress": "W trakcie"
     },

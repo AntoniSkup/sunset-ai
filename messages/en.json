@@ -315,6 +315,8 @@
       "actionChecking": "Checking {target}",
       "actionBuilt": "Built {target}",
       "actionBuilding": "Building {target}",
+      "actionRead": "Read {target}",
+      "actionReading": "Reading {target}",
       "targetPageVisuals": "page visuals",
       "targetSiteCompleteness": "site completeness",
       "targetUiConsistency": "UI consistency",
@@ -323,6 +325,7 @@
       "targetPageSuffix": "{name} page",
       "targetSection": "section",
       "targetPageUpdate": "page update",
+      "targetReferenceWebsite": "reference website",
       "statusDone": "Done",
       "statusInProgress": "In progress"
     },
