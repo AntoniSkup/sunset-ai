@@ -5,7 +5,7 @@ import {
 import { createRenderSnapshotToken } from "@/lib/render-snapshot-token";
 import { getScreenshotCaptureOrigin } from "@/lib/screenshots/public-app-origin";
 import { captureUrlWithScreenshotOne } from "@/lib/screenshots/screenshot-one-url";
-import { generateText } from "@/lib/ai/langsmith-ai";
+import { generateText, langSmithCallOptions } from "@/lib/ai/langsmith-ai";
 import { getAIModel } from "@/lib/ai/get-ai-model";
 import { z } from "zod";
 import { buildCompletenessValidationPrompt } from "@/prompts/tool-validate-completeness-prompt";
@@ -444,6 +444,11 @@ async function runLlmCompletenessCheck(params: {
     const out = await generateText({
       model,
       prompt,
+      providerOptions: {
+        langsmith: await langSmithCallOptions({
+          metadata: { functionId: "validate-completeness-llm" },
+        }),
+      },
     });
 
     const raw = out.text.trim();

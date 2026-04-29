@@ -1,4 +1,8 @@
-import { generateText, tool } from "@/lib/ai/langsmith-ai";
+import {
+  generateText,
+  tool,
+  langSmithCallOptions,
+} from "@/lib/ai/langsmith-ai";
 import { z } from "zod";
 import { transform } from "esbuild";
 import { createHash } from "node:crypto";
@@ -583,6 +587,18 @@ async function generateAndSaveSingleFile(params: {
             ],
           },
         ],
+        providerOptions: {
+          langsmith: await langSmithCallOptions({
+            useLighterModel,
+            metadata: {
+              chatId: params.chatId,
+              userId: params.userId,
+              destination: normalizedDestination,
+              codegenPromptCache: cachingEnabled,
+              functionId: "code-generation",
+            },
+          }),
+        },
       });
 
       const generatedCode = genResult.text;

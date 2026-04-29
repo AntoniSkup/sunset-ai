@@ -1,9 +1,9 @@
-import { createLangSmithProviderOptions } from "langsmith/experimental/vercel";
 import * as baseAi from "ai";
 import {
   streamText,
   convertToModelMessages,
   stepCountIs,
+  langSmithCallOptions,
 } from "@/lib/ai/langsmith-ai";
 import type { SystemModelMessage, UIMessage } from "ai";
 import type { Chat, User } from "@/lib/db/schema";
@@ -610,7 +610,7 @@ export async function createChatTurnStream({
     abortSignal: turnRunAbortController?.signal,
     stopWhen: stepCountIs(MAX_CHAT_STEPS_PER_TURN),
     providerOptions: {
-      langsmith: createLangSmithProviderOptions<typeof baseAi.streamText>({
+      langsmith: await langSmithCallOptions<typeof baseAi.streamText>({
         metadata: {
           userId: String(user.id),
           chatId: chatPublicId,
