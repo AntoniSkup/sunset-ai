@@ -1,7 +1,5 @@
-import { NextRequest, NextResponse, after } from "next/server";
-import { startActiveObservation } from "@langfuse/tracing";
+import { NextRequest, NextResponse } from "next/server";
 import { getUser, getUserById, getChatByPublicId } from "@/lib/db/queries";
-import { langfuseSpanProcessor } from "@/instrumentation";
 import { createChatTurnStream } from "@/lib/chat/execute-chat-turn";
 import type { UIMessage } from "ai";
 
@@ -111,7 +109,6 @@ async function chatHandler(request: NextRequest) {
       persistIncomingUserMessage: !isInternalJobCall,
     });
 
-    after(async () => langfuseSpanProcessor.forceFlush());
     return result.toUIMessageStreamResponse();
   } catch (error) {
     console.error("Chat API error:", error);
@@ -123,18 +120,6 @@ async function chatHandler(request: NextRequest) {
   }
 }
 
-/**
- * Use startActiveObservation (OTEL startActiveSpan) instead of observe().
- * observe() only wrapped the first sync tick of the async handler with an active
- * span, so streamText + nested generateText/tool telemetry often lost parent
- * context and showed up as separate Langfuse traces.
- */
 export async function POST(request: NextRequest) {
-  return startActiveObservation(
-    "chat-message",
-    async () => {
-      return chatHandler(request);
-    },
-    { endOnExit: false }
-  );
+  return chatHandler(request);
 }

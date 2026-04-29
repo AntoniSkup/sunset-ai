@@ -1,4 +1,4 @@
-import { embed } from "ai";
+import { embed } from "@/lib/ai/langsmith-ai";
 import { openai } from "@ai-sdk/openai";
 import { INSPIRATION_EMBEDDING_DIMENSIONS } from "@/lib/db/schema";
 
@@ -44,10 +44,6 @@ export async function embedInspirationText(text: string): Promise<number[] | nul
     const { embedding } = await embed({
       model: openai.embedding(EMBEDDING_MODEL),
       value: trimmed.slice(0, 8000),
-      experimental_telemetry: {
-        isEnabled: true,
-        functionId: "inspiration-embedding",
-      },
     });
 
     if (!embedding?.length) return null;

@@ -1,8 +1,10 @@
+import { createLangSmithProviderOptions } from "langsmith/experimental/vercel";
+import * as baseAi from "ai";
 import {
-  updateActiveObservation,
-  updateActiveTrace,
-} from "@langfuse/tracing";
-import { streamText, convertToModelMessages, stepCountIs } from "ai";
+  streamText,
+  convertToModelMessages,
+  stepCountIs,
+} from "@/lib/ai/langsmith-ai";
 import type { SystemModelMessage, UIMessage } from "ai";
 import type { Chat, User } from "@/lib/db/schema";
 import {
@@ -566,24 +568,6 @@ export async function createChatTurnStream({
         ? lastMessage.content
         : "") || "";
 
-  updateActiveObservation({
-    input: lastUserText.trim() || undefined,
-    metadata: {
-      model: modelId,
-      chatPromptCache: useChatPromptCache,
-    },
-  });
-  updateActiveTrace({
-    name: "chat-message",
-    sessionId: chatPublicId,
-    userId: String(user.id),
-    input: lastUserText.trim() || undefined,
-    metadata: {
-      model: modelId,
-      chatPromptCache: useChatPromptCache,
-    },
-  });
-
   const flushLiveTextDelta = async () => {
     if (!liveTextBuffer) return;
     const chunk = liveTextBuffer;
@@ -625,15 +609,16 @@ export async function createChatTurnStream({
     tools,
     abortSignal: turnRunAbortController?.signal,
     stopWhen: stepCountIs(MAX_CHAT_STEPS_PER_TURN),
-    experimental_telemetry: {
-      isEnabled: true,
-      functionId: "chat-stream",
-      metadata: {
-        userId: user.id,
-        chatId: chatPublicId,
-        sessionId: chatPublicId,
-        chatPromptCache: useChatPromptCache,
-      },
+    providerOptions: {
+      langsmith: createLangSmithProviderOptions<typeof baseAi.streamText>({
+        metadata: {
+          userId: String(user.id),
+          chatId: chatPublicId,
+          sessionId: chatPublicId,
+          model: modelId,
+          chatPromptCache: useChatPromptCache,
+        },
+      }),
     },
     onChunk: async (chunkEvent: unknown) => {
       try {
@@ -919,8 +904,6 @@ export async function createChatTurnStream({
           { urgent: true }
         );
       }
-      updateActiveObservation({ output: finalText || undefined });
-      updateActiveTrace({ output: finalText || undefined });
 
       if (lastSuccessfulRevision) {
         // Schedule the screenshot via a dedicated Trigger task (when the
@@ -962,7 +945,7 @@ export async function createChatTurnStream({
         (rootError instanceof Error && rootError.name === "AbortError") ||
         (abortCause instanceof Error && abortCause.name === "AbortError");
 
-      if (isAbortError && turnRunId) {
+      if (isAbortError) {
         return;
       }
 
@@ -982,8 +965,6 @@ export async function createChatTurnStream({
           { urgent: true }
         );
       }
-      updateActiveObservation({ output: errMsg, level: "ERROR" });
-      updateActiveTrace({ output: errMsg });
     },
   });
 }

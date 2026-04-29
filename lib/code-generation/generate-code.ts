@@ -1,4 +1,4 @@
-import { generateText, tool } from "ai";
+import { generateText, tool } from "@/lib/ai/langsmith-ai";
 import { z } from "zod";
 import { transform } from "esbuild";
 import { createHash } from "node:crypto";
@@ -541,17 +541,6 @@ async function generateAndSaveSingleFile(params: {
 
       const cachingEnabled = isAnthropicCodegenPromptCachingEnabled();
 
-      const telemetry = {
-        isEnabled: true,
-        functionId: "code-generation",
-        metadata: {
-          chatId: params.chatId,
-          userId: params.userId,
-          destination: normalizedDestination,
-          codegenPromptCache: cachingEnabled,
-        },
-      } as const;
-
       // Multimodal previews of the available image assets. Sits between the
       // (cacheable) static prompt and the per-request dynamic context so the
       // cached prefix stays stable across calls and the model sees each image
@@ -594,7 +583,6 @@ async function generateAndSaveSingleFile(params: {
             ],
           },
         ],
-        experimental_telemetry: telemetry,
       });
 
       const generatedCode = genResult.text;

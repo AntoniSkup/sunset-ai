@@ -44,7 +44,7 @@ import type {
 import { nanoid } from "nanoid";
 import { cookies } from "next/headers";
 import { verifyToken } from "@/lib/auth/session";
-import { generateText } from "ai";
+import { generateText } from "@/lib/ai/langsmith-ai";
 import { getAIModel } from "@/lib/ai/get-ai-model";
 import { buildChatNamePrompt } from "@/prompts/chat-name-prompt";
 import { localeLanguageLabel } from "@/lib/i18n/detect-language";
@@ -80,16 +80,6 @@ export async function generateChatName(
     const { text } = await generateText({
       model,
       prompt: buildChatNamePrompt(userQuery, context?.responseLanguage),
-      experimental_telemetry: {
-        isEnabled: true,
-        functionId: "generate-chat-name",
-        metadata: context
-          ? {
-              ...(context.userId != null && { userId: context.userId }),
-              ...(context.chatId != null && { chatId: context.chatId }),
-            }
-          : undefined,
-      },
     });
     let cleaned = text.trim();
     if (
