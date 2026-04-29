@@ -65,6 +65,20 @@ const ANY_IMPORT_RE =
   /import\s+([\s\S]*?)\s+from\s+['"]([^'"]+)['"]/g;
 const MOTION_REACT_IMPORT_RE = /from\s+["']motion\/react["']/;
 const MOTION_ELEMENT_RE = /<motion\.[A-Za-z][\w]*/g;
+/**
+ * Detects hardcoded external image URLs used inside TSX files — either as
+ * src attributes on <img> elements or as CSS background-image values. The
+ * model is instructed never to invent URLs; when it does anyway (usually to
+ * satisfy image-forward layout guidance despite no resolved assets), this
+ * check surfaces the violation as a critical finding so the repair loop
+ * replaces them before the user sees the output.
+ *
+ * Intentionally conservative: only matches common stock/CDN host patterns
+ * (unsplash, pexels, pixabay, images.*, cdn.*) to avoid false-positives on
+ * known-safe internal URLs like Google Fonts or Vercel Blob.
+ */
+const HARDCODED_EXTERNAL_IMAGE_URL_RE =
+  /(?:src|backgroundImage|background)\s*[:=]\s*["'`]https?:\/\/(?:images\.|cdn\.|[a-z0-9-]+\.unsplash\.com|[a-z0-9-]+\.pexels\.com|pixabay\.com|[a-z0-9-]+\.cloudinary\.com|[a-z0-9-]+\.imgix\.net)[^"'`\s)>]*/gi;
 const ANIMATE_PRESENCE_RE = /<AnimatePresence\b/g;
 const TAILWIND_ANIMATION_RE = /\banimate-[\w:-]+/g;
 const ARBITRARY_ANIMATION_RE = /\[animation:[^\]]+\]/g;
@@ -638,6 +652,20 @@ export async function validateCompleteness(params: {
             "Inline <style> tag detected; section and page files must use Tailwind utilities instead.",
           suggestedFix:
             "Remove the <style> tag and replace it with Tailwind classes or inline style props only for dynamic values.",
+        });
+      }
+      // Detect hardcoded external image URLs. The model is required to use
+      // only resolved ImageAsset aliases; raw stock/CDN URLs break if the
+      // provider changes rate limits, expire, or simply show the wrong image.
+      const externalImageMatches = file.content.match(HARDCODED_EXTERNAL_IMAGE_URL_RE);
+      if (externalImageMatches && externalImageMatches.length > 0) {
+        findings.push({
+          severity: "critical",
+          issueCode: "HARDCODED_EXTERNAL_IMAGE_URL",
+          path: file.path,
+          message: `${externalImageMatches.length} hardcoded external image URL(s) detected (e.g. Unsplash, Pexels, Pixabay, or CDN URLs). Only resolved ImageAsset aliases may be used for imagery.`,
+          suggestedFix:
+            "Remove all external image URLs. If resolved assets are available, replace with <ImageAsset asset=\"alias\" />. If no assets exist, replace image slots with gradient backgrounds, color-field backgrounds, or typographic treatments instead.",
         });
       }
       const imports = extractRelativeImports(file.content);

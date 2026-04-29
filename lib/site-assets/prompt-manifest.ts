@@ -101,8 +101,11 @@ export function buildSiteAssetPromptContextForCodegen(
   if (assets.length === 0) {
     return [
       "**Site images (ImageAsset aliases)**",
-      "No registered image assets are available for this chat yet. Do not invent raw blob URLs, placeholder CDN URLs, or direct stock URLs in generated TSX.",
-      "If this section needs resolved images with stable aliases, the workflow should call resolve_image_slots before or after generating files that render them.",
+      "No image assets are registered for this chat. This is a hard constraint with no exceptions:",
+      "- Do NOT use <img> tags with any external URL.",
+      "- Do NOT use CSS background-image with any external URL (including Unsplash, Pexels, Pixabay, or any other CDN or stock provider).",
+      "- Do NOT invent raw blob URLs, placeholder CDN URLs, or direct stock-provider URLs anywhere in the generated TSX.",
+      "Where the design calls for visual weight, use non-image alternatives: CSS gradients, solid color fields, geometric or noise-texture backgrounds (Tailwind utilities / CSS only), layered transparencies, or bold typographic treatments. Do not attempt to simulate missing imagery with placeholder URLs of any kind.",
     ].join("\n");
   }
 

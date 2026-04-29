@@ -155,8 +155,8 @@ export const fontBody = '"Lato", system-ui, sans-serif';
 - Make responsiveness a priority, not a final polish pass. Start mobile-first, use Tailwind breakpoints deliberately (e.g., sm:, md:, lg:), and ensure the layout reads well on narrow phones, common tablets, and desktop widths.
 - Check responsive failure modes while generating: no horizontal scrolling, no text or controls overlapping imagery, no unusably small tap targets, and no sections whose visual hierarchy collapses on smaller screens.
 - Use realistic placeholder content if specifics are missing, but never invent business facts.
-- Prefer image-forward sections when suitable. Most landing pages should use strong imagery not only in the hero, but also in several supporting sections where visuals improve clarity, mood, or perceived quality.
-- Within reason, default to including one or more meaningful images in major sections unless the section is clearly better as text-only (for example simple nav, footer, or compact legal/utility content).
+- Prefer image-forward sections **only when resolved ImageAsset aliases are available in context**. When the site images context states that no assets are registered, do NOT use external image URLs as substitutes — instead build visual richness through gradients, layered backgrounds, typography, and motion. Placeholder Unsplash or stock URLs are never acceptable.
+- When assets ARE available, use them prominently across the hero and several supporting sections, not just as small accents.
 
 Before finalizing output, run an internal check:
 - User constraints are satisfied.

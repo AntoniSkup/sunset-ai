@@ -992,12 +992,38 @@ const resolveImageSlotsToolExecute = async (
     return { success: false, error: "Chat ID is required" };
   }
 
+  console.log("[tool] resolve_image_slots called", {
+    chatId,
+    slotCount: input.slots.length,
+    slots: input.slots.map((s) => ({
+      slotKey: s.slotKey,
+      query: s.query,
+      orientation: s.orientation ?? null,
+    })),
+  });
+
   const result = await resolveImageSlots({
     chatId,
     userId,
     pageGoal: input.pageGoal,
     brandStyle: input.brandStyle,
     slots: input.slots,
+  });
+
+  console.log("[tool] resolve_image_slots result", {
+    chatId,
+    resolvedCount: result.resolved.length,
+    unresolvedCount: result.unresolved.length,
+    resolved: result.resolved.map((r) => ({
+      slotKey: r.slotKey,
+      alias: r.alias,
+      sourceType: r.sourceType,
+      reusedExisting: r.reusedExisting,
+    })),
+    unresolved: result.unresolved.map((u) => ({
+      slotKey: u.slotKey,
+      reason: u.reason,
+    })),
   });
 
   return {
