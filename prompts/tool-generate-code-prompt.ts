@@ -61,6 +61,7 @@ Requirements:
 - Ensure accessibility (proper heading hierarchy, alt attributes for images, ARIA labels where needed)
 - Make the design modern, responsive, and visually appealing
 - Output MUST be raw React/JSX/TSX only (no markdown code fences, no backticks, no \`\`\`jsx)
+- Do NOT include any code comments in the output. No JSX comments (\`{/* ... */}\`), no single-line comments (\`// ...\`), and no block comments (\`/* ... */\`). The generated file must be entirely comment-free.
 - Do NOT include <!DOCTYPE html>, <html>, <head>, or <body> in section/page files
 - Global reusable style tokens must live in landing/theme.tsx (typography, colors, shared spacing/constants).
 - Google Fonts are allowed, but font loading must be centralized in landing/theme.tsx via a single idempotent helper (never embedded font imports or @font-face blocks inside section/page components).
@@ -100,6 +101,7 @@ Conflict handling rules:
 
 **Output requirements**
 - Output RAW React/JSX/TSX ONLY (no markdown, no explanations, no code fences).
+- **No comments (hard rule)**: Do NOT include any comments in the generated code. Strip all JSX comments (\`{/* ... */}\`), single-line comments (\`// ...\`), and block comments (\`/* ... */\`), including section banners, TODOs, and "explain the change" notes. The output must be entirely comment-free; encode intent through clear naming and structure instead.
 - Use Tailwind CSS utility classes for ALL styling (no <style> tags, no external CSS). Use the className prop.
 - Reusable design values must come from landing/theme.tsx.
 - **Runtime environment**: landing files are bundled by esbuild and rendered as a standalone React app inside an iframe. They are NOT part of a Next.js application. Therefore, do NOT import from any Next.js-only module. Forbidden imports include but are not limited to: 'next/font/google', 'next/font/local', 'next/image', 'next/link', 'next/head', 'next/script', 'next/navigation', 'next/router', 'next/dynamic', 'next/server', 'next/headers', 'next/cookies', and any other 'next/*' specifier. Also forbidden: any Node built-ins ('fs', 'path', 'process', 'child_process', etc., with or without the 'node:' prefix) and any server-only library. Allowed imports: 'react', 'react-dom', 'react/jsx-runtime', 'react-router-dom' (HashRouter only), 'motion/react', and relative imports inside 'landing/' (./theme, ../theme, ../sections/..., ../pages/..., ../_runtime/ImageAsset, etc.).
