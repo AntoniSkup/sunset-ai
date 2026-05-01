@@ -1361,15 +1361,26 @@ export const Reorder = {
     React.createElement(As, sanitizeProps(rest), children),
 };
 
+const motionComponentCache = new Map();
+function getCachedMotionComponent(tag) {
+  const key = typeof tag === "string" ? tag : "div";
+  let cached = motionComponentCache.get(key);
+  if (!cached) {
+    cached = passthrough(key);
+    motionComponentCache.set(key, cached);
+  }
+  return cached;
+}
+
 export const motion = new Proxy(
-  { create: (tag) => passthrough(typeof tag === "string" ? tag : "div") },
+  { create: (tag) => getCachedMotionComponent(tag) },
   {
     get(target, prop) {
       if (prop === "create" && typeof target.create === "function") {
         return target.create;
       }
-      if (typeof prop !== "string") return passthrough("div");
-      return passthrough(prop);
+      if (typeof prop !== "string") return getCachedMotionComponent("div");
+      return getCachedMotionComponent(prop);
     },
   }
 );
