@@ -1,0 +1,5 @@
+1. 
+
+I have an agentic llm website builder (that focuses on making landing pages). I want to add an option for users to be able to attach links to websites that the llm can then search and use as inspiration or use to take content from or follow the layout. can you make a plan for the implementation of it
+
+

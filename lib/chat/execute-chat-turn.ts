@@ -72,7 +72,7 @@ const TEXT_DELTA_FLUSH_MS = 40;
 const TEXT_DELTA_FLUSH_CHARS = 24;
 const TURN_EVENT_FLUSH_MS = 32;
 const TURN_EVENT_BATCH_SIZE = 32;
-const MAX_CHAT_STEPS_PER_TURN = 20;
+const MAX_CHAT_STEPS_PER_TURN = 40;
 
 function normalizeErrorMessage(
   value: unknown,

@@ -346,6 +346,51 @@ function detectRouteElements(indexContent: string): string[] {
   return routeElements;
 }
 
+/**
+ * Pulls structured `<Route path="..." element={<Component ...>}>` entries out
+ * of landing/index.tsx. Tolerates either prop order. Used to verify each
+ * planned page is actually wired into the router, not just imported.
+ */
+function parseRouteEntries(
+  indexContent: string
+): Array<{ path: string; component: string }> {
+  const entries: Array<{ path: string; component: string }> = [];
+  const seen = new Set<string>();
+  const push = (path: string, component: string) => {
+    const key = `${path}::${component}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    entries.push({ path, component });
+  };
+  const reA = /<Route\b[^>]*?\bpath=["']([^"']+)["'][^>]*?\belement=\{\s*<([A-Z][A-Za-z0-9_]*)/g;
+  let m: RegExpExecArray | null;
+  while ((m = reA.exec(indexContent)) !== null) push(m[1], m[2]);
+  const reB = /<Route\b[^>]*?\belement=\{\s*<([A-Z][A-Za-z0-9_]*)[^>]*?\bpath=["']([^"']+)["']/g;
+  while ((m = reB.exec(indexContent)) !== null) push(m[2], m[1]);
+  return entries;
+}
+
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * True iff the given Navbar source contains a Link/NavLink whose `to` prop
+ * targets the supplied route path. Accepts both string-literal and object
+ * forms (e.g. `to="/about"` or `to={{ pathname: "/about" }}`).
+ */
+function navbarHasLinkTo(navbarContent: string, routePath: string): boolean {
+  const escaped = escapeRegex(routePath);
+  const stringForm = new RegExp(
+    `<(?:Nav)?Link\\b[^>]*?\\bto=["']${escaped}["']`
+  );
+  if (stringForm.test(navbarContent)) return true;
+  const objectForm = new RegExp(
+    `<(?:Nav)?Link\\b[^>]*?\\bto=\\{\\s*\\{[^}]*?pathname:\\s*["']${escaped}["']`
+  );
+  return objectForm.test(navbarContent);
+}
+
 function countMatches(input: string, pattern: RegExp): number {
   return input.match(pattern)?.length ?? 0;
 }
@@ -533,6 +578,7 @@ function findFile(
 export async function validateCompleteness(params: {
   chatId: string;
   siteSpec?: string;
+  plannedPages?: Array<{ name: string; path: string }>;
 }): Promise<ValidationToolResult> {
   try {
     const files = await loadLatestSiteFiles(params.chatId);
@@ -832,6 +878,67 @@ export async function validateCompleteness(params: {
           message: "No <Route element={<Component/>}> definitions detected.",
           path: "landing/index.tsx",
         });
+      }
+    }
+
+    // Planned-page completeness: every page declared by the agent must exist
+    // as a file, be wired into <Routes> with the right component, and (where
+    // appropriate) be linked from Navbar so users can actually reach it.
+    if (Array.isArray(params.plannedPages) && params.plannedPages.length > 0) {
+      const routeEntries = indexFile
+        ? parseRouteEntries(indexFile.content)
+        : [];
+      for (const page of params.plannedPages) {
+        const pagePath = `landing/pages/${page.name}.tsx`;
+        const pageFile = findFile(files, pagePath);
+
+        // Home is already covered by MISSING_HOME_PAGE; don't duplicate.
+        if (!pageFile && page.name !== "Home") {
+          findings.push({
+            severity: "critical",
+            issueCode: "MISSING_PAGE_FILE",
+            message: `Planned page ${page.name} is missing its file ${pagePath}.`,
+            path: pagePath,
+            suggestedFix: `Create ${pagePath} via create_section and have it render the sections that belong to ${page.name}.`,
+          });
+        }
+
+        if (indexFile) {
+          const matched = routeEntries.find(
+            (r) => r.path === page.path && r.component === page.name
+          );
+          if (!matched) {
+            const samePath = routeEntries.find((r) => r.path === page.path);
+            const sameComp = routeEntries.find((r) => r.component === page.name);
+            let detail = "";
+            if (samePath) {
+              detail = ` Found <Route path="${page.path}" element={<${samePath.component} />}>; expected element={<${page.name} />}.`;
+            } else if (sameComp) {
+              detail = ` Found <Route element={<${page.name} />}> with path="${sameComp.path}"; expected path="${page.path}".`;
+            }
+            findings.push({
+              severity: "critical",
+              issueCode: "MISSING_ROUTE_ENTRY",
+              message: `landing/index.tsx is missing <Route path="${page.path}" element={<${page.name} />}> for planned page ${page.name}.${detail}`,
+              path: "landing/index.tsx",
+              suggestedFix: `Add <Route path="${page.path}" element={<${page.name} />} /> inside <Routes> and import ${page.name} from "./pages/${page.name}".`,
+            });
+          }
+        }
+
+        // Home is typically reached via the brand/logo Link to "/", not a
+        // dedicated nav entry — skip the warning for it to avoid noise.
+        if (navbar && page.name !== "Home") {
+          if (!navbarHasLinkTo(navbar.content, page.path)) {
+            findings.push({
+              severity: "warning",
+              issueCode: "MISSING_NAV_LINK",
+              message: `Navbar (landing/sections/Navbar.tsx) does not appear to link to planned page ${page.name} (path "${page.path}").`,
+              path: "landing/sections/Navbar.tsx",
+              suggestedFix: `Add <Link to="${page.path}">${page.name}</Link> (or NavLink) to Navbar so users can discover ${page.name}.`,
+            });
+          }
+        }
       }
     }
 

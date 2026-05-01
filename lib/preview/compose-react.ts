@@ -138,6 +138,61 @@ async function collectFileMap(params: {
   }
 }
 
+const MAX_MISSING_LANDING_STUBS = 30;
+
+/**
+ * When a page imports `../sections/Foo` but `landing/sections/Foo.tsx` was
+ * never stored (partial generations, step limits), esbuild would fail the
+ * whole preview. Inject minimal placeholder modules so the bundle builds and
+ * the iframe shows an explicit "missing file" panel instead of a hard error.
+ */
+function injectMissingLandingImportStubs(fileMap: Map<string, string>): string[] {
+  const injected: string[] = [];
+  let guard = 0;
+  const keysSnapshot = () => [...fileMap.keys()];
+
+  for (let round = 0; round < 5 && guard < MAX_MISSING_LANDING_STUBS; round++) {
+    let addedThisRound = 0;
+    for (const fromPath of keysSnapshot()) {
+      if (!fromPath.startsWith("landing/")) continue;
+      const content = fileMap.get(fromPath);
+      if (!content) continue;
+      for (const spec of extractImportPaths(content)) {
+        const resolved = resolveImportPath(fromPath, spec);
+        if (!resolved || !resolved.startsWith("landing/")) continue;
+        if (fileMap.has(resolved)) continue;
+        if (guard >= MAX_MISSING_LANDING_STUBS) break;
+        fileMap.set(resolved, buildMissingLandingSectionStub(resolved));
+        injected.push(resolved);
+        guard += 1;
+        addedThisRound += 1;
+      }
+    }
+    if (addedThisRound === 0) break;
+  }
+
+  return injected;
+}
+
+function buildMissingLandingSectionStub(resolvedPath: string): string {
+  const shortLit = JSON.stringify(resolvedPath.replace(/^landing\//, ""));
+  return `export default function __MissingSectionPreviewStub() {
+  return (
+    <section
+      className="mx-auto max-w-3xl rounded-lg border border-amber-300 bg-amber-50 p-6 text-amber-950"
+      data-missing-landing-file={${shortLit}}
+    >
+      <p className="text-sm font-semibold">Missing source file (preview placeholder)</p>
+      <p className="mt-1 break-all font-mono text-xs opacity-90">{${shortLit}}</p>
+      <p className="mt-3 text-xs leading-relaxed text-amber-900/80">
+        A module imports this path, but no file exists for this revision. Regenerate this file or fix the import.
+      </p>
+    </section>
+  );
+}
+`;
+}
+
 const TAILWIND_CDN =
   '<script src="https://cdn.tailwindcss.com"></script>';
 
@@ -773,55 +828,403 @@ const PREVIEW_SHIM_NAMESPACE = "preview-shim";
 
 function getPreviewShimModule(specifier: string): string | null {
   if (specifier === "react-router-dom") {
+    // Real (small) HashRouter implementation. The published/preview iframe is
+    // served at a single URL (/p/<token> or /s/<publicId>) plus a single JS
+    // bundle, so true path-based routing requires deploy-host catch-all
+    // routes that we do not have yet. Hash routing works on a single URL
+    // and is enough for the AI builder to produce navigable multi-page
+    // sites. BrowserRouter / MemoryRouter are aliased to HashRouter so
+    // legacy generations keep working; swapping in a real BrowserRouter
+    // later is local to this file (see plan: future work section).
     return `
 import React from "react";
 
-const Fragment = React.Fragment;
+function parseHashLocation() {
+  if (typeof window === "undefined") {
+    return { pathname: "/", search: "", hash: "" };
+  }
+  const raw = window.location.hash || "";
+  let stripped = raw.startsWith("#") ? raw.slice(1) : raw;
+  if (!stripped.startsWith("/")) stripped = "/" + stripped;
+  let pathname = stripped;
+  let search = "";
+  let inner = "";
+  const hashIdx = pathname.indexOf("#");
+  if (hashIdx >= 0) {
+    inner = pathname.slice(hashIdx);
+    pathname = pathname.slice(0, hashIdx);
+  }
+  const qIdx = pathname.indexOf("?");
+  if (qIdx >= 0) {
+    search = pathname.slice(qIdx);
+    pathname = pathname.slice(0, qIdx);
+  }
+  if (!pathname) pathname = "/";
+  return { pathname, search, hash: inner };
+}
+
+function locationToPath(to) {
+  if (to == null) return "/";
+  if (typeof to === "string") {
+    return to.startsWith("/") || to.startsWith("?") || to.startsWith("#")
+      ? to
+      : "/" + to;
+  }
+  let p = to.pathname || "/";
+  if (!p.startsWith("/")) p = "/" + p;
+  const s = to.search
+    ? to.search.startsWith("?")
+      ? to.search
+      : "?" + to.search
+    : "";
+  const h = to.hash
+    ? to.hash.startsWith("#")
+      ? to.hash
+      : "#" + to.hash
+    : "";
+  return p + s + h;
+}
+
+const RouterContext = React.createContext(null);
+const RouteContext = React.createContext({ params: {} });
+
+function normalizePathname(p) {
+  if (!p) return "/";
+  if (p.length > 1 && p.endsWith("/")) return p.slice(0, -1);
+  return p;
+}
+
+function matchPath(pattern, pathname) {
+  if (pattern == null) return null;
+  if (pattern === "*" || pattern === "/*") return { params: { "*": pathname.replace(/^\\//, "") } };
+  const pat = normalizePathname(pattern);
+  const pn = normalizePathname(pathname);
+  const patParts = pat.split("/").filter(Boolean);
+  const pnParts = pn.split("/").filter(Boolean);
+  const hasWildcard = patParts.length > 0 && patParts[patParts.length - 1] === "*";
+  const fixed = hasWildcard ? patParts.slice(0, -1) : patParts;
+  if (!hasWildcard && pnParts.length !== fixed.length) return null;
+  if (hasWildcard && pnParts.length < fixed.length) return null;
+  const params = {};
+  for (let i = 0; i < fixed.length; i++) {
+    const a = fixed[i];
+    const b = pnParts[i];
+    if (a.startsWith(":")) {
+      try { params[a.slice(1)] = decodeURIComponent(b); }
+      catch { params[a.slice(1)] = b; }
+    } else if (a !== b) {
+      return null;
+    }
+  }
+  if (hasWildcard) {
+    params["*"] = pnParts.slice(fixed.length).join("/");
+  }
+  return { params };
+}
+
+function dispatchRouteChange() {
+  if (typeof window === "undefined") return;
+  try { window.dispatchEvent(new Event("hashchange")); }
+  catch { /* older envs */ }
+}
 
 export function HashRouter({ children }) {
-  return React.createElement(Fragment, null, children);
+  const [location, setLocation] = React.useState(parseHashLocation);
+
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    const h = window.location.hash;
+    if (!h || h === "#") {
+      const url =
+        window.location.pathname + window.location.search + "#/";
+      try { window.history.replaceState(null, "", url); } catch {}
+      setLocation(parseHashLocation());
+    }
+    const update = () => setLocation(parseHashLocation());
+    window.addEventListener("hashchange", update);
+    window.addEventListener("popstate", update);
+    return () => {
+      window.removeEventListener("hashchange", update);
+      window.removeEventListener("popstate", update);
+    };
+  }, []);
+
+  const navigate = React.useCallback((to, opts) => {
+    if (typeof window === "undefined") return;
+    if (typeof to === "number") {
+      try { window.history.go(to); } catch {}
+      return;
+    }
+    const dest = locationToPath(to);
+    const newHash = "#" + (dest.startsWith("/") ? dest : "/" + dest);
+    if (opts && opts.replace) {
+      const url =
+        window.location.pathname + window.location.search + newHash;
+      try { window.history.replaceState(null, "", url); } catch {}
+      setLocation(parseHashLocation());
+    } else {
+      window.location.hash = newHash;
+    }
+  }, []);
+
+  // Smart section scroll: when navigating to "/?scrollTo=hero" (used by Navbar
+  // section-links from non-Home pages), find the matching id after the route
+  // mounts and smooth-scroll to it, then strip the param so refresh/back
+  // doesn't re-trigger.
+  React.useEffect(() => {
+    if (typeof window === "undefined" || typeof document === "undefined") return;
+    if (!location.search) return;
+    let sp;
+    try { sp = new URLSearchParams(location.search); }
+    catch { return; }
+    const target = sp.get("scrollTo");
+    if (!target) return;
+    let cancelled = false;
+    let tries = 0;
+    const maxTries = 25;
+    const tryScroll = () => {
+      if (cancelled) return;
+      const el = document.getElementById(target);
+      if (el) {
+        try { el.scrollIntoView({ behavior: "smooth", block: "start" }); }
+        catch { try { el.scrollIntoView(); } catch {} }
+        sp.delete("scrollTo");
+        const cleanedSearch = sp.toString();
+        const newHash =
+          "#" + location.pathname +
+          (cleanedSearch ? "?" + cleanedSearch : "") +
+          (location.hash || "");
+        const url =
+          window.location.pathname + window.location.search + newHash;
+        try { window.history.replaceState(null, "", url); } catch {}
+        setLocation(parseHashLocation());
+        return;
+      }
+      if (++tries < maxTries) {
+        setTimeout(tryScroll, 80);
+      }
+    };
+    tryScroll();
+    return () => { cancelled = true; };
+  }, [location.pathname, location.search]);
+
+  const ctx = React.useMemo(() => ({ location, navigate }), [location, navigate]);
+
+  return React.createElement(RouterContext.Provider, { value: ctx }, children);
 }
 
-export function BrowserRouter({ children }) {
-  return React.createElement(Fragment, null, children);
-}
-
-export function MemoryRouter({ children }) {
-  return React.createElement(Fragment, null, children);
-}
+export const BrowserRouter = HashRouter;
+export const MemoryRouter = HashRouter;
 
 export function Routes({ children }) {
-  return React.createElement(Fragment, null, children);
+  const ctx = React.useContext(RouterContext);
+  const pathname = ctx ? ctx.location.pathname : "/";
+  let matchedElement = null;
+  let matchedParams = null;
+  let fallback = null;
+  React.Children.forEach(children, (child) => {
+    if (matchedElement !== null || !React.isValidElement(child)) return;
+    const props = child.props || {};
+    const path = props.path;
+    const element = props.element != null ? props.element : (props.children != null ? props.children : null);
+    if (path == null) return;
+    if (path === "*" || path === "/*") {
+      if (!fallback) fallback = { element, params: { "*": pathname.replace(/^\\//, "") } };
+      return;
+    }
+    const m = matchPath(path, pathname);
+    if (m) {
+      matchedElement = element;
+      matchedParams = m.params;
+    }
+  });
+  if (matchedElement === null && fallback) {
+    matchedElement = fallback.element;
+    matchedParams = fallback.params;
+  }
+  if (matchedElement === null) return null;
+  return React.createElement(
+    RouteContext.Provider,
+    { value: { params: matchedParams || {} } },
+    matchedElement
+  );
 }
 
 export function Route({ element = null, children = null }) {
-  return element ?? children ?? null;
+  // Marker component. Real matching happens in <Routes>. If rendered
+  // standalone, fall back to its element so content isn't silently dropped.
+  return element != null ? element : children;
 }
 
 export function Outlet() {
   return null;
 }
 
-export function Link({ to = "#", children, ...props }) {
-  const href = typeof to === "string" ? to : "#";
-  return React.createElement("a", { ...props, href }, children);
+function isModifiedClick(event) {
+  return (
+    event.defaultPrevented ||
+    (event.button != null && event.button !== 0) ||
+    event.metaKey ||
+    event.ctrlKey ||
+    event.shiftKey ||
+    event.altKey
+  );
 }
 
-export function NavLink({ to = "#", children, ...props }) {
-  const href = typeof to === "string" ? to : "#";
-  return React.createElement("a", { ...props, href }, children);
+function pathPart(to) {
+  const p = locationToPath(to);
+  return p.split("?")[0].split("#")[0] || "/";
+}
+
+export function Link({ to = "/", replace = false, onClick, target, children, ...rest }) {
+  const ctx = React.useContext(RouterContext);
+  const dest = locationToPath(to);
+  const href = "#" + (dest.startsWith("/") ? dest : "/" + dest);
+  const handleClick = (e) => {
+    if (typeof onClick === "function") onClick(e);
+    if (e.defaultPrevented) return;
+    if (target && target !== "_self") return;
+    if (isModifiedClick(e)) return;
+    if (!ctx) return;
+    e.preventDefault();
+    ctx.navigate(to, { replace });
+  };
+  return React.createElement(
+    "a",
+    { ...rest, href, target, onClick: handleClick },
+    children
+  );
+}
+
+export function NavLink({
+  to = "/",
+  replace = false,
+  end = false,
+  onClick,
+  target,
+  className,
+  style,
+  children,
+  ...rest
+}) {
+  const ctx = React.useContext(RouterContext);
+  const dest = locationToPath(to);
+  const href = "#" + (dest.startsWith("/") ? dest : "/" + dest);
+  const currentPath = normalizePathname(ctx ? ctx.location.pathname : "/");
+  const destPath = normalizePathname(pathPart(to));
+  const isActive = end
+    ? currentPath === destPath
+    : currentPath === destPath ||
+      (destPath !== "/" && currentPath.startsWith(destPath + "/"));
+
+  const cls = typeof className === "function" ? className({ isActive }) : className;
+  const sty = typeof style === "function" ? style({ isActive }) : style;
+  const ariaCurrent = isActive ? "page" : undefined;
+
+  const handleClick = (e) => {
+    if (typeof onClick === "function") onClick(e);
+    if (e.defaultPrevented) return;
+    if (target && target !== "_self") return;
+    if (isModifiedClick(e)) return;
+    if (!ctx) return;
+    e.preventDefault();
+    ctx.navigate(to, { replace });
+  };
+
+  let resolvedChildren = children;
+  if (typeof children === "function") {
+    resolvedChildren = children({ isActive });
+  }
+
+  return React.createElement(
+    "a",
+    {
+      ...rest,
+      href,
+      target,
+      onClick: handleClick,
+      className: cls,
+      style: sty,
+      "aria-current": ariaCurrent,
+    },
+    resolvedChildren
+  );
+}
+
+export function Navigate({ to, replace = true }) {
+  const ctx = React.useContext(RouterContext);
+  React.useEffect(() => {
+    if (!ctx) return;
+    ctx.navigate(to, { replace });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return null;
 }
 
 export function useLocation() {
-  return { pathname: "/", search: "", hash: "", state: null, key: "preview" };
+  const ctx = React.useContext(RouterContext);
+  if (!ctx) {
+    return { pathname: "/", search: "", hash: "", state: null, key: "default" };
+  }
+  return { ...ctx.location, state: null, key: "default" };
 }
 
 export function useNavigate() {
-  return () => {};
+  const ctx = React.useContext(RouterContext);
+  return ctx ? ctx.navigate : () => {};
 }
 
 export function useParams() {
-  return {};
+  const route = React.useContext(RouteContext);
+  return route ? route.params : {};
+}
+
+export function useSearchParams() {
+  const ctx = React.useContext(RouterContext);
+  const search = ctx ? ctx.location.search : "";
+  const params = new URLSearchParams(search);
+  const setParams = React.useCallback((next, opts) => {
+    if (!ctx) return;
+    const sp =
+      typeof next === "function"
+        ? next(new URLSearchParams(ctx.location.search))
+        : next instanceof URLSearchParams
+        ? next
+        : new URLSearchParams(next);
+    const newSearch = sp.toString();
+    ctx.navigate(
+      {
+        pathname: ctx.location.pathname,
+        search: newSearch ? "?" + newSearch : "",
+        hash: ctx.location.hash,
+      },
+      opts
+    );
+  }, [ctx]);
+  return [params, setParams];
+}
+
+export function useMatch(pattern) {
+  const ctx = React.useContext(RouterContext);
+  if (!ctx) return null;
+  const m = matchPath(typeof pattern === "string" ? pattern : (pattern && pattern.path) || "", ctx.location.pathname);
+  return m ? { params: m.params, pathname: ctx.location.pathname, pattern: { path: pattern } } : null;
+}
+
+export function useResolvedPath(to) {
+  const dest = pathPart(to);
+  return { pathname: dest, search: "", hash: "" };
+}
+
+export function useHref(to) {
+  const dest = locationToPath(to);
+  return "#" + (dest.startsWith("/") ? dest : "/" + dest);
+}
+
+export { matchPath };
+
+export function matchRoutes() {
+  return null;
 }
 `.trim();
   }
@@ -1222,6 +1625,13 @@ export async function getPreviewBrowserBundle(params: {
       depth: 0,
       allFiles: allFilesWithRuntime,
     });
+    const stubbedMissing = injectMissingLandingImportStubs(fileMap);
+    if (stubbedMissing.length > 0) {
+      bundleLog(tag, "filemap-missing-stubs", {
+        count: stubbedMissing.length,
+        paths: stubbedMissing,
+      });
+    }
     bundleLog(tag, "filemap-build:ok", {
       ms: Date.now() - phaseStart,
       fileCount: fileMap.size,

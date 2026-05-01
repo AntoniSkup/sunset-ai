@@ -746,6 +746,37 @@ const createSiteSchema = z.object({
     .describe(
       "High-level description of the site (brand, goal, audience)"
     ),
+  plannedPages: z
+    .array(
+      z.object({
+        name: z
+          .string()
+          .min(1)
+          .regex(
+            /^[A-Z][A-Za-z0-9]*$/,
+            "name must be PascalCase like Home, About, Contact"
+          )
+          .describe(
+            "PascalCase page component name. Becomes both the import name and the file name (landing/pages/<Name>.tsx)."
+          ),
+        path: z
+          .string()
+          .min(1)
+          .regex(
+            /^\/[a-z0-9\-\/:]*$/,
+            "path must start with / and use lowercase kebab segments (e.g. /, /about, /case-studies/:slug)"
+          )
+          .describe(
+            "Route path matched by react-router-dom. Use '/' for Home and lowercase kebab paths for others."
+          ),
+      })
+    )
+    .min(1)
+    .max(12)
+    .optional()
+    .describe(
+      "Authoritative list of pages this site will have. Drives the <Routes> table in landing/index.tsx and is later passed to validate_completeness. If omitted, the model defaults to a single-page site with [{name: 'Home', path: '/'}]."
+    ),
 });
 
 const createSectionSchema = z.object({
@@ -784,6 +815,31 @@ const validateCompletenessSchema = z.object({
     .optional()
     .describe(
       "Optional concise statement of what the site should include (pages, sections, key requirements). Used by LLM semantic completeness validation."
+    ),
+  plannedPages: z
+    .array(
+      z.object({
+        name: z
+          .string()
+          .min(1)
+          .regex(
+            /^[A-Z][A-Za-z0-9]*$/,
+            "name must be PascalCase like Home, About, Contact"
+          ),
+        path: z
+          .string()
+          .min(1)
+          .regex(
+            /^\/[a-z0-9\-\/:]*$/,
+            "path must start with / and use lowercase kebab segments"
+          ),
+      })
+    )
+    .min(1)
+    .max(12)
+    .optional()
+    .describe(
+      "The same authoritative page list passed to create_site (PascalCase name + route path). Validation will fail if any planned page is missing as a file, missing from <Routes> in landing/index.tsx, or missing from Navbar links."
     ),
 });
 
@@ -841,7 +897,7 @@ const resolveImageSlotsSchema = z.object({
 });
 
 const createSiteToolExecute = async (
-  { userRequest }: z.infer<typeof createSiteSchema>,
+  { userRequest, plannedPages }: z.infer<typeof createSiteSchema>,
   chatId: string,
   userId: number,
   deferredChatTurnBilling?: boolean,
@@ -851,13 +907,32 @@ const createSiteToolExecute = async (
     return { success: false, error: "Chat ID is required" };
   }
 
+  const normalizedPages =
+    Array.isArray(plannedPages) && plannedPages.length > 0
+      ? plannedPages
+      : [{ name: "Home", path: "/" }];
+  const hasHome = normalizedPages.some((p) => p.path === "/");
+  const finalPages = hasHome
+    ? normalizedPages
+    : [{ name: "Home", path: "/" }, ...normalizedPages];
+
+  const importLines = finalPages
+    .map((p) => `import ${p.name} from "./pages/${p.name}";`)
+    .join("\n");
+  const routeLines = finalPages
+    .map((p) => `<Route path="${p.path}" element={<${p.name} />} />`)
+    .join("\n");
+  const pagesSummary = finalPages
+    .map((p) => `${p.name} -> ${p.path}`)
+    .join(", ");
+
   const result = await generateAndSaveSingleFile({
     chatId,
     userId,
     destination: "landing/index.tsx",
     userRequest:
       userRequest +
-      "\n\nCreate the entry React component for the site (landing/index.tsx) as a WIREFRAME ONLY.\n\nHard requirements:\n- Use React Router: import { HashRouter, Routes, Route } from 'react-router-dom'. Wrap the whole app in <HashRouter>.\n- Put page content inside <Routes>. Only create Route entries for pages that are actually part of the current site plan. If only Home exists, include only <Route path=\"/\" element={<Home />} />.\n- Import and render ONLY: Navbar from './sections/Navbar', Footer from './sections/Footer', and the page components that really exist under './pages/...'. Do not import About, Contact, or any other page unless that page is part of the current site plan.\n- Import { ensureThemeFonts } from './theme' and call ensureThemeFonts() once near the top-level so Google Fonts/theme font links are loaded globally and centrally.\n- Structure: <HashRouter><div><Navbar /><main><Routes>...</Routes></main><Footer /></div></HashRouter>.\n- Do NOT use window.location.hash or manual switch; use HashRouter and Routes only.\n- Do NOT output <!DOCTYPE html>, <html>, <head>, or <body>; the app wraps your component.\n- Use Tailwind utility classes (className).",
+      `\n\nCreate the entry React component for the site (landing/index.tsx) as a WIREFRAME ONLY.\n\nPlanned pages for this site (authoritative — do not invent extra pages, do not omit any of these): ${pagesSummary}.\n\nHard requirements:\n- Use React Router: import { HashRouter, Routes, Route } from 'react-router-dom'. Wrap the whole app in <HashRouter>.\n- Put page content inside <Routes>. Emit exactly one <Route> per planned page above, using the listed paths. Use path="/" for Home and the listed lowercase kebab paths for the others.\n- Import every planned page from './pages/<Name>' and reference it from its <Route>. The matching landing/pages/<Name>.tsx files will be created by later create_section calls; import them now even if the file does not yet exist.\n- Import Navbar from './sections/Navbar' and Footer from './sections/Footer'. Do not import any other pages or sections beyond Navbar, Footer, and the planned pages.\n- Import { ensureThemeFonts } from './theme' and call ensureThemeFonts() once near the top-level so Google Fonts/theme font links are loaded globally and centrally.\n- Structure: <HashRouter><div><Navbar /><main><Routes>...</Routes></main><Footer /></div></HashRouter>.\n- Do NOT use window.location.hash or manual switch; use HashRouter and Routes only. Cross-page navigation is real: <Link to="/about"> works in preview and published builds.\n- Do NOT output <!DOCTYPE html>, <html>, <head>, or <body>; the app wraps your component.\n- Use Tailwind utility classes (className).\n\nReference imports / routes you must emit (exact names; you may reformat the JSX as long as the imports and <Route> entries are equivalent):\n\nImports:\n${importLines}\n\nRoutes:\n<Routes>\n${routeLines}\n</Routes>`,
     isModification: false,
     deferredChatTurnBilling,
     copyLanguage,
@@ -966,6 +1041,7 @@ const validateCompletenessToolExecute = async (
   return validateCompleteness({
     chatId,
     siteSpec: input?.siteSpec,
+    plannedPages: input?.plannedPages,
   });
 };
 
