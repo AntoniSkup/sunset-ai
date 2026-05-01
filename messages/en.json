@@ -552,6 +552,11 @@
     "memberRemoved": "Team member removed.",
     "invitationSent": "Invitation sent."
   },
+  "notFound": {
+    "title": "Page not found",
+    "description": "The page you are looking for might have been removed, had its name changed, or is temporarily unavailable.",
+    "backHome": "Back to home"
+  },
   "legal": {
     "nav": {
       "privacy": "Privacy",

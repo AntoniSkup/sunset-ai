@@ -552,6 +552,11 @@
     "memberRemoved": "Członek zespołu został usunięty.",
     "invitationSent": "Zaproszenie zostało wysłane."
   },
+  "notFound": {
+    "title": "Nie znaleziono strony",
+    "description": "Strona mogła zostać usunięta, zmieniono jej adres lub jest chwilowo niedostępna.",
+    "backHome": "Wróć na stronę główną"
+  },
   "legal": {
     "nav": {
       "privacy": "Prywatność",
