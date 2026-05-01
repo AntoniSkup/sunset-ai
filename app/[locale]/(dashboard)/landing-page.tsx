@@ -500,7 +500,9 @@ export default function LandingPage() {
                   <button
                     key={key}
                     type="button"
-                    onClick={() => handleSuggestion(tSuggestions(`${key}.prompt`))}
+                    onClick={() =>
+                      handleSuggestion(tSuggestions(`${key}.prompt`))
+                    }
                     className="group inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white/80 px-3.5 py-1.5 text-xs font-medium text-gray-700 backdrop-blur transition-[color,border-color,transform] duration-150 hover:-translate-y-0.5 hover:border-gray-900 hover:text-gray-900 active:translate-y-0"
                   >
                     <SparklesIcon className="h-3 w-3 text-gray-400 transition-colors group-hover:text-[#ff6313]" />
@@ -609,7 +611,9 @@ export default function LandingPage() {
 
         <footer className="border-t border-gray-100 py-8 text-xs text-gray-400">
           <div className="flex flex-col items-center justify-between gap-4 sm:flex-row">
-            <span>{tFooter("copyright", { year: new Date().getFullYear() })}</span>
+            <span>
+              {tFooter("copyright", { year: new Date().getFullYear() })}
+            </span>
             <div className="flex flex-wrap items-center justify-center gap-4">
               <Link href="/pricing" className="hover:text-gray-700">
                 {tFooter("pricing")}

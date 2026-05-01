@@ -62,11 +62,7 @@ type StartAttachment = {
 
 type TimeTranslator = ReturnType<typeof useTranslations<"builder.time">>;
 
-function getRelativeTime(
-  dateStr: string,
-  t: TimeTranslator,
-  locale: string
-) {
+function getRelativeTime(dateStr: string, t: TimeTranslator, locale: string) {
   const date = new Date(dateStr);
   const now = new Date();
   const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
@@ -690,9 +686,7 @@ export default function StartPage() {
                         }
                       }
                     }}
-                    placeholder={
-                      isFocused ? t("placeholderFocused") : ""
-                    }
+                    placeholder={isFocused ? t("placeholderFocused") : ""}
                     disabled={isLoading}
                     minRows={3}
                     maxRows={10}
@@ -796,7 +790,9 @@ export default function StartPage() {
                   <button
                     key={key}
                     type="button"
-                    onClick={() => handleSuggestion(tSuggestions(`${key}.prompt`))}
+                    onClick={() =>
+                      handleSuggestion(tSuggestions(`${key}.prompt`))
+                    }
                     className="group inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white/80 px-3.5 py-1.5 text-xs font-medium text-gray-700 backdrop-blur transition-[color,border-color,transform] duration-150 hover:-translate-y-0.5 hover:border-gray-900 hover:text-gray-900 active:translate-y-0"
                   >
                     <SparklesIcon className="h-3 w-3 text-gray-400 transition-colors group-hover:text-[#ff6313]" />
@@ -950,7 +946,9 @@ export default function StartPage() {
 
         <footer className="border-t border-gray-100 py-8 text-xs text-gray-400">
           <div className="flex flex-col items-center justify-between gap-3 sm:flex-row">
-            <span>{t("footerCopyright", { year: new Date().getFullYear() })}</span>
+            <span>
+              {t("footerCopyright", { year: new Date().getFullYear() })}
+            </span>
             <div className="flex items-center gap-4">
               <Link href="/pricing" className="hover:text-gray-700">
                 {t("footerPricing")}

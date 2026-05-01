@@ -7,6 +7,7 @@ import { getUser, getTeamForUser } from "@/lib/db/queries";
 
 import { SWRConfig } from "swr";
 import { Analytics } from "@vercel/analytics/next";
+import NextTopLoader from "nextjs-toploader";
 import { Toaster } from "sonner";
 import { absoluteUrl, siteConfig } from "@/lib/seo/site";
 import { SpeedInsights } from "@vercel/speed-insights/next";
@@ -125,6 +126,14 @@ export default async function RootLayout({
       className={`${ibmPlexSans.variable} bg-white dark:bg-gray-950 text-black dark:text-white`}
     >
       <body className={`${ibmPlexSans.className} min-h-[100dvh] bg-[#f8fafc]`}>
+        <NextTopLoader
+          color="#ff6313"
+          height={3}
+          showSpinner={false}
+          shadow={false}
+          easing="ease"
+          speed={250}
+        />
         <script
           type="application/ld+json"
           suppressHydrationWarning
