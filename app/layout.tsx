@@ -9,6 +9,7 @@ import { SWRConfig } from "swr";
 import { Analytics } from "@vercel/analytics/next";
 import { Toaster } from "sonner";
 import { absoluteUrl, siteConfig } from "@/lib/seo/site";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 const ibmPlexSans = IBM_Plex_Sans({
   subsets: ["latin"],
@@ -155,6 +156,7 @@ export default async function RootLayout({
           {children}
         </SWRConfig>
         <Toaster richColors closeButton />
+        <SpeedInsights />
         {gaId ? (
           <>
             <Script
