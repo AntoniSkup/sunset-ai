@@ -29,19 +29,55 @@ type CreditsSectionProps = {
  * Shows a single line "X + Y left" (subscription+topup, then daily) with a
  * two-segment progress bar. Designed to fit ~256px wide containers.
  *
- * Reads from /api/billing via SWR; renders nothing until data is loaded so
- * the parent menu doesn't flash.
+ * Reads from /api/billing via SWR. While loading we render a skeleton of
+ * identical height so the parent menu reserves the slot and doesn't reflow
+ * the moment data arrives. On auth/fetch errors (e.g. signed-out viewer) we
+ * render nothing so the menu isn't haunted by a permanent shimmer.
  */
 export function CreditsSection({
   href = "/dashboard",
   className = "block px-4 py-3 hover:bg-gray-50 rounded-md transition-colors -mx-1",
 }: CreditsSectionProps) {
-  const { data: billing } = useSWR<BillingApiResponse>("/api/billing", fetcher);
-  // Guard against both the loading state (`billing` undefined) and any
-  // unexpected payload shape (e.g. an error body that slipped past the
-  // fetcher) so an unauthenticated/transient failure can't crash the whole
-  // tree by trying to destructure `daily` off of `undefined`.
-  if (!billing?.credits) return null;
+  const { data: billing, error, isLoading } = useSWR<BillingApiResponse>(
+    "/api/billing",
+    fetcher
+  );
+
+  // Auth failure / fetch error: render nothing so the dropdown isn't
+  // permanently haunted by a loading shimmer for unauthenticated viewers.
+  if (error) return null;
+
+  // Initial load: render a structurally identical skeleton so the parent
+  // menu reserves the right height and doesn't reflow when data arrives.
+  if (isLoading || !billing) {
+    return (
+      <Link
+        href={href}
+        className={className}
+        aria-busy="true"
+        aria-live="polite"
+      >
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-sm font-medium text-gray-900">Credits</span>
+          <span className="flex items-center gap-0.5">
+            <span className="inline-block h-3.5 w-14 rounded bg-gray-200 animate-pulse" />
+            <ChevronRightIcon className="h-4 w-4 text-gray-300" />
+          </span>
+        </div>
+        <div className="space-y-1.5 mb-2">
+          <div className="h-3 w-full rounded-full bg-gray-200 animate-pulse" />
+        </div>
+        <p className="flex items-center gap-1.5 text-xs text-gray-500 mt-2">
+          <span className="size-1.5 rounded-full bg-gray-400" />
+          Daily credits reset at midnight UTC
+        </p>
+      </Link>
+    );
+  }
+
+  // Successful response with an unexpected shape (no `credits` key): render
+  // nothing rather than crash on the destructure below.
+  if (!billing.credits) return null;
 
   const { daily, monthly, topup } = billing.credits;
 
