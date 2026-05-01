@@ -1,27 +1,35 @@
 import type { ReactNode } from "react";
 
-type NotFoundShellProps = {
+type StatusPageShellProps = {
+  /** Small eyebrow above the title, e.g. "404" or "500". */
+  eyebrow?: ReactNode;
   title: string;
   description: string;
   /** Wrapped logo link (e.g. next-intl `Link` or `next/link`) */
   headerLogo: ReactNode;
   /** Primary nav action, typically “Back to home” (matches legal layout CTA). */
   headerAction: ReactNode;
+  /** Optional buttons rendered under the description (e.g. "Try again"). */
+  bodyActions?: ReactNode;
   /** e.g. `LanguageSwitcher` on localized surfaces */
   footerExtra?: ReactNode;
 };
 
 /**
- * Marketing-style 404 chrome aligned with `app/[locale]/(dashboard)/(legal)/layout.tsx`
- * (background wash, sticky header, footer).
+ * Marketing-style status-page chrome aligned with
+ * `app/[locale]/(dashboard)/(legal)/layout.tsx` (background wash, sticky
+ * header, footer). Used for 404 (`not-found.tsx`) and runtime errors
+ * (`error.tsx`).
  */
-export function NotFoundShell({
+export function StatusPageShell({
+  eyebrow,
   title,
   description,
   headerLogo,
   headerAction,
+  bodyActions,
   footerExtra,
-}: NotFoundShellProps) {
+}: StatusPageShellProps) {
   const year = new Date().getFullYear();
 
   return (
@@ -37,15 +45,22 @@ export function NotFoundShell({
 
       <main className="relative z-10 flex flex-1 flex-col items-center justify-center px-4 py-12 text-center sm:px-6">
         <div className="mx-auto flex w-full max-w-lg flex-col items-center">
-          <p className="mb-3 text-sm font-semibold uppercase tracking-[0.2em] text-orange-600">
-            404
-          </p>
+          {eyebrow ? (
+            <p className="mb-3 text-sm font-semibold uppercase tracking-[0.2em] text-orange-600">
+              {eyebrow}
+            </p>
+          ) : null}
           <h1 className="text-balance text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">
             {title}
           </h1>
           <p className="mt-4 max-w-md text-pretty text-base leading-relaxed text-gray-600">
             {description}
           </p>
+          {bodyActions ? (
+            <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+              {bodyActions}
+            </div>
+          ) : null}
         </div>
       </main>
 

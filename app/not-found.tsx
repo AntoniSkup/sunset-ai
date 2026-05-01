@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { NotFoundShell } from "@/components/not-found-shell";
+import { StatusPageShell } from "@/components/status-page-shell";
 
 /**
  * Fallback for URLs the i18n middleware does not associate with a locale
@@ -7,7 +7,8 @@ import { NotFoundShell } from "@/components/not-found-shell";
  */
 export default function NotFound() {
   return (
-    <NotFoundShell
+    <StatusPageShell
+      eyebrow="404"
       title="Page not found"
       description="The page you are looking for might have been removed, had its name changed, or is temporarily unavailable."
       headerLogo={

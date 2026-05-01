@@ -557,6 +557,12 @@
     "description": "The page you are looking for might have been removed, had its name changed, or is temporarily unavailable.",
     "backHome": "Back to home"
   },
+  "errorBoundary": {
+    "title": "Something went wrong",
+    "description": "An unexpected error occurred while loading this page. You can try again, or head back to safety.",
+    "tryAgain": "Try again",
+    "backHome": "Back to home"
+  },
   "legal": {
     "nav": {
       "privacy": "Privacy",

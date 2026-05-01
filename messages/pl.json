@@ -557,6 +557,12 @@
     "description": "Strona mogła zostać usunięta, zmieniono jej adres lub jest chwilowo niedostępna.",
     "backHome": "Wróć na stronę główną"
   },
+  "errorBoundary": {
+    "title": "Coś poszło nie tak",
+    "description": "Podczas ładowania tej strony wystąpił nieoczekiwany błąd. Możesz spróbować ponownie lub wrócić na stronę główną.",
+    "tryAgain": "Spróbuj ponownie",
+    "backHome": "Wróć na stronę główną"
+  },
   "legal": {
     "nav": {
       "privacy": "Prywatność",

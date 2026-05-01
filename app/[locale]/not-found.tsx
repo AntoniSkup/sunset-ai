@@ -1,14 +1,15 @@
 import { getTranslations } from "next-intl/server";
 import { Link } from "@/i18n/navigation";
 import { LanguageSwitcher } from "@/components/i18n/language-switcher";
-import { NotFoundShell } from "@/components/not-found-shell";
+import { StatusPageShell } from "@/components/status-page-shell";
 
 export default async function LocaleNotFound() {
   const t = await getTranslations("notFound");
   const tCommon = await getTranslations("common");
 
   return (
-    <NotFoundShell
+    <StatusPageShell
+      eyebrow="404"
       title={t("title")}
       description={t("description")}
       headerLogo={
