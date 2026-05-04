@@ -2,6 +2,7 @@ export const IMAGE_ASSET_COMPONENT_NAME = "ImageAsset";
 export const IMAGE_ASSET_RUNTIME_DIR = "landing/_runtime";
 export const IMAGE_ASSET_COMPONENT_PATH = `${IMAGE_ASSET_RUNTIME_DIR}/ImageAsset.tsx`;
 export const IMAGE_ASSET_MAP_PATH = `${IMAGE_ASSET_RUNTIME_DIR}/assets.ts`;
+export const FORM_RUNTIME_PATH = `${IMAGE_ASSET_RUNTIME_DIR}/forms.ts`;
 
 export const SITE_ASSET_ALLOWED_IMAGE_TYPES = [
   "image/jpeg",

@@ -36,6 +36,7 @@ export async function GET(
     chatId: verified.chatId,
     revisionNumber: verified.revisionNumber,
     basePath,
+    formSubmit: { mode: "preview", token },
   });
 
   return new NextResponse(html, {

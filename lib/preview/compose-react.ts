@@ -11,6 +11,7 @@ import {
 import {
   IMAGE_ASSET_COMPONENT_PATH,
   IMAGE_ASSET_MAP_PATH,
+  FORM_RUNTIME_PATH,
 } from "@/lib/site-assets/conventions";
 
 const ENTRY_PATH = "landing/index.tsx";
@@ -325,6 +326,235 @@ export default ImageAsset;
 `.trim();
 }
 
+/**
+ * Auto-intercept form submissions in AI-generated landing pages.
+ *
+ * Why a global `submit` listener instead of asking the LLM to import a
+ * `<FormSubmit>` helper:
+ *  - LLM compliance is unreliable. With a global listener every plain
+ *    `<form><input name="..." /></form>` works without the LLM knowing
+ *    anything about the wiring.
+ *  - Single behaviour spec for every site: serialize form fields, POST to
+ *    `${origin}/api/forms/submit`, replace form contents with a built-in
+ *    success / error / preview-toast UI.
+ *
+ * Opt-outs (anything the AI explicitly authored gets to escape this):
+ *  - `data-no-intercept` attribute on the `<form>`.
+ *  - `action` attribute pointing at a non-empty external URL (so the AI
+ *    can wire up real third-party form services like Formspree if asked).
+ *  - `method="get"` (GETs are read-only navigations, never email-worthy).
+ *
+ * Honeypot:
+ *  - Any `<input>` named `_honey` / `_gotcha` is treated as a bot trap.
+ *    Non-empty value → silently drop without sending. (We deliberately
+ *    don't trap `website` because it's a legitimate field on portfolio /
+ *    submission forms.)
+ *
+ * Preview mode:
+ *  - When `window.__SUNSET_FORM_CONFIG.mode === "preview"`, the endpoint
+ *    returns `{ ok: true, mode: "preview", recipient: "<email>" }` and
+ *    no email goes out. The toast tells the user where the email *would*
+ *    have gone.
+ *
+ * Runtime config is read from `window.__SUNSET_FORM_CONFIG` (injected
+ * once into the iframe HTML shell by `getPreviewHtml`).
+ */
+function buildRuntimeFormModule(): string {
+  return `
+const HONEY_FIELDS = new Set(["_honey", "_gotcha"]);
+const PROCESSED_FLAG = "__sunsetFormHandled";
+
+function getConfig() {
+  if (typeof window === "undefined") return null;
+  const cfg = window.__SUNSET_FORM_CONFIG;
+  if (!cfg || typeof cfg !== "object") return null;
+  if (typeof cfg.endpoint !== "string" || !cfg.endpoint) return null;
+  return cfg;
+}
+
+function shouldIntercept(form) {
+  if (!form || form.tagName !== "FORM") return false;
+  if (form.hasAttribute("data-no-intercept")) return false;
+  const method = (form.getAttribute("method") || "post").toLowerCase();
+  if (method === "get") return false;
+  const action = (form.getAttribute("action") || "").trim();
+  if (action && /^(https?:)?\\/\\//i.test(action)) return false;
+  return true;
+}
+
+function serializeForm(form) {
+  const fields = {};
+  let honeypotTripped = false;
+  const fd = new FormData(form);
+  for (const [rawKey, rawVal] of fd.entries()) {
+    const key = String(rawKey);
+    if (HONEY_FIELDS.has(key)) {
+      const trimmed = typeof rawVal === "string" ? rawVal.trim() : "";
+      if (trimmed) honeypotTripped = true;
+      continue;
+    }
+    const val = typeof rawVal === "string" ? rawVal : (rawVal && rawVal.name) || "";
+    if (Object.prototype.hasOwnProperty.call(fields, key)) {
+      const existing = fields[key];
+      if (Array.isArray(existing)) existing.push(val);
+      else fields[key] = [existing, val];
+    } else {
+      fields[key] = val;
+    }
+  }
+  return { fields, honeypotTripped };
+}
+
+function getFormName(form) {
+  return (
+    form.getAttribute("data-form-name") ||
+    form.getAttribute("name") ||
+    form.id ||
+    "form"
+  );
+}
+
+function findStatusContainer(form) {
+  return form.querySelector("[data-form-status]");
+}
+
+function paintStatus(form, kind, message) {
+  let container = findStatusContainer(form);
+  const baseStyles =
+    "margin-top:1rem;padding:0.75rem 1rem;border-radius:0.5rem;font-size:0.875rem;line-height:1.4;";
+  const palettes = {
+    success: "background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0;",
+    error: "background:#fef2f2;color:#991b1b;border:1px solid #fecaca;",
+    info: "background:#eff6ff;color:#1e3a8a;border:1px solid #bfdbfe;",
+  };
+  const style = baseStyles + (palettes[kind] || palettes.info);
+  if (!container) {
+    container = document.createElement("div");
+    container.setAttribute("data-form-status", kind);
+    form.appendChild(container);
+  }
+  container.setAttribute("data-form-status", kind);
+  container.setAttribute("style", style);
+  container.setAttribute("role", kind === "error" ? "alert" : "status");
+  container.textContent = message;
+}
+
+function lockSubmits(form, locked) {
+  const buttons = form.querySelectorAll(
+    'button[type="submit"], input[type="submit"], button:not([type])'
+  );
+  for (const btn of buttons) {
+    if (locked) {
+      btn.dataset.sunsetPrevDisabled = btn.disabled ? "1" : "0";
+      btn.disabled = true;
+    } else if (btn.dataset.sunsetPrevDisabled === "0") {
+      btn.disabled = false;
+      delete btn.dataset.sunsetPrevDisabled;
+    }
+  }
+}
+
+async function submit(form, cfg) {
+  const formName = getFormName(form);
+  const { fields, honeypotTripped } = serializeForm(form);
+
+  if (honeypotTripped) {
+    paintStatus(form, "success", "Thanks! We received your message.");
+    form.reset();
+    return;
+  }
+
+  if (Object.keys(fields).length === 0) {
+    paintStatus(form, "error", "Please fill in the form before submitting.");
+    return;
+  }
+
+  lockSubmits(form, true);
+  paintStatus(form, "info", "Sending\u2026");
+
+  let pageUrl = "";
+  try { pageUrl = window.location.href; } catch (_) {}
+
+  const payload = {
+    mode: cfg.mode,
+    token: cfg.token || null,
+    publicId: cfg.publicId || null,
+    formName,
+    fields,
+    pageUrl,
+  };
+
+  let res;
+  try {
+    res = await fetch(cfg.endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      cache: "no-store",
+      credentials: "omit",
+    });
+  } catch (err) {
+    lockSubmits(form, false);
+    paintStatus(form, "error", "Couldn't send right now. Please try again later.");
+    return;
+  }
+
+  let data = null;
+  try { data = await res.json(); } catch (_) {}
+
+  if (!res.ok) {
+    lockSubmits(form, false);
+    const msg = (data && (data.error || data.message)) ||
+      (res.status === 429
+        ? "Too many submissions. Please wait a moment and try again."
+        : "Couldn't send right now. Please try again later.");
+    paintStatus(form, "error", msg);
+    return;
+  }
+
+  if (data && data.mode === "preview") {
+    const target = data.recipient ? data.recipient : "the site owner";
+    paintStatus(
+      form,
+      "info",
+      "Preview mode \u00b7 In published mode this would email " + target + "."
+    );
+    lockSubmits(form, false);
+    return;
+  }
+
+  paintStatus(form, "success", "Thanks! Your message has been sent.");
+  form.reset();
+  lockSubmits(form, false);
+}
+
+function installInterceptor() {
+  if (typeof document === "undefined") return;
+  if (document[PROCESSED_FLAG]) return;
+  document[PROCESSED_FLAG] = true;
+
+  document.addEventListener(
+    "submit",
+    (event) => {
+      const form = event.target;
+      if (!shouldIntercept(form)) return;
+      const cfg = getConfig();
+      if (!cfg) return;
+      event.preventDefault();
+      submit(form, cfg).catch(() => {
+        try { paintStatus(form, "error", "Couldn't send right now."); } catch (_) {}
+      });
+    },
+    true
+  );
+}
+
+installInterceptor();
+
+export const __SUNSET_FORMS_RUNTIME = true;
+`.trim();
+}
+
 function buildRuntimeFiles(
   assets: Array<{
     alias: string;
@@ -342,6 +572,10 @@ function buildRuntimeFiles(
     {
       path: IMAGE_ASSET_COMPONENT_PATH,
       content: buildRuntimeImageAssetModule(),
+    },
+    {
+      path: FORM_RUNTIME_PATH,
+      content: buildRuntimeFormModule(),
     },
   ];
 }
@@ -692,15 +926,59 @@ function buildEarlyDiagnosticBootstrap(): string {
 })();`;
 }
 
+/**
+ * Form-runtime config injected into the iframe HTML. Read by
+ * `landing/_runtime/forms.ts` (see `buildRuntimeFormModule`) to know
+ * where to POST submissions and what mode it's in.
+ *
+ * `mode` distinguishes preview (no email sent — just toast) from
+ * published (real Resend delivery to the chat owner). `token` is
+ * required in preview mode so the endpoint can verify it. `publicId`
+ * identifies a published site; the endpoint cross-checks it against the
+ * deploy subdomain when present.
+ */
+export type FormSubmitConfig =
+  | {
+      mode: "preview";
+      /** Same JWT used for `/p/<token>` shell + bundle. */
+      token: string;
+    }
+  | {
+      mode: "published";
+      /** Subdomain label / `publishedSites.publicId`. */
+      publicId: string;
+    };
+
+function buildFormConfigScript(
+  config: FormSubmitConfig | undefined,
+  endpoint: string
+): string {
+  if (!config) return "";
+  const payload =
+    config.mode === "preview"
+      ? { mode: "preview", token: config.token, endpoint }
+      : { mode: "published", publicId: config.publicId, endpoint };
+  // Closing `</script>` mid-string would prematurely terminate the inline
+  // script tag; encode any accidental occurrence.
+  const json = JSON.stringify(payload).replace(/<\/(script)/gi, "<\\/$1");
+  return `<script>window.__SUNSET_FORM_CONFIG = ${json};</script>`;
+}
+
 export function getPreviewHtml(params: {
   chatId: string;
   revisionNumber: number;
   basePath: string;
   /** Appended after `${basePath}/bundle`, e.g. `?token=…` for signed public bundles */
   bundleSuffix?: string;
+  /** When provided, exposes the global form-submit config. */
+  formSubmit?: FormSubmitConfig;
 }): string {
-  const { basePath, bundleSuffix = "" } = params;
+  const { basePath, bundleSuffix = "", formSubmit } = params;
   const scriptSrc = `${basePath}/bundle${bundleSuffix}`;
+  // Endpoint is always same-origin on the deploy host so `connect-src 'self'`
+  // (see `lib/preview/deploy-csp.ts`) covers it.
+  const endpoint = "/api/forms/submit";
+  const formConfigScript = buildFormConfigScript(formSubmit, endpoint);
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -710,6 +988,7 @@ export function getPreviewHtml(params: {
   ${getBrowserReactImportMap()}
   ${TAILWIND_CDN}
   <script>${buildEarlyDiagnosticBootstrap()}</script>
+  ${formConfigScript}
 </head>
 <body>
   <div id="root"></div>
@@ -729,6 +1008,7 @@ export function getPreviewHtml(params: {
 const CLIENT_ENTRY = `
 import React from 'react';
 import { createRoot } from 'react-dom/client';
+import 'landing/_runtime/forms.ts';
 import App from 'landing/index.tsx';
 const root = document.getElementById('root');
 function landingHasRenderableSubtree(el) {
@@ -1636,6 +1916,18 @@ export async function getPreviewBrowserBundle(params: {
       depth: 0,
       allFiles: allFilesWithRuntime,
     });
+    // The form runtime is imported by CLIENT_ENTRY unconditionally (so every
+    // bundle gets the global submit interceptor). It's never imported from a
+    // landing/* file, so collectFileMap won't reach it. Add it directly to the
+    // fileMap so esbuild's `landing/*` resolver can find it.
+    {
+      const formsRuntime = runtimeFiles.find(
+        (f) => f.path === FORM_RUNTIME_PATH
+      );
+      if (formsRuntime && !fileMap.has(FORM_RUNTIME_PATH)) {
+        fileMap.set(FORM_RUNTIME_PATH, formsRuntime.content);
+      }
+    }
     const stubbedMissing = injectMissingLandingImportStubs(fileMap);
     if (stubbedMissing.length > 0) {
       bundleLog(tag, "filemap-missing-stubs", {

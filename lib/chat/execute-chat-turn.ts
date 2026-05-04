@@ -35,6 +35,7 @@ import {
   createSiteTool,
   createValidateCompletenessTool,
 } from "@/lib/code-generation/generate-code";
+import { createSetFormNotificationEmailTool } from "@/lib/forms/tool-set-form-notification-email";
 import {
   getAIModel,
   getAIModelId,
@@ -67,6 +68,7 @@ const BUILDER_TOOLS = new Set([
   "create_section",
   "resolve_image_slots",
   "validate_completeness",
+  "set_form_notification_email",
 ]);
 const TEXT_DELTA_FLUSH_MS = 40;
 const TEXT_DELTA_FLUSH_CHARS = 24;
@@ -136,6 +138,9 @@ function getToolTitle(toolName: string): string {
   }
   if (toolName === "validate_completeness") {
     return "Completeness check";
+  }
+  if (toolName === "set_form_notification_email") {
+    return "Form notifications";
   }
   return toolName || "tool";
 }
@@ -524,6 +529,7 @@ export async function createChatTurnStream({
     createSectionToolCall,
     validateCompletenessToolCall,
     resolveImageSlotsToolCall,
+    setFormNotificationEmailToolCall,
   ] = [
     createSiteTool(chatPublicId, user.id, {
       deferredChatTurnBilling: true,
@@ -535,12 +541,14 @@ export async function createChatTurnStream({
     }),
     createValidateCompletenessTool(chatPublicId, user.id),
     createResolveImageSlotsTool(chatPublicId, user.id),
+    createSetFormNotificationEmailTool(chatPublicId, user.id),
   ];
   const tools = {
     create_site: createSiteToolCall,
     create_section: createSectionToolCall,
     resolve_image_slots: resolveImageSlotsToolCall,
     validate_completeness: validateCompletenessToolCall,
+    set_form_notification_email: setFormNotificationEmailToolCall,
   };
 
   const lastMessage = contextMessages[contextMessages.length - 1] as any;

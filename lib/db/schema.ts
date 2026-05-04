@@ -300,6 +300,10 @@ export const chats = pgTable(
     title: varchar("title", { length: 255 }),
     screenshotUrl: text("screenshot_url"),
     responseLanguage: varchar("response_language", { length: 5 }),
+    // Per-chat override for the email recipient when a form on the
+    // generated landing site is submitted. NULL means "default to the
+    // chat owner's account email" (resolved at send time).
+    formNotificationEmail: varchar("form_notification_email", { length: 255 }),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
@@ -691,6 +695,42 @@ export const publishedSitesRelations = relations(publishedSites, ({ one }) => ({
 
 export type PublishedSite = typeof publishedSites.$inferSelect;
 export type NewPublishedSite = typeof publishedSites.$inferInsert;
+
+/**
+ * Submissions captured from forms on AI-generated landing sites
+ * (preview iframe + published deploys). Stored both for the eventual
+ * submissions dashboard and as a recovery log if Resend ever fails to
+ * deliver the notification email.
+ */
+export const formSubmissions = pgTable(
+  "form_submissions",
+  {
+    id: serial("id").primaryKey(),
+    chatId: varchar("chat_id", { length: 32 })
+      .notNull()
+      .references(() => chats.publicId),
+    publishedPublicId: varchar("published_public_id", { length: 63 }),
+    mode: varchar("mode", { length: 16 }).notNull(), // "preview" | "published"
+    formName: varchar("form_name", { length: 64 }),
+    pageUrl: text("page_url"),
+    fields: jsonb("fields").$type<Record<string, unknown>>().notNull(),
+    recipientEmail: varchar("recipient_email", { length: 255 }).notNull(),
+    emailDeliveryStatus: varchar("email_delivery_status", { length: 32 })
+      .notNull()
+      .default("pending"), // "pending" | "sent" | "skipped" | "failed"
+    emailDeliveryError: text("email_delivery_error"),
+    submitterIpHash: varchar("submitter_ip_hash", { length: 64 }),
+    userAgent: varchar("user_agent", { length: 512 }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    chatIdIdx: index("form_submissions_chat_id_idx").on(table.chatId),
+    createdAtIdx: index("form_submissions_created_at_idx").on(table.createdAt),
+  })
+);
+
+export type FormSubmission = typeof formSubmissions.$inferSelect;
+export type NewFormSubmission = typeof formSubmissions.$inferInsert;
 
 // ─── Billing & credits (ledger-based) ─────────────────────────────────────────
 

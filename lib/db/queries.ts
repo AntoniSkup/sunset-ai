@@ -36,6 +36,7 @@ import {
   accounts,
   subscriptions,
   plans,
+  formSubmissions,
 } from "./schema";
 import type {
   ChatTurnRunLivePreviewState,
@@ -1449,6 +1450,112 @@ export async function updatePublishedSite(
     .returning();
 
   return result.length > 0 ? result[0] : null;
+}
+
+/**
+ * Resolve the email address that should receive form submissions for a chat.
+ *
+ * Lookup order:
+ *  1. `chats.form_notification_email` (per-chat override set via the
+ *     `set_form_notification_email` LLM tool or future UI control).
+ *  2. The chat owner's `users.email`.
+ *
+ * Returns null only if the chat or owner doesn't exist (defensive — caller
+ * should treat that as "drop the submission, don't email anyone").
+ */
+export async function getFormNotificationRecipientForChat(
+  chatPublicId: string,
+): Promise<{
+  recipient: string;
+  ownerUserId: number;
+  ownerEmail: string;
+  isOverride: boolean;
+} | null> {
+  const result = await db
+    .select({
+      override: chats.formNotificationEmail,
+      ownerUserId: chats.userId,
+      ownerEmail: users.email,
+    })
+    .from(chats)
+    .innerJoin(users, eq(chats.userId, users.id))
+    .where(eq(chats.publicId, chatPublicId))
+    .limit(1);
+
+  const row = result[0];
+  if (!row) return null;
+
+  const override = row.override?.trim() || "";
+  const recipient = override || row.ownerEmail;
+  return {
+    recipient,
+    ownerUserId: row.ownerUserId,
+    ownerEmail: row.ownerEmail,
+    isOverride: Boolean(override),
+  };
+}
+
+/**
+ * Set (or clear) the per-chat form-notification override. Pass `null` or
+ * an empty string to clear the override and fall back to the owner's
+ * account email.
+ *
+ * Authorization: caller must already have established `userId` is the chat
+ * owner. We still scope the WHERE on `userId` so a stray call with the
+ * wrong user can never overwrite someone else's chat.
+ */
+export async function setChatFormNotificationEmail(
+  chatPublicId: string,
+  userId: number,
+  email: string | null,
+): Promise<{ chatPublicId: string; formNotificationEmail: string | null } | null> {
+  const normalized = email?.trim() ? email.trim() : null;
+  const result = await db
+    .update(chats)
+    .set({
+      formNotificationEmail: normalized,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(chats.publicId, chatPublicId), eq(chats.userId, userId)))
+    .returning({
+      chatPublicId: chats.publicId,
+      formNotificationEmail: chats.formNotificationEmail,
+    });
+
+  return result[0] ?? null;
+}
+
+export async function createFormSubmission(data: {
+  chatId: string;
+  publishedPublicId?: string | null;
+  mode: "preview" | "published";
+  formName?: string | null;
+  pageUrl?: string | null;
+  fields: Record<string, unknown>;
+  recipientEmail: string;
+  emailDeliveryStatus: "pending" | "sent" | "skipped" | "failed";
+  emailDeliveryError?: string | null;
+  submitterIpHash?: string | null;
+  userAgent?: string | null;
+}) {
+  const result = await db
+    .insert(formSubmissions)
+    .values({
+      chatId: data.chatId,
+      publishedPublicId: data.publishedPublicId ?? null,
+      mode: data.mode,
+      formName: data.formName ?? null,
+      pageUrl: data.pageUrl ?? null,
+      fields: data.fields,
+      recipientEmail: data.recipientEmail,
+      emailDeliveryStatus: data.emailDeliveryStatus,
+      emailDeliveryError: data.emailDeliveryError ?? null,
+      submitterIpHash: data.submitterIpHash ?? null,
+      userAgent: data.userAgent ?? null,
+    })
+    .returning();
+
+  return result[0];
 }
 
 export async function createInspiration(data: {

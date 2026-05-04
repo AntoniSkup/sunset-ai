@@ -176,6 +176,13 @@
       "when": 1777408693987,
       "tag": "0024_add_chats_response_language",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1777500000000,
+      "tag": "0025_add_form_notifications",
+      "breakpoints": true
     }
   ]
 }

@@ -42,6 +42,7 @@ export async function GET(
       revisionNumber: publishedSite.revisionNumber,
       basePath,
       bundleSuffix: `?v=${publishedSite.revisionNumber}`,
+      formSubmit: { mode: "published", publicId },
     });
 
     return new NextResponse(html, {
