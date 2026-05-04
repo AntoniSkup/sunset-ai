@@ -328,10 +328,15 @@ export function PreviewPanel({
   }, [chatId, t]);
 
   useEffect(() => {
+    if (!chatId || typeof chatId !== "string") {
+      setIsCheckingLiveRun(false);
+      return;
+    }
+
     let cancelled = false;
+    setIsCheckingLiveRun(true);
 
     async function loadLatestPreview() {
-      if (!chatId || typeof chatId !== "string") return;
       try {
         const res = await fetch(`/api/preview/${chatId}/token`, {
           cache: "no-store",
@@ -358,41 +363,27 @@ export function PreviewPanel({
       }
     }
 
-    loadLatestPreview();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [chatId]);
-
-  useEffect(() => {
-    if (!chatId || typeof chatId !== "string") {
-      setIsCheckingLiveRun(false);
-      return;
-    }
-
-    let cancelled = false;
-    setIsCheckingLiveRun(true);
-
     (async () => {
+      let hasRunningTurnRun = false;
       try {
         const res = await fetch(
           `/api/chats/${encodeURIComponent(chatId)}/turn-runs/live`,
           { cache: "no-store" }
         );
         if (cancelled) return;
-        if (!res.ok) return;
-        const data = (await res.json()) as {
-          run?: { id?: string } | null;
-          liveState?: { status?: string } | null;
-        };
-        if (cancelled) return;
-        const isRunning =
-          Boolean(data?.run) || data?.liveState?.status === "running";
-        if (isRunning) {
-          setIsLoading(true);
-          setLoadingMessage((prev) => prev || t("generatingLandingPage"));
-          setLoadingStep((prev) => prev || t("generatingLandingPage"));
+        if (res.ok) {
+          const data = (await res.json()) as {
+            run?: { id?: string } | null;
+            liveState?: { status?: string } | null;
+          };
+          if (cancelled) return;
+          hasRunningTurnRun =
+            Boolean(data?.run) || data?.liveState?.status === "running";
+          if (hasRunningTurnRun) {
+            setIsLoading(true);
+            setLoadingMessage((prev) => prev || t("generatingLandingPage"));
+            setLoadingStep((prev) => prev || t("generatingLandingPage"));
+          }
         }
       } catch {
         // Best-effort: if the live lookup fails we just fall back to the
@@ -402,6 +393,28 @@ export function PreviewPanel({
           setIsCheckingLiveRun(false);
         }
       }
+
+      if (cancelled) return;
+
+      if (hasRunningTurnRun) {
+        // A turn-run is mid-flight. Each in-flight tool call commits its own
+        // partial `landingSiteRevisions` row (e.g. Hero.tsx without its sibling
+        // sections / theme.tsx yet), and `getLatestLandingSiteRevision` does
+        // not distinguish "complete" from "partial". If we fetched + loaded
+        // that latest revision into the iframe right now, esbuild would
+        // resolve every unsatisfied `../sections/Foo` import via
+        // `injectMissingLandingImportStubs` (lib/preview/compose-react.ts) and
+        // the iframe would render a wall of "Missing source file (preview
+        // placeholder)" panels — exactly the bug we're avoiding.
+        //
+        // Instead, leave `currentVersionId` null so the loader overlay stays
+        // up, and wait for chat.tsx to dispatch UPDATE_PREVIEW on
+        // `run_completed`, which calls `fetchTokenAndPoint` above to load
+        // the now-complete revision.
+        return;
+      }
+
+      await loadLatestPreview();
     })();
 
     return () => {
