@@ -20,7 +20,7 @@ import useSWR from "swr";
 import type { User } from "@/lib/db/schema";
 import { CreditsSection } from "@/components/billing/credits-section";
 
-type SunsetLogoMenuProps = {
+type BrandLogoMenuProps = {
   variant?: "default" | "dashboard";
   className?: string;
   contentClassName?: string;
@@ -31,12 +31,12 @@ type SunsetLogoMenuProps = {
   showCredits?: boolean;
 };
 
-export function SunsetLogoMenu({
+export function BrandLogoMenu({
   variant = "default",
   className,
   contentClassName = "w-64",
   showCredits = true,
-}: SunsetLogoMenuProps) {
+}: BrandLogoMenuProps) {
   const router = useRouter();
   // After sign-out we want to land on the bare "/" without locale prefix being
   // re-applied — use the unlocalized router for that single redirect.
@@ -62,7 +62,7 @@ export function SunsetLogoMenu({
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
         <img
-          src="/sunset-logo.png"
+          src="/stronka-logo.png"
           alt={tCommon("appName")}
           className={
             className ??

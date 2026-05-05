@@ -1,6 +1,6 @@
 {
   "common": {
-    "appName": "Sunset",
+    "appName": "Stronka AI",
     "signIn": "Sign in",
     "signUp": "Sign up",
     "signOut": "Sign out",
@@ -19,7 +19,7 @@
   "auth": {
     "signInTitle": "Welcome back",
     "signUpTitle": "Create your account",
-    "signInSubtitle": "Sign in to your <brand>Sunset</brand> account",
+    "signInSubtitle": "Sign in to your <brand>Stronka AI</brand> account",
     "signingIn": "Signing in...",
     "creatingAccount": "Creating account...",
     "noAccount": "Don't have an account?",
@@ -88,10 +88,10 @@
       "navPricing": "Pricing",
       "navSettings": "Settings",
       "badge": "What are we building next?",
-      "logoAlt": "Sunset",
+      "logoAlt": "Stronka AI",
       "titleStart": "What are we creating",
       "titleHighlight": "today?",
-      "subtitle": "Describe your idea — Sunset designs, builds, and ships it in seconds.",
+      "subtitle": "Describe your idea — Stronka AI designs, builds, and ships it in seconds.",
       "dropTitle": "Drop images here",
       "dropHint": "PNG, JPG, or WebP — or paste from clipboard",
       "placeholderPrefix": "Make a website",
@@ -112,7 +112,7 @@
       "noProjectsTitle": "No projects yet",
       "noProjectsHelp": "Describe a website above and we'll save it here.",
       "startFirstProject": "Start your first project",
-      "footerCopyright": "© {year} Sunset.",
+      "footerCopyright": "© {year} Stronka AI.",
       "footerPricing": "Pricing",
       "footerSettings": "Settings",
       "footerPrivacy": "Privacy",
@@ -202,7 +202,7 @@
       "generatingLandingPageEllipsis": "Generating landing page...",
       "generatingLandingPage": "Generating landing page",
       "buildingLayout": "Building layout",
-      "logoLargeAlt": "Sunset logo large",
+      "logoLargeAlt": "Stronka AI logo large",
       "iframeTitle": "Website Preview",
       "tipGoalAudienceVibe": "Tell the AI the goal, audience, and vibe.",
       "tipSections": "Request a hero, features, social proof, pricing, FAQ, and a clear CTA.",
@@ -257,7 +257,7 @@
       "cancel": "Cancel",
       "send": "Send",
       "sending": "Sending…",
-      "mailtoSubject": "Sunset — chat error report"
+      "mailtoSubject": "Stronka AI — chat error report"
     },
     "input": {
       "placeholder": "What would you like to change?",
@@ -268,9 +268,9 @@
       "sendMessage": "Send message"
     },
     "header": {
-      "logoAlt": "Sunset logo",
+      "logoAlt": "Stronka AI logo",
       "openMenu": "Open menu",
-      "logoTitle": "Sunset logo",
+      "logoTitle": "Stronka AI logo",
       "goToDashboard": "Go to Dashboard",
       "payment": "Payment",
       "settings": "Settings",
@@ -296,7 +296,7 @@
       "features": {
         "userRoles": "User roles & permissions",
         "customDomains": "Custom domains",
-        "removeBadge": "Remove the Sunset badge",
+        "removeBadge": "Remove the Stronka AI badge",
         "downgradeAnytime": "Downgrade anytime",
         "creditsRollover": "Credits rollover"
       },
@@ -451,10 +451,10 @@
     },
     "hero": {
       "badge": "Build a landing page by chatting",
-      "logoAlt": "Sunset — AI landing page builder",
+      "logoAlt": "Stronka AI — AI landing page builder",
       "titleLine1": "Your landing page,",
       "titleLine2": "one message away.",
-      "subtitle": "Describe it. Sunset designs, builds, and ships a conversion-focused landing page in seconds — no templates, no drag-and-drop."
+      "subtitle": "Describe it. Stronka AI designs, builds, and ships a conversion-focused landing page in seconds — no templates, no drag-and-drop."
     },
     "composer": {
       "dropTitle": "Drop images here",
@@ -499,11 +499,11 @@
       "subtitle": "No templates. No drag-and-drop. Just a conversation.",
       "describe": {
         "title": "Describe it",
-        "desc": "Tell Sunset what you want — your business, the vibe, the sections you need."
+        "desc": "Tell Stronka AI what you want — your business, the vibe, the sections you need."
       },
       "design": {
         "title": "We design it",
-        "desc": "Sunset ships a beautiful, on-brand site in seconds, ready to refine."
+        "desc": "Stronka AI ships a beautiful, on-brand site in seconds, ready to refine."
       },
       "ship": {
         "title": "You ship it",
@@ -518,7 +518,7 @@
       "createAccount": "Create account"
     },
     "footer": {
-      "copyright": "© {year} Sunset.",
+      "copyright": "© {year} Stronka AI.",
       "pricing": "Pricing",
       "privacy": "Privacy",
       "terms": "Terms",

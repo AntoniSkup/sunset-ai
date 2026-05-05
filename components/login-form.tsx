@@ -84,7 +84,7 @@ export function LoginForm({
               <div className="flex flex-col items-center gap-3 text-center">
                 <img
                   src="/sunset-logo.png"
-                  alt="Sunset"
+                  alt="Stronka AI"
                   className="h-9 w-auto select-none object-contain drop-shadow-sm"
                   draggable={false}
                 />

@@ -21,7 +21,7 @@ import { getScreenshotCaptureHost } from "@/lib/screenshots/public-app-origin";
  *   - `mode: "preview"` + `token` (the same JWT that gates `/p/<token>`), or
  *   - `mode: "published"` + `publicId` (the site's subdomain label, also
  *     cross-checked against the deploy subdomain when the request comes in
- *     on `<slug>.sunset-deploy.com`).
+ *     on `<slug>.stronkaai-deploy.com`).
  *
  * Hardening:
  *   - Host check: only accepts requests on the deploy origin (apex or any
@@ -203,7 +203,7 @@ function buildEmailBody(params: {
   publishedPublicId: string | null;
 }): { subject: string; text: string } {
   const subject =
-    `[Sunset] New form submission` +
+    `[Stronka AI] New form submission` +
     (params.formName ? ` (${params.formName})` : "");
   const lines: string[] = [];
   lines.push(`Site chat: ${params.chatId}`);
@@ -372,7 +372,7 @@ export async function POST(request: NextRequest) {
   const apiKey = process.env.RESEND_API_KEY?.trim();
   const from =
     process.env.SUPPORT_EMAIL_FROM?.trim() ||
-    "Sunset <onboarding@resend.dev>";
+    "Stronka AI <onboarding@resend.dev>";
 
   let deliveryStatus: "sent" | "skipped" | "failed" = "skipped";
   let deliveryError: string | null = null;

@@ -13,7 +13,7 @@ const MIN_URL_CAPTURE_JPEG_BYTES = 12_000;
  * Designed to run in the background (fire-and-forget).
  *
  * Capture path:
- *   URL capture via the deploy origin (`https://sunset-deploy.com/p/<token>`).
+ *   URL capture via the deploy origin (`https://stronkaai-deploy.com/p/<token>`).
  *   The origin is resolved by `getScreenshotCaptureOrigin()`, which prefers
  *   `NEXT_PUBLIC_DEPLOY_ORIGIN` and falls back to the configured
  *   `SCREENSHOT_BROWSER_BASE_URL` tunnel when the deploy origin is loopback

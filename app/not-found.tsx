@@ -18,7 +18,7 @@ export default function NotFound() {
         >
           <img
             src="/sunset-logo.png"
-            alt="Sunset"
+            alt="Stronka AI"
             className="h-8 w-auto object-contain"
           />
         </Link>

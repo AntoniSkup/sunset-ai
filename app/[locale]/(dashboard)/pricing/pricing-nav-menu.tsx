@@ -1,7 +1,7 @@
 "use client";
 
-import { SunsetLogoMenu } from "@/components/nav/sunset-logo-menu";
+import { BrandLogoMenu } from "@/components/nav/brand-logo-menu";
 
 export function PricingNavMenu() {
-  return <SunsetLogoMenu />;
+  return <BrandLogoMenu />;
 }

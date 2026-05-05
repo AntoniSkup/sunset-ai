@@ -11,7 +11,7 @@ import { buildDeployUrl } from "@/lib/preview/deploy-host";
  *   - Caller must be signed in and own the chat (session cookie on main app).
  *   - The minted JWT is bearer-only; it does not carry any session info, just
  *     `(chatId, revisionNumber, exp ~12m)`.
- *   - The deploy host (`sunset-deploy.com`) verifies the JWT with the same
+ *   - The deploy host (`stronkaai-deploy.com`) verifies the JWT with the same
  *     `RENDER_SNAPSHOT_SECRET` and never reads cookies.
  */
 export async function GET(

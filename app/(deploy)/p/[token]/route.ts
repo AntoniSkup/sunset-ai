@@ -4,7 +4,7 @@ import { verifyRenderSnapshotToken } from "@/lib/render-snapshot-token";
 import { buildDeploySecurityHeaders } from "@/lib/preview/deploy-csp";
 
 /**
- * Token-gated HTML shell served from the deploy origin (e.g. `sunset-deploy.com/p/<jwt>`).
+ * Token-gated HTML shell served from the deploy origin (e.g. `stronkaai-deploy.com/p/<jwt>`).
  *
  * Used by:
  *   - The builder iframe (token minted by `/api/preview/<chatId>/token` on main app).

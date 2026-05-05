@@ -27,7 +27,7 @@ import sunsetLogoTree from "@/components/icons/sunset_logo_tree.png";
 
 import { BorderBeam } from "@/components/ui/border-beam";
 import TypingText from "@/components/ui/typewriter";
-import { SunsetLogoMenu } from "@/components/nav/sunset-logo-menu";
+import { BrandLogoMenu } from "@/components/nav/brand-logo-menu";
 import {
   MessageAttachment,
   MessageAttachments,
@@ -563,7 +563,7 @@ export default function StartPage() {
 
       <header className="sticky top-0 z-30 border-b border-gray-200/60 bg-white/65 backdrop-blur-md backdrop-saturate-150 supports-[backdrop-filter]:bg-white/55">
         <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
-          <SunsetLogoMenu />
+          <BrandLogoMenu />
           <nav className="flex items-center gap-1 sm:gap-2">
             <Link
               href="/pricing"

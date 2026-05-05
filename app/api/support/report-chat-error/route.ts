@@ -67,7 +67,7 @@ export async function POST(request: Request) {
 
   const from =
     process.env.SUPPORT_EMAIL_FROM?.trim() ||
-    "Sunset <onboarding@resend.dev>";
+    "Stronka AI <onboarding@resend.dev>";
 
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -78,7 +78,7 @@ export async function POST(request: Request) {
     body: JSON.stringify({
       from,
       to: [supportEmail],
-      subject: `[Sunset] Chat error report — ${user.email}`,
+      subject: `[Stronka AI] Chat error report — ${user.email}`,
       text: emailBody,
     }),
   });

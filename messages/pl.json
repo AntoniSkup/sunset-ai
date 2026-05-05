@@ -1,6 +1,6 @@
 {
   "common": {
-    "appName": "Sunset",
+    "appName": "Stronka AI",
     "signIn": "Zaloguj się",
     "signUp": "Zarejestruj się",
     "signOut": "Wyloguj się",
@@ -19,7 +19,7 @@
   "auth": {
     "signInTitle": "Witaj ponownie",
     "signUpTitle": "Utwórz konto",
-    "signInSubtitle": "Zaloguj się do swojego konta <brand>Sunset</brand>",
+    "signInSubtitle": "Zaloguj się do swojego konta <brand>Stronka AI</brand>",
     "signingIn": "Logowanie...",
     "creatingAccount": "Tworzenie konta...",
     "noAccount": "Nie masz jeszcze konta?",
@@ -88,10 +88,10 @@
       "navPricing": "Cennik",
       "navSettings": "Ustawienia",
       "badge": "Co dziś zbudujemy?",
-      "logoAlt": "Sunset",
+      "logoAlt": "Stronka AI",
       "titleStart": "Co dziś",
       "titleHighlight": "tworzymy?",
-      "subtitle": "Opisz swój pomysł — Sunset zaprojektuje, zbuduje i opublikuje go w kilka sekund.",
+      "subtitle": "Opisz swój pomysł — Stronka AI zaprojektuje, zbuduje i opublikuje go w kilka sekund.",
       "dropTitle": "Upuść obrazy tutaj",
       "dropHint": "PNG, JPG lub WebP — albo wklej ze schowka",
       "placeholderPrefix": "Zrób stronę",
@@ -112,7 +112,7 @@
       "noProjectsTitle": "Brak projektów",
       "noProjectsHelp": "Opisz stronę powyżej, a zapiszemy ją tutaj.",
       "startFirstProject": "Zacznij swój pierwszy projekt",
-      "footerCopyright": "© {year} Sunset.",
+      "footerCopyright": "© {year} Stronka AI.",
       "footerPricing": "Cennik",
       "footerSettings": "Ustawienia",
       "footerPrivacy": "Prywatność",
@@ -202,7 +202,7 @@
       "generatingLandingPageEllipsis": "Generowanie strony...",
       "generatingLandingPage": "Generowanie strony",
       "buildingLayout": "Budowanie układu",
-      "logoLargeAlt": "Duże logo Sunset",
+      "logoLargeAlt": "Duże logo Stronka AI",
       "iframeTitle": "Podgląd strony",
       "tipGoalAudienceVibe": "Powiedz AI cel, grupę docelową i klimat.",
       "tipSections": "Poproś o hero, funkcje, dowody społeczne, cennik, FAQ i wyraźne CTA.",
@@ -257,7 +257,7 @@
       "cancel": "Anuluj",
       "send": "Wyślij",
       "sending": "Wysyłanie…",
-      "mailtoSubject": "Sunset — zgłoszenie błędu czatu"
+      "mailtoSubject": "Stronka AI — zgłoszenie błędu czatu"
     },
     "input": {
       "placeholder": "Co chciałbyś zmienić?",
@@ -268,9 +268,9 @@
       "sendMessage": "Wyślij wiadomość"
     },
     "header": {
-      "logoAlt": "Logo Sunset",
+      "logoAlt": "Logo Stronka AI",
       "openMenu": "Otwórz menu",
-      "logoTitle": "Logo Sunset",
+      "logoTitle": "Logo Stronka AI",
       "goToDashboard": "Przejdź do panelu",
       "payment": "Płatności",
       "settings": "Ustawienia",
@@ -296,7 +296,7 @@
       "features": {
         "userRoles": "Role i uprawnienia użytkowników",
         "customDomains": "Własne domeny",
-        "removeBadge": "Usunięcie znaku Sunset",
+        "removeBadge": "Usunięcie znaku Stronka AI",
         "downgradeAnytime": "Możliwość obniżenia planu",
         "creditsRollover": "Przeniesienie kredytów"
       },
@@ -451,10 +451,10 @@
     },
     "hero": {
       "badge": "Zbuduj stronę landing page rozmawiając",
-      "logoAlt": "Sunset — kreator landing page AI",
+      "logoAlt": "Stronka AI — kreator landing page AI",
       "titleLine1": "Twoja strona internetowa",
-      "titleLine2": "w jednym kliknięciu",
-      "subtitle": "Opisz, czego chcesz. Sunset zaprojektuje, zbuduje i opublikuje skuteczną stronę landing page w kilka sekund — bez szablonów i przeciągania bloków."
+      "titleLine2": "w 5 minut",
+      "subtitle": "Opisz, czego chcesz. Stronka AI zaprojektuje, zbuduje i opublikuje skuteczną stronę landing page w kilka sekund — bez szablonów i przeciągania bloków."
     },
     "composer": {
       "dropTitle": "Upuść obrazy tutaj",
@@ -499,11 +499,11 @@
       "subtitle": "Bez szablonów. Bez przeciągania bloków. Po prostu rozmowa.",
       "describe": {
         "title": "Opisz",
-        "desc": "Powiedz Sunset, czego chcesz — twoja firma, klimat, potrzebne sekcje."
+        "desc": "Powiedz Stronka AI, czego chcesz — twoja firma, klimat, potrzebne sekcje."
       },
       "design": {
         "title": "My projektujemy",
-        "desc": "Sunset tworzy piękną, dopasowaną do marki stronę w kilka sekund, gotową do dopracowania."
+        "desc": "Stronka AI tworzy piękną, dopasowaną do marki stronę w kilka sekund, gotową do dopracowania."
       },
       "ship": {
         "title": "Ty publikujesz",
@@ -518,7 +518,7 @@
       "createAccount": "Utwórz konto"
     },
     "footer": {
-      "copyright": "© {year} Sunset.",
+      "copyright": "© {year} Stronka AI.",
       "pricing": "Cennik",
       "privacy": "Prywatność",
       "terms": "Warunki",

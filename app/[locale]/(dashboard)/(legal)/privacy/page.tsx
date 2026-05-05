@@ -9,7 +9,7 @@ export async function generateMetadata(): Promise<Metadata> {
     return {
       title: "Polityka prywatności",
       description:
-        "Jak Sunset Builder zbiera, wykorzystuje i chroni Twoje dane osobowe zgodnie z RODO.",
+        "Jak Stronka AI zbiera, wykorzystuje i chroni Twoje dane osobowe zgodnie z RODO.",
       alternates: { canonical: "/privacy" },
       robots: { index: true, follow: true },
     };
@@ -17,7 +17,7 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     title: "Privacy Policy",
     description:
-      "How Sunset Builder collects, uses, and protects your personal data under the EU GDPR.",
+      "How Stronka AI collects, uses, and protects your personal data under the EU GDPR.",
     alternates: { canonical: "/privacy" },
     robots: { index: true, follow: true },
   };

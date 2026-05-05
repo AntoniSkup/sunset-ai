@@ -19,7 +19,7 @@ export default function PrivacyPagePl() {
       />
 
       <LegalHighlight>
-        Sunset Builder („my", „nas", „nasze") dba o ochronę Twoich danych
+        Stronka AI („my", „nas", „nasze") dba o ochronę Twoich danych
         osobowych. Niniejsza Polityka prywatności wyjaśnia, jakie dane
         zbieramy, w jakim celu oraz jakie prawa przysługują Ci na mocy
         Ogólnego rozporządzenia o ochronie danych (RODO).
@@ -28,7 +28,7 @@ export default function PrivacyPagePl() {
       <div className="space-y-10">
         <LegalSection title="1. Administrator danych">
           <p>
-            Administratorem Twoich danych osobowych jest Sunset Builder z
+            Administratorem Twoich danych osobowych jest Stronka AI z
             siedzibą w Polsce. Dane kontaktowe znajdują się w punkcie 12
             poniżej.
           </p>
@@ -113,7 +113,7 @@ export default function PrivacyPagePl() {
                 Doskonalenie usługi
               </strong>{" "}
               — prawnie uzasadniony interes polegający na rozumieniu, jak
-              użytkownicy korzystają z Sunset Builder (art. 6 ust. 1 lit. f
+              użytkownicy korzystają z Stronka AI (art. 6 ust. 1 lit. f
               RODO).
             </li>
             <li>
@@ -127,7 +127,7 @@ export default function PrivacyPagePl() {
 
         <LegalSection title="4. Treści generowane przez AI">
           <p>
-            Sunset Builder korzysta z zewnętrznych usług AI (takich jak modele
+            Stronka AI korzysta z zewnętrznych usług AI (takich jak modele
             językowe) do generowania treści landing page'y w Twoim imieniu.
             Korzystając z tych funkcji, Twoje polecenia i instrukcje mogą być
             przesyłane do naszego dostawcy AI w celu przetwarzania. Nie
@@ -141,7 +141,7 @@ export default function PrivacyPagePl() {
           <p>
             Stosujemy niezbędne pliki cookies wymagane do działania serwisu.
             Możemy także używać analitycznych plików cookies, aby lepiej
-            rozumieć, jak korzystasz z Sunset Builder. Przed umieszczeniem
+            rozumieć, jak korzystasz z Stronka AI. Przed umieszczeniem
             jakichkolwiek opcjonalnych cookies poprosimy Cię o zgodę poprzez
             baner cookies. Możesz w każdej chwili wycofać zgodę lub zmienić
             preferencje za pomocą ustawień przeglądarki lub naszego panelu
@@ -292,7 +292,7 @@ export default function PrivacyPagePl() {
 
         <LegalSection title="11. Prywatność dzieci">
           <p>
-            Sunset Builder nie jest przeznaczony dla osób poniżej 16. roku
+            Stronka AI nie jest przeznaczony dla osób poniżej 16. roku
             życia. Nie zbieramy świadomie danych osobowych od dzieci. Jeśli
             dowiemy się, że dziecko przekazało nam swoje dane osobowe,
             niezwłocznie je usuniemy.
@@ -305,11 +305,11 @@ export default function PrivacyPagePl() {
             skorzystania z przysługujących Ci praw skontaktuj się z nami:
           </p>
           <LegalContactCard>
-            <p className="font-semibold text-gray-900">Sunset Builder</p>
+            <p className="font-semibold text-gray-900">Stronka AI</p>
             <p>
               Email:{" "}
-              <LegalLink href="mailto:privacy@sunsetbuilder.com">
-                privacy@sunsetbuilder.com
+              <LegalLink href="mailto:privacy@stronkaai.com">
+                privacy@stronkaai.com
               </LegalLink>
             </p>
             <p>Siedziba: Polska</p>

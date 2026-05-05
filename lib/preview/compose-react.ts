@@ -351,22 +351,22 @@ export default ImageAsset;
  *    submission forms.)
  *
  * Preview mode:
- *  - When `window.__SUNSET_FORM_CONFIG.mode === "preview"`, the endpoint
+ *  - When `window.__STRONKA_FORM_CONFIG.mode === "preview"`, the endpoint
  *    returns `{ ok: true, mode: "preview", recipient: "<email>" }` and
  *    no email goes out. The toast tells the user where the email *would*
  *    have gone.
  *
- * Runtime config is read from `window.__SUNSET_FORM_CONFIG` (injected
+ * Runtime config is read from `window.__STRONKA_FORM_CONFIG` (injected
  * once into the iframe HTML shell by `getPreviewHtml`).
  */
 function buildRuntimeFormModule(): string {
   return `
 const HONEY_FIELDS = new Set(["_honey", "_gotcha"]);
-const PROCESSED_FLAG = "__sunsetFormHandled";
+const PROCESSED_FLAG = "__stronkaFormHandled";
 
 function getConfig() {
   if (typeof window === "undefined") return null;
-  const cfg = window.__SUNSET_FORM_CONFIG;
+  const cfg = window.__STRONKA_FORM_CONFIG;
   if (!cfg || typeof cfg !== "object") return null;
   if (typeof cfg.endpoint !== "string" || !cfg.endpoint) return null;
   return cfg;
@@ -445,11 +445,11 @@ function lockSubmits(form, locked) {
   );
   for (const btn of buttons) {
     if (locked) {
-      btn.dataset.sunsetPrevDisabled = btn.disabled ? "1" : "0";
+      btn.dataset.stronkaPrevDisabled = btn.disabled ? "1" : "0";
       btn.disabled = true;
-    } else if (btn.dataset.sunsetPrevDisabled === "0") {
+    } else if (btn.dataset.stronkaPrevDisabled === "0") {
       btn.disabled = false;
-      delete btn.dataset.sunsetPrevDisabled;
+      delete btn.dataset.stronkaPrevDisabled;
     }
   }
 }
@@ -551,7 +551,7 @@ function installInterceptor() {
 
 installInterceptor();
 
-export const __SUNSET_FORMS_RUNTIME = true;
+export const __STRONKA_FORMS_RUNTIME = true;
 `.trim();
 }
 
@@ -961,7 +961,7 @@ function buildFormConfigScript(
   // Closing `</script>` mid-string would prematurely terminate the inline
   // script tag; encode any accidental occurrence.
   const json = JSON.stringify(payload).replace(/<\/(script)/gi, "<\\/$1");
-  return `<script>window.__SUNSET_FORM_CONFIG = ${json};</script>`;
+  return `<script>window.__STRONKA_FORM_CONFIG = ${json};</script>`;
 }
 
 export function getPreviewHtml(params: {

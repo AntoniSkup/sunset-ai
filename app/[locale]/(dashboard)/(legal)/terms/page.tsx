@@ -9,7 +9,7 @@ export async function generateMetadata(): Promise<Metadata> {
     return {
       title: "Warunki korzystania",
       description:
-        "Warunki korzystania regulujące dostęp do platformy Sunset Builder oraz korzystanie z niej.",
+        "Warunki korzystania regulujące dostęp do platformy Stronka AI oraz korzystanie z niej.",
       alternates: { canonical: "/terms" },
       robots: { index: true, follow: true },
     };
@@ -17,7 +17,7 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     title: "Terms of Use",
     description:
-      "Terms of Use governing your access to and use of the Sunset Builder platform.",
+      "Terms of Use governing your access to and use of the Stronka AI platform.",
     alternates: { canonical: "/terms" },
     robots: { index: true, follow: true },
   };

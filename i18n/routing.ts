@@ -12,7 +12,7 @@ import { defineRouting } from "next-intl/routing";
  *
  * NOTE: locale routing only applies to routes living under `app/[locale]/`.
  * Host-bound surfaces are explicitly bypassed in `middleware.ts`:
- *   - the deploy host (sunset-deploy.com) and its `/p/*`, `/s/*` shells
+ *   - the deploy host (stronkaai-deploy.com) and its `/p/*`, `/s/*` shells
  *   - the screenshot-tunnel host (ngrok in dev)
  *   - `/api/*`
  */

@@ -14,7 +14,7 @@ export default function TermsPageEn() {
 
       <LegalHighlight>
         These Terms of Use (&ldquo;Terms&rdquo;) govern your access to and use
-        of the Sunset Builder platform. By creating an account or using our
+        of the Stronka AI platform. By creating an account or using our
         service, you agree to be bound by these Terms. If you do not agree,
         please do not use the service.
       </LegalHighlight>
@@ -25,7 +25,7 @@ export default function TermsPageEn() {
             <strong className="font-semibold text-gray-900">
               &ldquo;Service&rdquo;
             </strong>{" "}
-            refers to the Sunset Builder web application, including all
+            refers to the Stronka AI web application, including all
             features, tools, and content generation capabilities.
           </p>
           <p>
@@ -39,7 +39,7 @@ export default function TermsPageEn() {
             <strong className="font-semibold text-gray-900">
               &ldquo;We&rdquo;, &ldquo;us&rdquo;, &ldquo;our&rdquo;
             </strong>{" "}
-            refers to Sunset Builder, a company based in Poland.
+            refers to Stronka AI, a company based in Poland.
           </p>
           <p>
             <strong className="font-semibold text-gray-900">
@@ -52,7 +52,7 @@ export default function TermsPageEn() {
 
         <LegalSection title="2. Eligibility">
           <p>
-            You must be at least 16 years old to use Sunset Builder. By using
+            You must be at least 16 years old to use Stronka AI. By using
             the Service, you represent that you meet this requirement and have
             the legal capacity to enter into these Terms.
           </p>
@@ -101,7 +101,7 @@ export default function TermsPageEn() {
 
         <LegalSection title="5. AI-Generated Content">
           <p>
-            Sunset Builder uses artificial intelligence to help you create
+            Stronka AI uses artificial intelligence to help you create
             landing pages. You acknowledge that:
           </p>
           <LegalList>
@@ -129,7 +129,7 @@ export default function TermsPageEn() {
               Your content:
             </strong>{" "}
             You retain full ownership of the User Content you create using
-            Sunset Builder. By using the Service, you grant us a limited,
+            Stronka AI. By using the Service, you grant us a limited,
             non-exclusive license to host, store, and display your User Content
             solely for the purpose of providing the Service to you.
           </p>
@@ -139,7 +139,7 @@ export default function TermsPageEn() {
             </strong>{" "}
             All rights, title, and interest in the Service itself — including
             its design, code, AI models (as licensed to us), branding, and
-            documentation — remain with Sunset Builder. These Terms do not
+            documentation — remain with Stronka AI. These Terms do not
             grant you any rights to our trademarks, logos, or other brand
             assets.
           </p>
@@ -147,7 +147,7 @@ export default function TermsPageEn() {
 
         <LegalSection title="7. Subscriptions and Payments">
           <p>
-            Sunset Builder offers paid subscription plans. By subscribing, you
+            Stronka AI offers paid subscription plans. By subscribing, you
             agree to the following:
           </p>
           <LegalList>
@@ -185,7 +185,7 @@ export default function TermsPageEn() {
 
         <LegalSection title="9. Availability and Support">
           <p>
-            We aim to keep Sunset Builder available at all times but do not
+            We aim to keep Stronka AI available at all times but do not
             guarantee uninterrupted access. The Service may be temporarily
             unavailable due to maintenance, updates, or circumstances beyond
             our control. We will make reasonable efforts to notify you of
@@ -197,7 +197,7 @@ export default function TermsPageEn() {
           <p>To the maximum extent permitted by applicable law:</p>
           <LegalList>
             <li>
-              Sunset Builder is provided on an &ldquo;as is&rdquo; and
+              Stronka AI is provided on an &ldquo;as is&rdquo; and
               &ldquo;as available&rdquo; basis, without warranties of any kind,
               whether express or implied.
             </li>
@@ -221,7 +221,7 @@ export default function TermsPageEn() {
 
         <LegalSection title="11. Indemnification">
           <p>
-            You agree to indemnify and hold harmless Sunset Builder and its
+            You agree to indemnify and hold harmless Stronka AI and its
             affiliates, officers, and employees from any claims, damages,
             losses, or expenses (including reasonable legal fees) arising from
             your use of the Service, your User Content, or your violation of
@@ -280,11 +280,11 @@ export default function TermsPageEn() {
         <LegalSection title="16. Contact">
           <p>For questions about these Terms, contact us at:</p>
           <LegalContactCard>
-            <p className="font-semibold text-gray-900">Sunset Builder</p>
+            <p className="font-semibold text-gray-900">Stronka AI</p>
             <p>
               Email:{" "}
-              <LegalLink href="mailto:hello@sunsetbuilder.com">
-                hello@sunsetbuilder.com
+              <LegalLink href="mailto:hello@stronkaai.com">
+                hello@stronkaai.com
               </LegalLink>
             </p>
             <p>Based in Poland</p>

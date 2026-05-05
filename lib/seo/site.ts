@@ -3,7 +3,7 @@ import {
   isLoopbackHttpOrigin,
 } from "@/lib/url/resolve-http-origin";
 
-const PRODUCTION_FALLBACK = "https://www.sunset-builder.com";
+const PRODUCTION_FALLBACK = "https://www.stronkaai.com";
 
 function readSiteOrigin(): string {
   const origin = firstHttpOriginFromCandidates([
@@ -24,28 +24,32 @@ function readSiteOrigin(): string {
 }
 
 export const siteConfig = {
-  name: "Sunset",
-  legalName: "Sunset Builder",
-  shortDescription: "AI landing page builder",
-  tagline: "Build a landing page by chatting",
+  name: "Stronka AI",
+  legalName: "Stronka AI",
+  shortDescription: "Kreator stron AI",
+  tagline: "Zbuduj stronę rozmawiając",
   description:
-    "Sunset is an AI landing page builder. Describe your business in plain English and ship a beautiful, conversion-focused landing page in seconds — no templates, no drag-and-drop.",
+    "Stronka AI to kreator stron internetowych i landing page'y oparty na sztucznej inteligencji. Opisz swój biznes po polsku, a Stronka zaprojektuje, zbuduje i opublikuje piękną, konwertującą stronę w kilka sekund — bez szablonów i przeciągania bloków.",
   shortDescriptionSocial:
-    "Describe it. Sunset designs, builds, and ships a conversion-focused landing page in seconds.",
+    "Opisz, czego chcesz. Stronka AI zaprojektuje, zbuduje i opublikuje konwertującą stronę w kilka sekund.",
   url: readSiteOrigin(),
   ogImagePath: "/opengraph-image",
   twitterHandle: undefined as string | undefined,
-  locale: "en_US",
+  locale: "pl_PL",
   themeColor: "#ff6313",
   keywords: [
+    "kreator stron AI",
+    "kreator stron internetowych",
+    "AI kreator stron",
+    "generator stron AI",
+    "generator landing page",
+    "landing page AI",
+    "strona internetowa AI",
+    "stworzyć stronę AI",
+    "stronka AI",
+    "kreator landing page",
     "AI landing page builder",
     "AI website builder",
-    "landing page generator",
-    "AI website generator",
-    "no-code landing page",
-    "build landing page from text",
-    "landing page maker",
-    "AI web design",
   ],
 } as const;
 

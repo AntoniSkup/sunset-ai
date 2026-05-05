@@ -8,7 +8,7 @@ import { parseHttpOriginCandidate } from "@/lib/url/resolve-http-origin";
  * `fetch("/api/...")` against the real app). All consumers — builder iframe,
  * ScreenshotOne capture, published share links — point here.
  *
- * Production: `https://sunset-deploy.com`
+ * Production: `https://stronkaai-deploy.com`
  * Local dev: `http://deploy.localhost:3000` (treated as a separate origin from
  * `localhost` by all major browsers, so cookie/storage isolation still applies).
  */
@@ -18,7 +18,7 @@ export function getDeployOrigin(): string {
   );
   if (!origin) {
     throw new Error(
-      "NEXT_PUBLIC_DEPLOY_ORIGIN is not configured. Set it to the public origin of the preview/publish host (e.g. https://sunset-deploy.com)."
+      "NEXT_PUBLIC_DEPLOY_ORIGIN is not configured. Set it to the public origin of the preview/publish host (e.g. https://stronkaai-deploy.com)."
     );
   }
   return origin;
@@ -34,7 +34,7 @@ export function getDeployOriginOrNull(): string | null {
   return parseHttpOriginCandidate(process.env.NEXT_PUBLIC_DEPLOY_ORIGIN);
 }
 
-/** Host portion of the deploy origin, e.g. `sunset-deploy.com`. */
+/** Host portion of the deploy origin, e.g. `stronkaai-deploy.com`. */
 export function getDeployHost(): string | null {
   const origin = getDeployOriginOrNull();
   if (!origin) return null;
@@ -75,7 +75,7 @@ function buildPublishedSiteUrlWithOrigin(origin: string, publicId: string): stri
 
 /**
  * Public live URL for a published site: `https://<slug>.<deploy host>/`
- * (e.g. `https://acme-landing.sunset-deploy.com/`).
+ * (e.g. `https://acme-landing.stronkaai-deploy.com/`).
  * Safe to use in client components when `NEXT_PUBLIC_DEPLOY_ORIGIN` is set.
  */
 export function buildPublishedSiteUrlOrNull(publicId: string): string | null {
@@ -90,7 +90,7 @@ export function buildPublishedSiteUrl(publicId: string): string {
 
 /**
  * If `host` is a one-level subdomain of the deploy origin (e.g. `acme` for
- * `acme.sunset-deploy.com` or `acme.deploy.localhost:3000`), returns that label;
+ * `acme.stronkaai-deploy.com` or `acme.deploy.localhost:3000`), returns that label;
  * otherwise `null` (including for the deploy apex host).
  */
 export function getPublishedSiteLabelFromHost(

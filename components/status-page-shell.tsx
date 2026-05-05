@@ -66,7 +66,7 @@ export function StatusPageShell({
 
       <footer className="relative z-10 shrink-0 border-t border-gray-100 py-8">
         <div className="mx-auto flex w-full max-w-7xl flex-col items-center justify-between gap-4 px-4 text-xs text-gray-400 sm:flex-row sm:px-6 lg:px-8">
-          <span>© {year} Sunset.</span>
+          <span>© {year} Stronka AI.</span>
           {footerExtra ? (
             <div className="flex flex-wrap items-center justify-center gap-4">
               {footerExtra}

@@ -249,7 +249,7 @@ export function PreviewPanel({
     async function fetchTokenAndPoint() {
       if (cancelled) return;
       // Mints a new short-lived JWT and returns an absolute URL on the deploy
-      // origin (`sunset-deploy.com/p/<token>`). Fetched fresh on every
+      // origin (`stronkaai-deploy.com/p/<token>`). Fetched fresh on every
       // revision change because tokens encode `(chatId, revisionNumber)`.
       try {
         const res = await fetch(`/api/preview/${chatId}/token`, {
@@ -446,7 +446,7 @@ export function PreviewPanel({
           )}
           {/*
            * The preview iframe is loaded from the deploy origin
-           * (`sunset-deploy.com`) — a different host than the main app — so
+           * (`stronkaai-deploy.com`) — a different host than the main app — so
            * the AI-generated React bundle runs in a separate browser origin
            * with no access to the main app's cookies, storage, or APIs.
            *

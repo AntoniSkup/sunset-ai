@@ -75,7 +75,7 @@ const DEPLOY_HOST_ALLOWED_EXACT = new Set(["/favicon.ico", "/robots.txt"]);
 
 /**
  * Path is considered "preview-shell-only" — only renderable on the deploy
- * origin (`sunset-deploy.com`), never on the main app.
+ * origin (`stronkaai-deploy.com`), never on the main app.
  */
 function isDeployOnlyPath(pathname: string): boolean {
   return DEPLOY_HOST_ALLOWED_PREFIXES.some((p) => pathname.startsWith(p));
@@ -150,7 +150,7 @@ export async function middleware(request: NextRequest) {
 
   // Deploy origin: serve only the preview/published shells. Everything else
   // (dashboard, sign-in, billing, /api/*) is invisible here so a misconfig
-  // can never leak the main app surface onto sunset-deploy.com.
+  // can never leak the main app surface onto stronkaai-deploy.com.
   if (onDeploy) {
     if (!isDeployHostAllowedPath(pathname)) {
       return new NextResponse("Not Found", { status: 404 });

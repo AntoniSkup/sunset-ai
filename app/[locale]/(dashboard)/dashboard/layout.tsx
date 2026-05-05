@@ -17,7 +17,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { signOut } from "@/app/[locale]/(login)/actions";
 import { mutate } from "swr";
-import { SunsetLogoMenu } from "@/components/nav/sunset-logo-menu";
+import { BrandLogoMenu } from "@/components/nav/brand-logo-menu";
 
 export default function DashboardLayout({
   children,
@@ -65,7 +65,7 @@ export default function DashboardLayout({
 
       <div className="relative z-10 flex items-center justify-between border-b border-gray-200/70 bg-white/70 p-4 backdrop-blur-md backdrop-saturate-150 supports-[backdrop-filter]:bg-white/55 lg:hidden">
         <div className="flex items-center gap-2">
-          <SunsetLogoMenu variant="dashboard" />
+          <BrandLogoMenu variant="dashboard" />
           <span className="text-sm font-medium tracking-tight text-gray-900">
             {tNav("settings")}
           </span>
@@ -91,7 +91,7 @@ export default function DashboardLayout({
         >
           <nav className="flex h-full flex-col overflow-y-auto p-4">
             <div className="mb-4 hidden items-center gap-2 lg:flex">
-              <SunsetLogoMenu variant="dashboard" />
+              <BrandLogoMenu variant="dashboard" />
             </div>
 
             <div className="flex-1 space-y-1">

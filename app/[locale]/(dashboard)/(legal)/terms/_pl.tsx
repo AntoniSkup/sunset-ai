@@ -20,7 +20,7 @@ export default function TermsPagePl() {
 
       <LegalHighlight>
         Niniejsze Warunki korzystania („Warunki") regulują Twój dostęp do
-        platformy Sunset Builder oraz korzystanie z niej. Zakładając konto lub
+        platformy Stronka AI oraz korzystanie z niej. Zakładając konto lub
         korzystając z naszej usługi, zgadzasz się przestrzegać niniejszych
         Warunków. Jeśli nie zgadzasz się z nimi, prosimy nie korzystać z
         usługi.
@@ -32,7 +32,7 @@ export default function TermsPagePl() {
             <strong className="font-semibold text-gray-900">
               „Usługa"
             </strong>{" "}
-            oznacza aplikację internetową Sunset Builder wraz ze wszystkimi
+            oznacza aplikację internetową Stronka AI wraz ze wszystkimi
             funkcjami, narzędziami oraz możliwościami generowania treści.
           </p>
           <p>
@@ -46,7 +46,7 @@ export default function TermsPagePl() {
             <strong className="font-semibold text-gray-900">
               „My", „nas", „nasze"
             </strong>{" "}
-            oznacza Sunset Builder, firmę z siedzibą w Polsce.
+            oznacza Stronka AI, firmę z siedzibą w Polsce.
           </p>
           <p>
             <strong className="font-semibold text-gray-900">
@@ -60,7 +60,7 @@ export default function TermsPagePl() {
 
         <LegalSection title="2. Wymagania">
           <p>
-            Aby korzystać z Sunset Builder, musisz mieć ukończone co najmniej
+            Aby korzystać z Stronka AI, musisz mieć ukończone co najmniej
             16 lat. Korzystając z Usługi, oświadczasz, że spełniasz ten
             wymóg i masz zdolność prawną do zawarcia niniejszych Warunków.
           </p>
@@ -114,7 +114,7 @@ export default function TermsPagePl() {
 
         <LegalSection title="5. Treści generowane przez AI">
           <p>
-            Sunset Builder wykorzystuje sztuczną inteligencję, aby pomóc Ci
+            Stronka AI wykorzystuje sztuczną inteligencję, aby pomóc Ci
             w tworzeniu landing page'y. Przyjmujesz do wiadomości, że:
           </p>
           <LegalList>
@@ -144,7 +144,7 @@ export default function TermsPagePl() {
               Twoje treści:
             </strong>{" "}
             zachowujesz pełne prawa do Treści Użytkownika tworzonych za pomocą
-            Sunset Builder. Korzystając z Usługi, udzielasz nam ograniczonej,
+            Stronka AI. Korzystając z Usługi, udzielasz nam ograniczonej,
             niewyłącznej licencji na hostowanie, przechowywanie i wyświetlanie
             Twoich Treści Użytkownika wyłącznie w celu świadczenia Usługi.
           </p>
@@ -154,7 +154,7 @@ export default function TermsPagePl() {
             </strong>{" "}
             wszelkie prawa do samej Usługi — w tym do jej projektu, kodu,
             modeli AI (na zasadach licencji udzielonej nam), marki oraz
-            dokumentacji — pozostają przy Sunset Builder. Niniejsze Warunki
+            dokumentacji — pozostają przy Stronka AI. Niniejsze Warunki
             nie udzielają Ci żadnych praw do naszych znaków towarowych, logo
             ani innych elementów marki.
           </p>
@@ -162,7 +162,7 @@ export default function TermsPagePl() {
 
         <LegalSection title="7. Subskrypcje i płatności">
           <p>
-            Sunset Builder oferuje płatne plany subskrypcyjne. Subskrybując
+            Stronka AI oferuje płatne plany subskrypcyjne. Subskrybując
             usługę, akceptujesz następujące zasady:
           </p>
           <LegalList>
@@ -200,7 +200,7 @@ export default function TermsPagePl() {
 
         <LegalSection title="9. Dostępność i wsparcie">
           <p>
-            Dążymy do tego, aby Sunset Builder był dostępny przez cały czas,
+            Dążymy do tego, aby Stronka AI był dostępny przez cały czas,
             ale nie gwarantujemy nieprzerwanego dostępu. Usługa może być
             tymczasowo niedostępna z powodu prac konserwacyjnych, aktualizacji
             lub okoliczności od nas niezależnych. Dołożymy starań, aby z
@@ -214,7 +214,7 @@ export default function TermsPagePl() {
           </p>
           <LegalList>
             <li>
-              Sunset Builder jest dostarczany w stanie „takim, jaki jest" i
+              Stronka AI jest dostarczany w stanie „takim, jaki jest" i
               „w miarę dostępności", bez jakichkolwiek gwarancji, wyraźnych
               ani dorozumianych.
             </li>
@@ -240,7 +240,7 @@ export default function TermsPagePl() {
 
         <LegalSection title="11. Zwolnienie z odpowiedzialności">
           <p>
-            Zobowiązujesz się zwolnić Sunset Builder oraz jego podmioty
+            Zobowiązujesz się zwolnić Stronka AI oraz jego podmioty
             powiązane, członków organów i pracowników z wszelkich roszczeń,
             szkód, strat lub kosztów (w tym uzasadnionych kosztów obsługi
             prawnej) wynikających z korzystania przez Ciebie z Usługi, z
@@ -305,11 +305,11 @@ export default function TermsPagePl() {
             nami pod adresem:
           </p>
           <LegalContactCard>
-            <p className="font-semibold text-gray-900">Sunset Builder</p>
+            <p className="font-semibold text-gray-900">Stronka AI</p>
             <p>
               Email:{" "}
-              <LegalLink href="mailto:hello@sunsetbuilder.com">
-                hello@sunsetbuilder.com
+              <LegalLink href="mailto:hello@stronkaai.com">
+                hello@stronkaai.com
               </LegalLink>
             </p>
             <p>Siedziba: Polska</p>

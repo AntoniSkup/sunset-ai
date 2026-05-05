@@ -13,7 +13,7 @@ export default function PrivacyPageEn() {
       <LegalPageHeader title="Privacy Policy" lastUpdated="April 25, 2026" />
 
       <LegalHighlight>
-        Sunset Builder (&ldquo;we&rdquo;, &ldquo;us&rdquo;, &ldquo;our&rdquo;)
+        Stronka AI (&ldquo;we&rdquo;, &ldquo;us&rdquo;, &ldquo;our&rdquo;)
         is committed to protecting your personal data. This Privacy Policy
         explains what data we collect, why, and your rights under the EU
         General Data Protection Regulation (GDPR).
@@ -22,9 +22,8 @@ export default function PrivacyPageEn() {
       <div className="space-y-10">
         <LegalSection title="1. Data Controller">
           <p>
-            The data controller responsible for your personal data is Sunset
-            Builder, based in Poland. For contact details, see Section 12
-            below.
+            The data controller responsible for your personal data is Stronka
+            AI, based in Poland. For contact details, see Section 12 below.
           </p>
         </LegalSection>
 
@@ -105,7 +104,7 @@ export default function PrivacyPageEn() {
                 To improve the service
               </strong>{" "}
               — legitimate interest in understanding how users interact with
-              Sunset Builder (Art. 6(1)(f) GDPR).
+              Stronka AI (Art. 6(1)(f) GDPR).
             </li>
             <li>
               <strong className="font-semibold text-gray-900">
@@ -118,7 +117,7 @@ export default function PrivacyPageEn() {
 
         <LegalSection title="4. AI-Generated Content">
           <p>
-            Sunset Builder uses third-party AI services (such as language
+            Stronka AI uses third-party AI services (such as language
             models) to generate landing page content on your behalf. When you
             use these features, the text prompts and instructions you provide
             may be sent to our AI provider for processing. We do not use your
@@ -130,8 +129,8 @@ export default function PrivacyPageEn() {
         <LegalSection title="5. Cookies and Tracking">
           <p>
             We use essential cookies required for the service to function. We
-            may also use analytics cookies to understand how you use Sunset
-            Builder. Before placing any non-essential cookies, we will ask for
+            may also use analytics cookies to understand how you use Stronka
+            AI. Before placing any non-essential cookies, we will ask for
             your consent via a cookie banner. You can withdraw consent or
             manage your cookie preferences at any time through your browser
             settings or our cookie settings panel.
@@ -269,7 +268,7 @@ export default function PrivacyPageEn() {
 
         <LegalSection title="11. Children's Privacy">
           <p>
-            Sunset Builder is not intended for use by individuals under the age
+            Stronka AI is not intended for use by individuals under the age
             of 16. We do not knowingly collect personal data from children. If
             we become aware that a child has provided us with personal data,
             we will delete it promptly.
@@ -282,11 +281,11 @@ export default function PrivacyPageEn() {
             exercise your data rights, you can reach us at:
           </p>
           <LegalContactCard>
-            <p className="font-semibold text-gray-900">Sunset Builder</p>
+            <p className="font-semibold text-gray-900">Stronka AI</p>
             <p>
               Email:{" "}
-              <LegalLink href="mailto:privacy@sunsetbuilder.com">
-                privacy@sunsetbuilder.com
+              <LegalLink href="mailto:privacy@stronkaai.com">
+                privacy@stronkaai.com
               </LegalLink>
             </p>
             <p>Based in Poland</p>

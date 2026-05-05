@@ -31,7 +31,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { BorderBeam } from "@/components/ui/border-beam";
 import TypingText from "@/components/ui/typewriter";
-import { SunsetLogoMenu } from "@/components/nav/sunset-logo-menu";
+import { BrandLogoMenu } from "@/components/nav/brand-logo-menu";
 import sunsetLogoTree from "@/components/icons/sunset_logo_tree.png";
 import {
   MessageAttachment,
@@ -250,7 +250,7 @@ export default function LandingPage() {
         }`}
       >
         <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
-          <SunsetLogoMenu />
+          <BrandLogoMenu />
           <nav className="flex items-center gap-2">
             <Link
               href="/pricing"

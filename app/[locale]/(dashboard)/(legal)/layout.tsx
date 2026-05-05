@@ -1,6 +1,6 @@
 import { getTranslations } from "next-intl/server";
 import { Link } from "@/i18n/navigation";
-import { SunsetLogoMenu } from "@/components/nav/sunset-logo-menu";
+import { BrandLogoMenu } from "@/components/nav/brand-logo-menu";
 import { LanguageSwitcher } from "@/components/i18n/language-switcher";
 
 export default async function LegalLayout({
@@ -16,7 +16,7 @@ export default async function LegalLayout({
 
       <header className="sticky top-0 z-30 border-b border-gray-200/60 bg-white/65 backdrop-blur-md backdrop-saturate-150 supports-[backdrop-filter]:bg-white/55">
         <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
-          <SunsetLogoMenu />
+          <BrandLogoMenu />
           <nav className="flex items-center gap-1.5">
             <Link
               href="/privacy"
@@ -52,7 +52,7 @@ export default async function LegalLayout({
 
       <footer className="relative z-10 border-t border-gray-100 py-8">
         <div className="mx-auto flex w-full max-w-3xl flex-col items-center justify-between gap-4 px-4 text-xs text-gray-400 sm:flex-row sm:px-6 lg:px-8">
-          <span>© {new Date().getFullYear()} Sunset.</span>
+          <span>© {new Date().getFullYear()} Stronka AI.</span>
           <div className="flex flex-wrap items-center justify-center gap-4">
             <Link href="/privacy" className="hover:text-gray-700">
               {t("privacy")}

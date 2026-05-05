@@ -2,7 +2,7 @@ import { parseHttpOriginCandidate } from "@/lib/url/resolve-http-origin";
 
 /**
  * Content-Security-Policy applied to every HTML/JS response served from the
- * deploy origin (`sunset-deploy.com`).
+ * deploy origin (`stronkaai-deploy.com`).
  *
  * Defense-in-depth on top of the cross-origin sandbox: even if AI-generated
  * code somehow escapes our compile pipeline or the iframe's `sandbox` attr is

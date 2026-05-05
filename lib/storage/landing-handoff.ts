@@ -15,7 +15,7 @@
  */
 
 const PROMPT_KEY = "landing-starter-prompt";
-const DB_NAME = "sunset-handoff";
+const DB_NAME = "stronka-handoff";
 const DB_VERSION = 1;
 const STORE_NAME = "files";
 const FILES_KEY = "landing-starter-files";
