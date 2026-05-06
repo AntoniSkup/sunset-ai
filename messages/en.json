@@ -34,6 +34,23 @@
     "and": "and"
   },
   "billing": {},
+  "seo": {
+    "app": {
+      "tagline": "Build your website by chatting",
+      "shortDescription": "AI website builder",
+      "defaultTitle": "Stronka AI — Build your website by chatting",
+      "titleTemplate": "%s — Stronka AI",
+      "applicationDescription": "Stronka AI is an AI-powered website and landing page builder. Describe your business in plain language and Stronka designs, builds, and ships a beautiful, conversion-focused site in seconds — no templates, no drag-and-drop."
+    },
+    "home": {
+      "title": "Stronka AI — Build your website by chatting",
+      "description": "Stronka AI is an AI-powered website and landing page builder. Describe your business in plain language and Stronka designs, builds, and ships a beautiful, conversion-focused site in seconds — no templates, no drag-and-drop.",
+      "ogTitle": "Stronka AI — Build your website by chatting",
+      "ogDescription": "Describe what you want. Stronka AI designs, builds, and ships a conversion-focused site in seconds.",
+      "ogImageAlt": "Stronka AI — AI website builder",
+      "keywords": "AI website builder, AI landing page builder, AI website generator, AI landing page generator, build a website with AI, generate a landing page, no-code website builder, AI web design, Stronka AI"
+    }
+  },
   "pricing": {
     "metaTitle": "Pricing",
     "metaDescription": "Simple, credit-based pricing for {brand}, the {tagline}. Subscribe monthly or buy one-time top-ups whenever you need extra credits.",

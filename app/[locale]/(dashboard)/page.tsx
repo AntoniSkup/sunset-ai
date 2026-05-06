@@ -1,46 +1,88 @@
 import type { Metadata } from "next";
+import { getTranslations } from "next-intl/server";
 import LandingPage from "./landing-page";
 import { absoluteUrl, siteConfig } from "@/lib/seo/site";
+import {
+  getOgAlternateLocales,
+  getOgImageUrl,
+  getOgLocale,
+  localizedAlternates,
+  localizedUrl,
+} from "@/lib/seo/metadata";
+import { routing, type AppLocale } from "@/i18n/routing";
 
-const fullTitle = `${siteConfig.name} — ${siteConfig.tagline}`;
-const pageDescription = siteConfig.description;
-const pageUrl = absoluteUrl("/");
-const ogImageUrl = absoluteUrl(siteConfig.ogImagePath);
+function resolveAppLocale(value: string): AppLocale {
+  return (routing.locales as readonly string[]).includes(value)
+    ? (value as AppLocale)
+    : routing.defaultLocale;
+}
 
-export const metadata: Metadata = {
-  title: {
-    absolute: fullTitle,
-  },
-  description: pageDescription,
-  keywords: [...siteConfig.keywords],
-  alternates: {
-    canonical: "/",
-  },
-  openGraph: {
-    type: "website",
-    url: pageUrl,
-    siteName: siteConfig.name,
-    title: fullTitle,
-    description: siteConfig.shortDescriptionSocial,
-    locale: siteConfig.locale,
-    images: [
-      {
-        url: ogImageUrl,
-        width: 1200,
-        height: 630,
-        alt: `${siteConfig.name} — ${siteConfig.shortDescription}`,
-      },
-    ],
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: fullTitle,
-    description: siteConfig.shortDescriptionSocial,
-    images: [ogImageUrl],
-  },
-};
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<Metadata> {
+  const { locale: localeParam } = await params;
+  const locale = resolveAppLocale(localeParam);
+  const tSeo = await getTranslations({ locale, namespace: "seo" });
 
-export default function Page() {
+  const title = tSeo("home.title");
+  const description = tSeo("home.description");
+  const ogTitle = tSeo("home.ogTitle");
+  const ogDescription = tSeo("home.ogDescription");
+  const ogImageAlt = tSeo("home.ogImageAlt");
+  const keywords = tSeo("home.keywords")
+    .split(",")
+    .map((k) => k.trim())
+    .filter(Boolean);
+
+  const alternates = localizedAlternates("/", locale);
+  const ogImageUrl = getOgImageUrl(locale);
+
+  return {
+    title: { absolute: title },
+    description,
+    keywords,
+    alternates,
+    openGraph: {
+      type: "website",
+      url: alternates.canonical as string,
+      siteName: siteConfig.name,
+      title: ogTitle,
+      description: ogDescription,
+      locale: getOgLocale(locale),
+      alternateLocale: getOgAlternateLocales(locale),
+      images: [
+        {
+          url: ogImageUrl,
+          width: 1200,
+          height: 630,
+          alt: ogImageAlt,
+        },
+      ],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: ogTitle,
+      description: ogDescription,
+      images: [ogImageUrl],
+    },
+  };
+}
+
+export default async function Page({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale: localeParam } = await params;
+  const locale = resolveAppLocale(localeParam);
+  const tSeo = await getTranslations({ locale, namespace: "seo" });
+
+  const description = tSeo("home.description");
+  const pageUrl = localizedUrl("/", locale);
+  const ogImageUrl = getOgImageUrl(locale);
+
   const softwareApplicationLd = {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
@@ -49,8 +91,9 @@ export default function Page() {
     applicationCategory: "WebApplication",
     operatingSystem: "Web",
     url: pageUrl,
-    description: pageDescription,
+    description,
     image: ogImageUrl,
+    inLanguage: getOgLocale(locale).replace("_", "-"),
     offers: {
       "@type": "Offer",
       price: "0",

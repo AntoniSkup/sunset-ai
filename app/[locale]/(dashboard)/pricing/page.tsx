@@ -12,8 +12,21 @@ import {
 } from "@/lib/billing/accounts";
 import { getUser } from "@/lib/db/queries";
 import { siteConfig } from "@/lib/seo/site";
+import {
+  getOgAlternateLocales,
+  getOgImageUrl,
+  getOgLocale,
+  localizedAlternates,
+} from "@/lib/seo/metadata";
+import { routing, type AppLocale } from "@/i18n/routing";
 import { SubmitButton } from "./submit-button";
 import { PricingNavMenu } from "./pricing-nav-menu";
+
+function resolveAppLocale(value: string): AppLocale {
+  return (routing.locales as readonly string[]).includes(value)
+    ? (value as AppLocale)
+    : routing.defaultLocale;
+}
 import {
   Card,
   CardContent,
@@ -26,28 +39,44 @@ import { Button } from "@/components/ui/button";
 
 export const revalidate = 3600;
 
-export async function generateMetadata(): Promise<Metadata> {
-  const t = await getTranslations("pricing");
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<Metadata> {
+  const { locale: localeParam } = await params;
+  const locale = resolveAppLocale(localeParam);
+  const [t, tSeo] = await Promise.all([
+    getTranslations({ locale, namespace: "pricing" }),
+    getTranslations({ locale, namespace: "seo" }),
+  ]);
   const description = t("metaDescription", {
     brand: siteConfig.name,
-    tagline: siteConfig.shortDescription,
+    tagline: tSeo("app.shortDescription"),
   });
   const titleSocial = t("metaTitleSocial", { brand: siteConfig.name });
+  const alternates = localizedAlternates("/pricing", locale);
+  const ogImageUrl = getOgImageUrl(locale);
+
   return {
     title: t("metaTitle"),
     description,
-    alternates: { canonical: "/pricing" },
+    alternates,
     openGraph: {
       type: "website",
-      url: "/pricing",
+      url: alternates.canonical as string,
       siteName: siteConfig.name,
       title: titleSocial,
       description,
+      locale: getOgLocale(locale),
+      alternateLocale: getOgAlternateLocales(locale),
+      images: [{ url: ogImageUrl, width: 1200, height: 630 }],
     },
     twitter: {
       card: "summary_large_image",
       title: titleSocial,
       description,
+      images: [ogImageUrl],
     },
   };
 }

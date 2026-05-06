@@ -34,6 +34,23 @@
     "and": "oraz"
   },
   "billing": {},
+  "seo": {
+    "app": {
+      "tagline": "Zbuduj stronę przez rozmowę",
+      "shortDescription": "Kreator stron AI",
+      "defaultTitle": "Stronka AI — Zbuduj stronę przez rozmowę",
+      "titleTemplate": "%s — Stronka AI",
+      "applicationDescription": "Stronka AI to kreator stron internetowych i landing page'y oparty na sztucznej inteligencji. Opisz swój biznes po polsku, a Stronka zaprojektuje, zbuduje i opublikuje piękną, konwertującą stronę w kilka sekund — bez szablonów i przeciągania bloków."
+    },
+    "home": {
+        "title": "Stronka AI — Zbuduj stronę przez rozmowę",
+      "description": "Stronka AI to kreator stron internetowych i landing page'y oparty na sztucznej inteligencji. Opisz swój biznes po polsku, a Stronka zaprojektuje, zbuduje i opublikuje piękną, konwertującą stronę w kilka sekund — bez szablonów i przeciągania bloków.",
+      "ogTitle": "Stronka AI — Zbuduj stronę przez rozmowę",
+      "ogDescription": "Opisz, czego chcesz. Stronka AI zaprojektuje, zbuduje i opublikuje konwertującą stronę w kilka sekund.",
+      "ogImageAlt": "Stronka AI — Kreator stron AI",
+      "keywords": "kreator stron AI, kreator stron internetowych, AI kreator stron, generator stron AI, generator landing page, landing page AI, strona internetowa AI, stworzyć stronę AI, stronka AI, kreator landing page, AI landing page builder, AI website builder"
+    }
+  },
   "pricing": {
     "metaTitle": "Cennik",
     "metaDescription": "Prosty cennik kredytowy dla {brand}, {tagline}. Subskrybuj miesięcznie lub kupuj jednorazowe doładowania, gdy potrzebujesz więcej kredytów.",

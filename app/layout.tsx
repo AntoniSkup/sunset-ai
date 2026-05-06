@@ -2,7 +2,7 @@ import "./globals.css";
 import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Sans } from "next/font/google";
 import Script from "next/script";
-import { getLocale } from "next-intl/server";
+import { getLocale, getTranslations } from "next-intl/server";
 import { getUser, getTeamForUser } from "@/lib/db/queries";
 
 import { SWRConfig } from "swr";
@@ -10,6 +10,13 @@ import { Analytics } from "@vercel/analytics/next";
 import NextTopLoader from "nextjs-toploader";
 import { Toaster } from "sonner";
 import { absoluteUrl, siteConfig } from "@/lib/seo/site";
+import {
+  getOgAlternateLocales,
+  getOgImageUrl,
+  getOgLocale,
+  localizedAlternates,
+} from "@/lib/seo/metadata";
+import { routing, type AppLocale } from "@/i18n/routing";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 
 const ibmPlexSans = IBM_Plex_Sans({
@@ -20,62 +27,96 @@ const ibmPlexSans = IBM_Plex_Sans({
 
 const gaId = process.env.NEXT_PUBLIC_GA_ID;
 
-export const metadata: Metadata = {
-  metadataBase: new URL(siteConfig.url),
-  title: {
-    default: `${siteConfig.name} — ${siteConfig.tagline}`,
-    template: `%s — ${siteConfig.name}`,
-  },
-  description: siteConfig.description,
-  applicationName: siteConfig.name,
-  generator: "Next.js",
-  keywords: [...siteConfig.keywords],
-  authors: [{ name: siteConfig.legalName, url: siteConfig.url }],
-  creator: siteConfig.legalName,
-  publisher: siteConfig.legalName,
-  category: "technology",
-  formatDetection: {
-    email: false,
-    address: false,
-    telephone: false,
-  },
-  openGraph: {
-    type: "website",
-    siteName: siteConfig.name,
-    title: `${siteConfig.name} — ${siteConfig.tagline}`,
-    description: siteConfig.shortDescriptionSocial,
-    url: siteConfig.url,
-    locale: siteConfig.locale,
-    images: [
-      {
-        url: siteConfig.ogImagePath,
-        width: 1200,
-        height: 630,
-        alt: `${siteConfig.name} — ${siteConfig.shortDescription}`,
-      },
-    ],
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: `${siteConfig.name} — ${siteConfig.tagline}`,
-    description: siteConfig.shortDescriptionSocial,
-    images: [siteConfig.ogImagePath],
-  },
-  robots: {
-    index: true,
-    follow: true,
-    googleBot: {
+function resolveAppLocale(value: string): AppLocale {
+  return (routing.locales as readonly string[]).includes(value)
+    ? (value as AppLocale)
+    : routing.defaultLocale;
+}
+
+/**
+ * Root metadata. Generated per-request because every value depends on
+ * the active locale (title/description copy, og:locale, hreflang
+ * alternates). Page-level `generateMetadata` exports merge over these
+ * defaults — pages still need their own `alternates` because canonical
+ * URLs are per-path.
+ */
+export async function generateMetadata(): Promise<Metadata> {
+  const localeStr = await getLocale();
+  const locale = resolveAppLocale(localeStr);
+  const tSeo = await getTranslations({ locale, namespace: "seo" });
+
+  const defaultTitle = tSeo("app.defaultTitle");
+  const titleTemplate = tSeo("app.titleTemplate");
+  const description = tSeo("home.description");
+  const ogTitle = tSeo("home.ogTitle");
+  const ogDescription = tSeo("home.ogDescription");
+  const ogImageAlt = tSeo("home.ogImageAlt");
+  const keywords = tSeo("home.keywords")
+    .split(",")
+    .map((k) => k.trim())
+    .filter(Boolean);
+
+  const ogImageUrl = getOgImageUrl(locale);
+
+  return {
+    metadataBase: new URL(siteConfig.url),
+    title: {
+      default: defaultTitle,
+      template: titleTemplate,
+    },
+    description,
+    applicationName: siteConfig.name,
+    generator: "Next.js",
+    keywords,
+    authors: [{ name: siteConfig.legalName, url: siteConfig.url }],
+    creator: siteConfig.legalName,
+    publisher: siteConfig.legalName,
+    category: "technology",
+    formatDetection: {
+      email: false,
+      address: false,
+      telephone: false,
+    },
+    openGraph: {
+      type: "website",
+      siteName: siteConfig.name,
+      title: ogTitle,
+      description: ogDescription,
+      url: localizedAlternates("/", locale).canonical as string,
+      locale: getOgLocale(locale),
+      alternateLocale: getOgAlternateLocales(locale),
+      images: [
+        {
+          url: ogImageUrl,
+          width: 1200,
+          height: 630,
+          alt: ogImageAlt,
+        },
+      ],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: ogTitle,
+      description: ogDescription,
+      images: [ogImageUrl],
+    },
+    robots: {
       index: true,
       follow: true,
-      "max-image-preview": "large",
-      "max-snippet": -1,
-      "max-video-preview": -1,
+      googleBot: {
+        index: true,
+        follow: true,
+        "max-image-preview": "large",
+        "max-snippet": -1,
+        "max-video-preview": -1,
+      },
     },
-  },
-  alternates: {
-    canonical: "/",
-  },
-};
+    // Per-locale canonical + reciprocal hreflang for the home path.
+    // Pages override this with their own path; layouts only set the
+    // home alternates as a sensible default.
+    alternates: localizedAlternates("/", locale),
+  };
+}
 
 export const viewport: Viewport = {
   maximumScale: 1,
@@ -83,24 +124,24 @@ export const viewport: Viewport = {
   colorScheme: "light",
 };
 
-const organizationJsonLd = {
+const organizationJsonLd = (description: string) => ({
   "@context": "https://schema.org",
   "@type": "Organization",
   name: siteConfig.legalName,
   alternateName: siteConfig.name,
   url: siteConfig.url,
   logo: absoluteUrl("/icon.png"),
-  description: siteConfig.description,
-};
+  description,
+});
 
-function buildWebsiteJsonLd(locale: string) {
+function buildWebsiteJsonLd(locale: AppLocale, description: string) {
   return {
     "@context": "https://schema.org",
     "@type": "WebSite",
     name: siteConfig.name,
-    url: siteConfig.url,
-    description: siteConfig.description,
-    inLanguage: locale,
+    url: localizedAlternates("/", locale).canonical,
+    description,
+    inLanguage: getOgLocale(locale).replace("_", "-"),
     publisher: {
       "@type": "Organization",
       name: siteConfig.legalName,
@@ -114,11 +155,15 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  // Falls back to `routing.defaultLocale` ("en") for non-localized surfaces
+  // Falls back to `routing.defaultLocale` ("pl") for non-localized surfaces
   // (deploy-host route handlers, global not-found) where no locale segment
   // exists. See `i18n/request.ts`.
-  const locale = await getLocale();
-  const websiteJsonLd = buildWebsiteJsonLd(locale);
+  const localeStr = await getLocale();
+  const locale = resolveAppLocale(localeStr);
+  const tSeo = await getTranslations({ locale, namespace: "seo" });
+  const description = tSeo("home.description");
+  const websiteJsonLd = buildWebsiteJsonLd(locale, description);
+  const orgJsonLd = organizationJsonLd(tSeo("app.applicationDescription"));
 
   return (
     <html
@@ -138,7 +183,7 @@ export default async function RootLayout({
           type="application/ld+json"
           suppressHydrationWarning
           dangerouslySetInnerHTML={{
-            __html: JSON.stringify(organizationJsonLd),
+            __html: JSON.stringify(orgJsonLd),
           }}
         />
         <script

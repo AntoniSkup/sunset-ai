@@ -3,7 +3,22 @@ import { siteConfig } from "@/lib/seo/site";
 
 export const runtime = "edge";
 
-export const alt = `${siteConfig.name} — ${siteConfig.shortDescription}`;
+/**
+ * Default OG image used by metadata across both locales.
+ *
+ * The visual identity (logo + brand name + Polish tagline) is shared
+ * across languages. Per-locale variants can be added later by branching
+ * on a `?locale=` query param and emitting different copy — Open Graph
+ * tags can carry multiple `og:image` URLs at the page-metadata layer
+ * even though this single asset works for both today.
+ */
+const HEADLINE = "Twoja strona,";
+const HEADLINE_HIGHLIGHT = "jedna wiadomość dalej.";
+const SUBHEADLINE =
+  "Opisz, czego chcesz. Stronka AI zaprojektuje, zbuduje i opublikuje konwertującą stronę w kilka sekund.";
+const SHORT_DESCRIPTION = "Kreator stron AI";
+
+export const alt = `${siteConfig.name} — ${SHORT_DESCRIPTION}`;
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -90,7 +105,7 @@ export default function OpengraphImage() {
               gap: 16,
             }}
           >
-            <span>Your landing page,</span>
+            <span>{HEADLINE}</span>
             <span
               style={{
                 background:
@@ -100,7 +115,7 @@ export default function OpengraphImage() {
                 display: "flex",
               }}
             >
-              one message away.
+              {HEADLINE_HIGHLIGHT}
             </span>
           </div>
           <div
@@ -112,7 +127,7 @@ export default function OpengraphImage() {
               maxWidth: 880,
             }}
           >
-            {siteConfig.shortDescriptionSocial}
+            {SUBHEADLINE}
           </div>
         </div>
 
@@ -125,7 +140,7 @@ export default function OpengraphImage() {
             fontSize: 22,
           }}
         >
-          <div style={{ display: "flex" }}>{siteConfig.shortDescription}</div>
+          <div style={{ display: "flex" }}>{SHORT_DESCRIPTION}</div>
           <div style={{ display: "flex" }}>
             {siteConfig.url.replace(/^https?:\/\//, "")}
           </div>

@@ -23,34 +23,25 @@ function readSiteOrigin(): string {
   return origin;
 }
 
+/**
+ * Locale-agnostic site constants. Brand name, legal entity, public URL,
+ * theme color and the OG image path are identical across every language,
+ * so they live here.
+ *
+ * Localized strings (titles, descriptions, taglines, keywords, the
+ * Open Graph `locale` value) are NOT in this file. Pages must read those
+ * from `messages/<locale>.json` (via `getTranslations("seo")`) and from
+ * `lib/seo/metadata.ts` (for canonical / hreflang / og:locale). This way
+ * the same product can target Polish and English search results without
+ * the metadata layer leaking one language onto the other.
+ */
 export const siteConfig = {
   name: "Stronka AI",
   legalName: "Stronka AI",
-  shortDescription: "Kreator stron AI",
-  tagline: "Zbuduj stronę rozmawiając",
-  description:
-    "Stronka AI to kreator stron internetowych i landing page'y oparty na sztucznej inteligencji. Opisz swój biznes po polsku, a Stronka zaprojektuje, zbuduje i opublikuje piękną, konwertującą stronę w kilka sekund — bez szablonów i przeciągania bloków.",
-  shortDescriptionSocial:
-    "Opisz, czego chcesz. Stronka AI zaprojektuje, zbuduje i opublikuje konwertującą stronę w kilka sekund.",
   url: readSiteOrigin(),
   ogImagePath: "/opengraph-image",
   twitterHandle: undefined as string | undefined,
-  locale: "pl_PL",
   themeColor: "#ff6313",
-  keywords: [
-    "kreator stron AI",
-    "kreator stron internetowych",
-    "AI kreator stron",
-    "generator stron AI",
-    "generator landing page",
-    "landing page AI",
-    "strona internetowa AI",
-    "stworzyć stronę AI",
-    "stronka AI",
-    "kreator landing page",
-    "AI landing page builder",
-    "AI website builder",
-  ],
 } as const;
 
 export type SiteConfig = typeof siteConfig;
