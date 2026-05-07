@@ -7,6 +7,10 @@ const DEFAULT_CREDITS_COST = 10;
 /** Fallback when no DB row exists (e.g. chat_message not seeded yet). */
 const ACTION_FALLBACK: Record<string, number> = {
   chat_message: 0.5,
+  // url_import: one Firecrawl scrape per call (1 credit on their side
+  // for content; 1 + branding for inspiration). Mirror it 1-for-1 here
+  // until we have plan-specific pricing in the DB.
+  url_import: 1,
 };
 
 /**

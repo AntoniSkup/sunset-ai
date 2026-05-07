@@ -732,6 +732,48 @@ export const formSubmissions = pgTable(
 export type FormSubmission = typeof formSubmissions.$inferSelect;
 export type NewFormSubmission = typeof formSubmissions.$inferInsert;
 
+/**
+ * Cached results of the `import_from_url` chat tool. One row per
+ * (chat, urlHash, mode) triple so a follow-up call inside the same chat
+ * for the same URL+mode returns the persisted summary without re-billing
+ * Firecrawl. Screenshot bytes (when present) live in Vercel Blob; we
+ * only store the public blob URL here.
+ */
+export const urlImports = pgTable(
+  "url_imports",
+  {
+    id: serial("id").primaryKey(),
+    chatId: varchar("chat_id", { length: 32 })
+      .notNull()
+      .references(() => chats.publicId),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id),
+    urlHash: varchar("url_hash", { length: 64 }).notNull(),
+    url: text("url").notNull(),
+    finalUrl: text("final_url"),
+    mode: varchar("mode", { length: 16 }).notNull(),
+    title: varchar("title", { length: 512 }),
+    description: text("description"),
+    summary: jsonb("summary").$type<Record<string, unknown>>().notNull(),
+    screenshotBlobUrl: text("screenshot_blob_url"),
+    provider: varchar("provider", { length: 32 }).notNull().default("firecrawl"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    chatUrlHashModeUnique: unique("url_imports_chat_url_mode_unique").on(
+      table.chatId,
+      table.urlHash,
+      table.mode
+    ),
+    chatIdIdx: index("url_imports_chat_id_idx").on(table.chatId),
+    createdAtIdx: index("url_imports_created_at_idx").on(table.createdAt),
+  })
+);
+
+export type UrlImport = typeof urlImports.$inferSelect;
+export type NewUrlImport = typeof urlImports.$inferInsert;
+
 // ─── Billing & credits (ledger-based) ─────────────────────────────────────────
 
 export const accounts = pgTable(

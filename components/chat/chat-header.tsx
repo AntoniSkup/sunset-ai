@@ -11,7 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import sunsetLogo from "@/components/icons/sunset_logo_tree.png";
+import stronkaLogo from "@/components/icons/stronka_logo_tree.png";
 import {
   CreditCardIcon,
   Cog6ToothIcon,
@@ -97,7 +97,7 @@ export function ChatHeader({ chatId, chatName, onRename }: ChatHeaderProps) {
           <DropdownMenu modal={false}>
             <DropdownMenuTrigger asChild>
               <img
-                src={sunsetLogo.src}
+                src={stronkaLogo.src}
                 alt={t("logoAlt")}
                 className="w-7 h-7 shrink-0 hover:opacity-70 click:opacity-100 transition-all duration-200 cursor-pointer ease-in-out"
                 aria-label={t("openMenu")}

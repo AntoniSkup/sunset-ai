@@ -32,7 +32,7 @@ import { Button } from "@/components/ui/button";
 import { BorderBeam } from "@/components/ui/border-beam";
 import TypingText from "@/components/ui/typewriter";
 import { BrandLogoMenu } from "@/components/nav/brand-logo-menu";
-import sunsetLogoTree from "@/components/icons/sunset_logo_tree.png";
+import stronkaLogoTree from "@/components/icons/stronka_logo_tree.png";
 import {
   MessageAttachment,
   MessageAttachments,
@@ -311,7 +311,7 @@ export default function LandingPage() {
             <div className="flex flex-col items-center gap-3">
               <motion.div variants={heroItem}>
                 <Image
-                  src={sunsetLogoTree}
+                  src={stronkaLogoTree}
                   alt={tHero("logoAlt")}
                   width={48}
                   height={48}

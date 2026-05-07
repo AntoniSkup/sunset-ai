@@ -36,6 +36,7 @@ import {
   createValidateCompletenessTool,
 } from "@/lib/code-generation/generate-code";
 import { createSetFormNotificationEmailTool } from "@/lib/forms/tool-set-form-notification-email";
+import { createImportFromUrlTool } from "@/lib/url-import/tool-import-from-url";
 import {
   getAIModel,
   getAIModelId,
@@ -141,6 +142,9 @@ function getToolTitle(toolName: string): string {
   }
   if (toolName === "set_form_notification_email") {
     return "Form notifications";
+  }
+  if (toolName === "import_from_url") {
+    return "Imported reference";
   }
   return toolName || "tool";
 }
@@ -530,6 +534,7 @@ export async function createChatTurnStream({
     validateCompletenessToolCall,
     resolveImageSlotsToolCall,
     setFormNotificationEmailToolCall,
+    importFromUrlToolCall,
   ] = [
     createSiteTool(chatPublicId, user.id, {
       deferredChatTurnBilling: true,
@@ -542,6 +547,7 @@ export async function createChatTurnStream({
     createValidateCompletenessTool(chatPublicId, user.id),
     createResolveImageSlotsTool(chatPublicId, user.id),
     createSetFormNotificationEmailTool(chatPublicId, user.id),
+    createImportFromUrlTool(chatPublicId, user.id),
   ];
   const tools = {
     create_site: createSiteToolCall,
@@ -549,6 +555,7 @@ export async function createChatTurnStream({
     resolve_image_slots: resolveImageSlotsToolCall,
     validate_completeness: validateCompletenessToolCall,
     set_form_notification_email: setFormNotificationEmailToolCall,
+    import_from_url: importFromUrlToolCall,
   };
 
   const lastMessage = contextMessages[contextMessages.length - 1] as any;

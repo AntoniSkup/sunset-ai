@@ -23,7 +23,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { Button } from "@/components/ui/button";
 import { motion, useReducedMotion, type Variants } from "motion/react";
-import sunsetLogoTree from "@/components/icons/sunset_logo_tree.png";
+import stronkaLogoTree from "@/components/icons/stronka_logo_tree.png";
 
 import { BorderBeam } from "@/components/ui/border-beam";
 import TypingText from "@/components/ui/typewriter";
@@ -600,7 +600,7 @@ export default function StartPage() {
             <div className="flex flex-col items-center gap-3">
               <motion.img
                 variants={heroItem}
-                src={sunsetLogoTree.src}
+                src={stronkaLogoTree.src}
                 alt={t("logoAlt")}
                 className="h-12 w-12 select-none drop-shadow-sm"
                 draggable={false}
@@ -920,7 +920,7 @@ export default function StartPage() {
             <div className="mx-auto flex max-w-md flex-col items-center justify-center rounded-2xl border border-dashed border-gray-200 bg-white/60 px-6 py-16 text-center backdrop-blur">
               <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-2xl border border-gray-200 bg-white shadow-sm">
                 <img
-                  src={sunsetLogoTree.src}
+                  src={stronkaLogoTree.src}
                   alt=""
                   aria-hidden
                   className="h-10 w-10 opacity-70"

@@ -9,7 +9,7 @@ import type {
   PreviewLoadingPayload,
 } from "@/lib/preview/update-preview";
 import { PREVIEW_EVENT_TYPE } from "@/lib/preview/update-preview";
-import sunsetLogoLarge from "@/components/icons/sunset_logo_large.png";
+import stronkaLogoLarge from "@/components/icons/stronka_logo_large.png";
 import { CodePanel } from "./code-panel";
 
 export type PreviewPanelTab = "preview" | "code";
@@ -504,7 +504,7 @@ export function PreviewPanel({
                   ) : (
                     <>
                       <img
-                        src={sunsetLogoLarge.src}
+                        src={stronkaLogoLarge.src}
                         alt={t("logoLargeAlt")}
                         className="mx-auto mb-12"
                       />

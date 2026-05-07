@@ -83,7 +83,7 @@ export function LoginForm({
             <FieldGroup>
               <div className="flex flex-col items-center gap-3 text-center">
                 <img
-                  src="/sunset-logo.png"
+                  src="/stronka-logo.png"
                   alt="Stronka AI"
                   className="h-9 w-auto select-none object-contain drop-shadow-sm"
                   draggable={false}
@@ -187,7 +187,7 @@ export function LoginForm({
           </form>
           <div className="relative hidden bg-gray-900 md:block">
             <img
-              src="/login-sunset.png"
+              src="/login-hero.png"
               alt=""
               className="absolute inset-0 h-full w-full object-cover"
             />

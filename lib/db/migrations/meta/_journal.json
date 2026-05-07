@@ -183,6 +183,13 @@
       "when": 1777500000000,
       "tag": "0025_add_form_notifications",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1778600000000,
+      "tag": "0026_add_url_imports",
+      "breakpoints": true
     }
   ]
 }

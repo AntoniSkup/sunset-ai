@@ -15,7 +15,7 @@ export default async function LocaleNotFound() {
       headerLogo={
         <Link href="/" className="inline-flex shrink-0 transition-opacity hover:opacity-80">
           <img
-            src="/sunset-logo.png"
+            src="/stronka-logo.png"
             alt={tCommon("appName")}
             className="h-8 w-auto object-contain"
           />
