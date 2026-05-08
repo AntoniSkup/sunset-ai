@@ -228,6 +228,7 @@ export function ChatInput({
             onPaste={handlePaste}
             onKeyDown={handleKeyDown}
             placeholder={t("placeholder")}
+            spellCheck={false}
             minRows={3}
             maxRows={10}
             className={cn(
