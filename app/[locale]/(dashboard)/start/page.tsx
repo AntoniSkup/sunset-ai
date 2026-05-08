@@ -688,6 +688,7 @@ export default function StartPage() {
                     }}
                     placeholder={isFocused ? t("placeholderFocused") : ""}
                     disabled={isLoading}
+                    spellCheck={false}
                     minRows={3}
                     maxRows={10}
                     className="relative w-full resize-none overflow-auto bg-transparent pt-2 text-base leading-normal text-gray-900 placeholder:text-gray-400 focus:outline-none disabled:opacity-50"

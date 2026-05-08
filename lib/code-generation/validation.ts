@@ -13,6 +13,7 @@ import {
   IMAGE_ASSET_COMPONENT_PATH,
   IMAGE_ASSET_MAP_PATH,
 } from "@/lib/site-assets/conventions";
+import { tryBuildLandingBundle } from "@/lib/preview/compose-react";
 
 export type ValidationSeverity = "critical" | "warning";
 
@@ -942,6 +943,50 @@ export async function validateCompleteness(params: {
       }
     }
 
+    // Run the *real* esbuild bundle pipeline (same one the preview iframe
+    // uses) and surface any build error as a critical finding. The
+    // deterministic regex checks above approximate esbuild's import
+    // resolver but miss things like transitive next/* imports, JSX errors
+    // esbuild rejects, runtime shim mismatches, and re-exports across
+    // multiple files. This catches all of them.
+    let buildCheck:
+      | { status: "pass" }
+      | { status: "fail"; message: string }
+      | { status: "skipped"; reason: string }
+      | { status: "error"; error: string } = { status: "skipped", reason: "no_revision" };
+    try {
+      const latestRev = await getLatestLandingSiteRevision(params.chatId);
+      if (latestRev) {
+        const buildResult = await tryBuildLandingBundle({
+          chatId: params.chatId,
+          revisionNumber: latestRev.revisionNumber,
+        });
+        if (buildResult.ok) {
+          buildCheck = { status: "pass" };
+        } else {
+          buildCheck = { status: "fail", message: buildResult.message };
+          findings.push({
+            severity: "critical",
+            issueCode: "BUILD_FAILED",
+            message: buildResult.message,
+            suggestedFix:
+              "The error text above includes the offending file:line:column from esbuild. Fix that file (e.g. add the missing export, remove the disallowed `next/*` import, correct the JSX) and re-run validation.",
+          });
+        }
+      }
+    } catch (error) {
+      buildCheck = {
+        status: "error",
+        error: error instanceof Error ? error.message : String(error),
+      };
+      findings.push({
+        severity: "warning",
+        issueCode: "BUILD_CHECK_UNAVAILABLE",
+        message: "Real esbuild bundle check could not run.",
+        suggestedFix: buildCheck.error,
+      });
+    }
+
     const preLlmCriticalCount = findings.filter(
       (finding) => finding.severity === "critical"
     ).length;
@@ -979,6 +1024,7 @@ export async function validateCompleteness(params: {
         missingNamedExportCount: missingNamedExports.length,
         missingDefaultExportCount: missingDefaultExports.length,
         animationStrategy,
+        buildCheck,
         llmCompleteness:
           llmResult?.ok === true
             ? {

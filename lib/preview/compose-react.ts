@@ -1813,6 +1813,16 @@ function formatBundleBuildError(err: unknown): string {
 }
 
 /**
+ * Sentinel comment prefix on the very first line of the failure stub built
+ * by `buildErrorBundleStub`. Both the bundle route handler (for logging) and
+ * `tryBuildLandingBundle` (for completeness validation) detect failures by
+ * checking whether the bundle output starts with this string. Keep them in
+ * sync if you ever change the stub format.
+ */
+export const BUNDLE_FAILURE_SENTINEL =
+  "// Landing preview bundle failed to build.";
+
+/**
  * Wrap an error message in a JS module that, when loaded by the preview HTML
  * shell, calls the early-diagnostic global to paint the actual error in the
  * iframe. Returning this from `/p/<token>/bundle` (with status 200) is much
@@ -1823,7 +1833,7 @@ function buildErrorBundleStub(message: string): string {
   // Encode as a JSON string literal so quotes / backticks / newlines / unicode
   // in esbuild error text are safe to embed in a JS source.
   const literal = JSON.stringify(message);
-  return `// Landing preview bundle failed to build. Surface the real reason.
+  return `${BUNDLE_FAILURE_SENTINEL} Surface the real reason.
 (function(){
   var msg = ${literal};
   try {
@@ -2166,6 +2176,51 @@ export async function getPreviewBrowserBundle(params: {
       stubLen: stub.length,
     });
     return stub;
+  }
+}
+
+/**
+ * Run the same bundle pipeline used by `/p/<token>/bundle` and report
+ * whether it succeeded. Used by `validateCompleteness` so the agent gets
+ * a critical finding when the *actual* esbuild compile fails — covering
+ * everything the regex-based static checks miss (transitive next/* imports,
+ * JSX errors esbuild rejects, runtime shim mismatches, …).
+ *
+ * Implementation note: `getPreviewBrowserBundle` always returns valid JS
+ * (either the real bundle or `buildErrorBundleStub(message)`). We detect
+ * the failure case by the stub's `BUNDLE_FAILURE_SENTINEL` comment and
+ * pull the JSON-encoded message back out. If the format ever drifts the
+ * worst case is a generic "build failed" finding — the agent still gets
+ * the signal to fix something, even if the specifics are lost.
+ */
+export async function tryBuildLandingBundle(params: {
+  chatId: string;
+  revisionNumber: number;
+}): Promise<{ ok: true } | { ok: false; message: string }> {
+  const out = await getPreviewBrowserBundle(params);
+  if (!out.startsWith(BUNDLE_FAILURE_SENTINEL)) {
+    return { ok: true };
+  }
+  const match = out.match(/var msg = ("(?:\\.|[^"\\])*");/);
+  if (!match) {
+    return {
+      ok: false,
+      message: "Landing bundle build failed (error message could not be captured).",
+    };
+  }
+  try {
+    const message = JSON.parse(match[1]);
+    return {
+      ok: false,
+      message: typeof message === "string"
+        ? message
+        : "Landing bundle build failed (non-string error payload).",
+    };
+  } catch {
+    return {
+      ok: false,
+      message: "Landing bundle build failed (error message could not be parsed).",
+    };
   }
 }
 

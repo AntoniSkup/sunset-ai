@@ -402,6 +402,7 @@ export default function LandingPage() {
                       }
                     }}
                     disabled={isLoading}
+                    spellCheck={false}
                     minRows={3}
                     maxRows={8}
                     placeholder={
