@@ -527,6 +527,52 @@
         "desc": "Iteruj przez czat, dodaj swoje materiały i publikuj, kiedy jesteś gotowy."
       }
     },
+    "marketLeader": {
+      "eyebrow": "Najlepszy kreator stron na rynku",
+      "titleLine1": "Stworzony dla zachwycającego",
+      "titleHighlight": "designu",
+      "titleLine2": "i niezrównanego SEO.",
+      "subtitle": "Każda strona od Stronki jest projektowana ręcznie przez AI — piękna, dopasowana do marki i zoptymalizowana pod wyszukiwarki od pierwszego dnia. Bez szablonów. Bez kompromisów.",
+      "design": {
+        "eyebrow": "Design",
+        "title": "Niepowtarzalny design, nigdy szablon",
+        "description": "Prawdziwe układy komponowane pod Twoją markę — nowoczesna typografia, przemyślane odstępy i animacje, które żyją. To nie kreator typu drag-and-drop.",
+        "badge": "Bez szablonów",
+        "chips": {
+          "custom": "Zawsze unikalny",
+          "typography": "Dopracowana typografia",
+          "responsive": "Mobile-first"
+        }
+      },
+      "seo": {
+        "eyebrow": "SEO",
+        "title": "Stworzony, by zajmować pierwsze miejsca",
+        "description": "Semantyczny HTML, idealne Core Web Vitals, bogate metadane i dane strukturalne — wszystko, co Google nagradza, wbudowane od pierwszego renderu.",
+        "excellent": "Doskonale",
+        "metrics": {
+          "performance": "Wydajność",
+          "accessibility": "Dostępność",
+          "bestPractices": "Dobre praktyki",
+          "seo": "SEO"
+        },
+        "serp": {
+          "breadcrumb": "O nas",
+          "title": "Twoja firma — zaprojektowana przez Stronka AI",
+          "rating": "Ocena: 5.0 · 1,2 tys. opinii",
+          "description": "Pięknie zaprojektowana, błyskawiczna strona zbudowana w semantycznym HTML, z idealnymi Core Web Vitals i danymi strukturalnymi, które uwielbiają wyszukiwarki."
+        },
+        "chips": {
+          "vitals": "Core Web Vitals: zielone",
+          "semantic": "Semantyczny HTML",
+          "metadata": "Bogate metadane"
+        }
+      },
+      "proof": {
+        "indexed": "Zaindeksowane w dni",
+        "mobile": "Responsywne domyślnie",
+        "schema": "Schema.org wbudowane"
+      }
+    },
     "cta": {
       "title": "Gotów stworzyć coś pięknego?",
       "subtitle": "Zacznij od jednego zdania. Iteruj przez czat. Opublikuj, kiedy poczujesz, że jest dobrze.",

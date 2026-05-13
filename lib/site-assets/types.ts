@@ -79,6 +79,15 @@ export interface SiteAssetPromptDescriptor {
   slotKey?: string | null;
   altHint?: string | null;
   label?: string | null;
+  /**
+   * Intrinsic pixel dimensions captured at upload (parsed server-side from
+   * the file header) or returned by the stock provider. Surfaced into the
+   * AI prompt manifest so the model can pick aliases whose aspect ratio
+   * matches the slot, avoid stretching, and avoid rendering tiny images
+   * full-bleed (which the browser would upscale and pixelate).
+   */
+  width?: number | null;
+  height?: number | null;
 }
 
 export interface SiteAssetManifestEntry {

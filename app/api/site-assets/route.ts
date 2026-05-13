@@ -13,6 +13,7 @@ import {
   SITE_ASSET_MAX_FILE_SIZE_BYTES,
 } from "@/lib/site-assets/conventions";
 import { createUniqueSiteAssetAlias } from "@/lib/site-assets/alias";
+import { readImageDimensionsFromBuffer } from "@/lib/site-assets/image-dimensions";
 import { SITE_ASSET_INTENTS } from "@/lib/site-assets/types";
 
 const SITE_ASSET_ALLOWED_IMAGE_TYPE_SET = new Set<string>(
@@ -163,6 +164,28 @@ export async function POST(request: Request) {
   const label = getStringField(formData, "label");
   const altHint = getStringField(formData, "altHint");
 
+  // Buffer the upload bytes ONCE so we can both ship them to Vercel Blob
+  // and parse intrinsic pixel dimensions out of the same payload. The AI
+  // agent uses these dimensions later to pick aliases whose aspect ratio
+  // matches the slot it's filling and to avoid stretching/upscaling.
+  let fileBuffer: Uint8Array;
+  try {
+    fileBuffer = new Uint8Array(await file.arrayBuffer());
+  } catch (error) {
+    console.error("[site-assets] Failed to read upload buffer:", error);
+    return NextResponse.json(
+      { error: "Failed to read uploaded file", code: "FILE_READ_FAILED" },
+      { status: 400 }
+    );
+  }
+
+  let dimensions: { width: number; height: number } | null = null;
+  try {
+    dimensions = readImageDimensionsFromBuffer(fileBuffer, mimeType);
+  } catch {
+    dimensions = null;
+  }
+
   try {
     for (let attempt = 0; attempt < SITE_ASSET_ALIAS_RETRY_LIMIT; attempt += 1) {
       const existingAliases = await getSiteAssetAliasesByChatId(chatId, user.id);
@@ -173,11 +196,15 @@ export async function POST(request: Request) {
       );
 
       try {
-        const blob = await put(`site-assets/${chatId}/${Date.now()}-${alias}`, file, {
-          access: "public",
-          addRandomSuffix: false,
-          contentType: mimeType,
-        });
+        const blob = await put(
+          `site-assets/${chatId}/${Date.now()}-${alias}`,
+          fileBuffer,
+          {
+            access: "public",
+            addRandomSuffix: false,
+            contentType: mimeType,
+          }
+        );
 
         const asset = await createSiteAsset({
           chatId,
@@ -188,8 +215,8 @@ export async function POST(request: Request) {
           status: "ready",
           mimeType,
           sizeBytes: file.size,
-          width: null,
-          height: null,
+          width: dimensions?.width ?? null,
+          height: dimensions?.height ?? null,
           originalFilename: file.name || null,
           altHint,
           label,

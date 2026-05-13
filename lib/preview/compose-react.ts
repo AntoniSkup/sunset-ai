@@ -268,19 +268,28 @@ function buildRuntimeAssetMapModule(
     altHint?: string | null;
     label?: string | null;
     intent: string;
+    width?: number | null;
+    height?: number | null;
   }>
 ): string {
   const entries = assets
-    .map(
-      (asset) =>
-        `  ${escapeForJsString(asset.alias)}: { url: ${escapeForJsString(
-          asset.blobUrl
-        )}, altHint: ${
-          asset.altHint ? escapeForJsString(asset.altHint) : "undefined"
-        }, label: ${
-          asset.label ? escapeForJsString(asset.label) : "undefined"
-        }, intent: ${escapeForJsString(asset.intent)} }`
-    )
+    .map((asset) => {
+      const width =
+        typeof asset.width === "number" && Number.isFinite(asset.width) && asset.width > 0
+          ? String(asset.width)
+          : "undefined";
+      const height =
+        typeof asset.height === "number" && Number.isFinite(asset.height) && asset.height > 0
+          ? String(asset.height)
+          : "undefined";
+      return `  ${escapeForJsString(asset.alias)}: { url: ${escapeForJsString(
+        asset.blobUrl
+      )}, altHint: ${
+        asset.altHint ? escapeForJsString(asset.altHint) : "undefined"
+      }, label: ${
+        asset.label ? escapeForJsString(asset.label) : "undefined"
+      }, intent: ${escapeForJsString(asset.intent)}, width: ${width}, height: ${height} }`;
+    })
     .join(",\n");
 
   return `
@@ -303,10 +312,12 @@ function buildRuntimeImageAssetModule(): string {
 import React from "react";
 import { getAssetMeta, resolveAsset } from "./assets";
 
-export function ImageAsset({ asset, alt, ...props }) {
+export function ImageAsset({ asset, alt, width, height, ...props }) {
   const meta = getAssetMeta(asset);
   const src = resolveAsset(asset);
   const resolvedAlt = alt ?? meta?.altHint ?? meta?.label ?? asset;
+  const resolvedWidth = width ?? meta?.width;
+  const resolvedHeight = height ?? meta?.height;
 
   if (!src) {
     return (
@@ -319,7 +330,15 @@ export function ImageAsset({ asset, alt, ...props }) {
     );
   }
 
-  return <img {...props} src={src} alt={resolvedAlt} />;
+  return (
+    <img
+      {...props}
+      src={src}
+      alt={resolvedAlt}
+      width={resolvedWidth}
+      height={resolvedHeight}
+    />
+  );
 }
 
 export default ImageAsset;
@@ -562,6 +581,8 @@ function buildRuntimeFiles(
     altHint?: string | null;
     label?: string | null;
     intent: string;
+    width?: number | null;
+    height?: number | null;
   }>
 ): Array<{ path: string; content: string }> {
   return [

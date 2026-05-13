@@ -1,5 +1,6 @@
 import type { ImagePart, TextPart } from "@ai-sdk/provider-utils";
 import { IMAGE_ASSET_COMPONENT_NAME } from "./conventions";
+import { classifyAspect } from "./image-dimensions";
 import type { SiteAssetPromptDescriptor } from "./types";
 
 /**
@@ -10,10 +11,21 @@ import type { SiteAssetPromptDescriptor } from "./types";
  */
 const DEFAULT_MAX_VISUAL_IMAGES_PER_CODEGEN = 16;
 
+function buildDimensionFragment(
+  width: number | null | undefined,
+  height: number | null | undefined
+): string | null {
+  const aspect = classifyAspect(width ?? null, height ?? null);
+  if (!aspect) return null;
+  return `${aspect.width}x${aspect.height}px (${aspect.orientation}, aspect=${aspect.aspectDecimal.toFixed(2)})`;
+}
+
 function serializeAssetLine(asset: SiteAssetPromptDescriptor): string {
+  const dimensions = buildDimensionFragment(asset.width, asset.height);
   const extras = [
     asset.sourceType ? `sourceType=${asset.sourceType}` : null,
     asset.slotKey ? `slot=${asset.slotKey}` : null,
+    dimensions ? `size=${dimensions}` : null,
     asset.label ? `label="${asset.label}"` : null,
     asset.altHint ? `altHint="${asset.altHint}"` : null,
   ]
@@ -48,6 +60,8 @@ export function toSiteAssetPromptDescriptors(
     slotKey?: string | null;
     altHint?: string | null;
     label?: string | null;
+    width?: number | null;
+    height?: number | null;
   }>
 ): SiteAssetPromptDescriptor[] {
   return assets
@@ -61,6 +75,8 @@ export function toSiteAssetPromptDescriptors(
       slotKey: asset.slotKey ?? null,
       altHint: asset.altHint ?? null,
       label: asset.label ?? null,
+      width: asset.width ?? null,
+      height: asset.height ?? null,
     }));
 }
 
@@ -79,6 +95,16 @@ export function buildSiteAssetPromptGuidance(): string {
     "- Use the provided alias exactly as written. Do not rename it, beautify it, translate it, or derive a new filename from the label, alt text, or slot.",
     "- If a manifest line includes slot=hero and alias=hero.jpg, then the component must use asset=\"hero.jpg\" exactly.",
     "- Do not invent new asset aliases or raw external image URLs.",
+    "",
+    "Image sizing rules (avoid stretched / pixelated output):",
+    "- Each manifest line may include a `size=WxH (orientation, aspect=N.NN)` fragment. Treat it as authoritative intrinsic dimensions for that asset.",
+    "- Match orientation to slot: prefer landscape assets for hero/banner/cover bands, portrait assets for tall feature cards / team / testimonial portraits, and square assets for grid tiles, avatars, and uniform card sets.",
+    "- When several aliases would fit, pick the one whose intrinsic aspect is closest to the slot's aspect, so cropping is gentle rather than aggressive.",
+    "- Never force the rendered display size to fight the source aspect ratio. If the slot is wider than the image, use Tailwind aspect utilities (`aspect-video`, `aspect-square`, `aspect-[4/3]`, `aspect-[3/4]`, `aspect-[16/9]`) on a wrapper plus `object-cover` (crop) or `object-contain` (letterbox) on the ImageAsset — never set fixed width AND fixed height in CSS unless they preserve the source ratio.",
+    "- Pick `object-cover` when peripheral cropping is acceptable (most editorial / product / hero shots) and `object-contain` when the full subject must remain visible (logos, screenshots, diagrams, packaging shots).",
+    "- Do not render an asset much larger than its native pixel dimensions. A 600x400 image used full-bleed at 1920px wide will be visibly upscaled and pixelated. If the only available image is small, contain it inside a smaller framed composition (max-w utilities, framed cards, mosaic grid) instead of stretching it across the viewport.",
+    "- Logos and small brand marks (often <=512px on the longest side) should always be rendered at constrained widths (e.g. `max-w-32`, `max-w-40`) and never used as background hero imagery.",
+    "- The ImageAsset runtime auto-applies the asset's intrinsic width/height attributes. Override with explicit width/height props only when intentionally cropping with a wrapper that owns the visible aspect; do not pass mismatched width/height props that contradict the source ratio.",
   ].join("\n");
 }
 
@@ -164,11 +190,13 @@ export function buildSiteAssetVisualPromptParts(
       continue;
     }
 
+    const dimensions = buildDimensionFragment(asset.width, asset.height);
     const meta = [
       `alias=${asset.alias}`,
       `intent=${asset.intent}`,
       asset.sourceType ? `sourceType=${asset.sourceType}` : null,
       asset.slotKey ? `slot=${asset.slotKey}` : null,
+      dimensions ? `size=${dimensions}` : null,
       asset.label ? `label="${asset.label}"` : null,
       asset.altHint ? `altHint="${asset.altHint}"` : null,
     ]

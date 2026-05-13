@@ -32,6 +32,7 @@ import { Button } from "@/components/ui/button";
 import { BorderBeam } from "@/components/ui/border-beam";
 import TypingText from "@/components/ui/typewriter";
 import { BrandLogoMenu } from "@/components/nav/brand-logo-menu";
+import { LandingMarketLeader } from "@/components/landing/market-leader";
 import stronkaLogoTree from "@/components/icons/stronka_logo_tree.png";
 import {
   MessageAttachment,
@@ -562,6 +563,8 @@ export default function LandingPage() {
             ))}
           </div>
         </motion.section>
+
+        <LandingMarketLeader />
 
         <section className="pb-24">
           <motion.div

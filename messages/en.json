@@ -527,6 +527,52 @@
         "desc": "Iterate by chat, drop in your assets, and publish when you're ready."
       }
     },
+    "marketLeader": {
+      "eyebrow": "The best website maker on the market",
+      "titleLine1": "Built for stunning",
+      "titleHighlight": "design",
+      "titleLine2": "and unbeatable SEO.",
+      "subtitle": "Every site Stronka ships is hand-crafted by AI — gorgeous, on-brand, and engineered to rank from day one. No templates. No compromises.",
+      "design": {
+        "eyebrow": "Design",
+        "title": "Custom design, never a template",
+        "description": "Real layouts composed for your brand — modern typography, considered spacing, and motion that feels alive. Not a drag-and-drop kit.",
+        "badge": "No templates",
+        "chips": {
+          "custom": "Custom every time",
+          "typography": "Refined typography",
+          "responsive": "Mobile-first"
+        }
+      },
+      "seo": {
+        "eyebrow": "SEO",
+        "title": "Engineered to rank",
+        "description": "Semantic markup, perfect Core Web Vitals, rich metadata and structured data — everything Google rewards, baked in from the first render.",
+        "excellent": "Excellent",
+        "metrics": {
+          "performance": "Performance",
+          "accessibility": "Accessibility",
+          "bestPractices": "Best Practices",
+          "seo": "SEO"
+        },
+        "serp": {
+          "breadcrumb": "About",
+          "title": "Your business — handcrafted by Stronka AI",
+          "rating": "Rating: 5.0 · 1.2k reviews",
+          "description": "A beautifully designed, lightning-fast landing page built with semantic HTML, perfect Core Web Vitals, and structured data search engines love."
+        },
+        "chips": {
+          "vitals": "Core Web Vitals: green",
+          "semantic": "Semantic HTML",
+          "metadata": "Rich metadata"
+        }
+      },
+      "proof": {
+        "indexed": "Indexed in days",
+        "mobile": "Responsive by default",
+        "schema": "Schema.org built-in"
+      }
+    },
     "cta": {
       "title": "Ready to build something beautiful?",
       "subtitle": "Start with a sentence. Iterate by chat. Publish when it feels right.",
